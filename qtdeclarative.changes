@@ -1,0 +1,76 @@
+* Wed Apr 25 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git5.0.0~alpha1
+- Automated source update
+
+* Mon Apr 16 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git5.0.0~alpha1
+- Automated source update
+
+* Mon Apr 16 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git5.0.0~alpha1
+- Automated source update
+
+* Mon Apr 16 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git5.0.0~alpha1
+- Automated source update
+
+* Mon Apr 16 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git5.0.0~alpha1
+- Automated source update
+
+* Mon Apr 16 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~gitv5.0.0alpha1
+- Automated source update
+
+* Sun Apr 15 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~gitqt-v5.0.0-alpha1
+- Automated source update
+
+* Sun Apr 15 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~gitqt-v5.0.0-alpha1
+- Automated source update
+
+* Sun Apr 15 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git
+- Automated source update
+
+* Sun Apr 15 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git93.g0f1696f
+- Automated source update
+
+* Sun Apr 15 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git93.g0f1696f
+- Automated source update
+
+* Thu Apr 12 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git93.g0f1696f
+- Automated source update
+
+* Tue Mar  6 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git2513.gc2e5141
+- Automated source update
+
+* Tue Mar  6 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git2513.gc2e5141
+- Automated source update
+
+* Sat Feb 25 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git2425.gdc31651
+- Automated source update
+
+* Wed Feb 15 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git2348.g3c3b995
+- Automated source update
+
+* Sun Feb  5 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git2242.gff8f1ac
+- Automated source update
+
+* Sun Jan 15 2012 Mika Boström <mika.bostrom@nomovok.com> - 5~git2069.gef1860e
+- Automated source update
+
+* Wed Oct  5 2011 Mika Boström <mika.bostrom@nomovok.com> - 5~git1269.g354e285
+- Automated source update
+
+* Mon Jul 25 2011 Mika Boström <mika.bostrom@nomovok.com> - 5~git583.g087619b
+- Automated source update
+
+* Wed Jul 13 2011 Mika Boström <mika.bostrom@nomovok.com> - 4.9.90.20110711-2
+- Include v8 sources
+- Apply patches in src/v8 to this tree - doesn't happen automatically
+- Include python as build dependency; V8 tree has python-based tools
+- Add new packages for recently imported QtQuick 1 support modules
+
+* Tue Jul 12 2011 Mika Boström <mika.bostrom@nomovok.com> - 4.9.90.20110711
+- Update and rebuild against latest qtbase snapshot
+
+* Tue Jul  5 2011 Mika Boström <mika.bostrom@nomovok.com> - 4.9.90.20110701
+- Split into more packages
+- Create packages for all imports and plugins
+
+* Mon Jul  4 2011 Mika Boström <mika.bostrom@nomovok.com> - 4.9.90.20110701
+- Initial packaging
+- Builds against packages from qtbase build
