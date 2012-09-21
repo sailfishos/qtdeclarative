@@ -1,19 +1,17 @@
-%define _qtmodule_snapshot_version 5~5.0.0~alpha1
+%define _qtmodule_snapshot_version 5.0.0-beta1
 %define _qtmodule_name qt5-qtdeclarative
  
-Name:       qt5-qtqml
+Name:       qt5-qtdeclarative
 Summary:    Qt Declarative library
-Version:    %{_qtmodule_snapshot_version}
+Version:    5.0.0~beta1
 Release:    1%{?dist}
 Group:      Qt/Qt
 License:    LGPLv2.1 with exception or GPLv3
 URL:        http://qt.nokia.com
-Source0:    %{_qtmodule_name}-%{version}.tar.gz
-Patch0:     create_prl_and_pc_files.patch
-Patch1:     fix-destdir.patch
-Patch10:    particles-shader-fix.patch
-Patch11:    glsl-highp-ambiguity.patch
-Patch50:    0001-Fix-modular-build.patch
+#Source0:    %{_qtmodule_name}-%{version}.tar.xz
+Source0:    qtdeclarative-opensource-src-%{_qtmodule_snapshot_version}.tar.xz
+Patch0:     fix-destdir.patch
+Patch1:    glsl-highp-ambiguity.patch
 BuildRequires:  qt5-qtcore-devel
 BuildRequires:  qt5-qtgui-devel
 BuildRequires:  qt5-qtnetwork-devel
@@ -39,6 +37,7 @@ Summary:    Qt Declarative - development files
 Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   qt5-qtsql-devel
+Requires:   qt5-qtnetwork-devel
 
 %description devel
 Qt is a cross-platform application and UI framework. Using Qt, you can
@@ -62,7 +61,7 @@ Summary:    Qt Declarative QtQuickTest - development files
 Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   %{name}-devel = %{version}-%{release}
-Requires:   qt5-qtqml-qtquicktest = %{version}-%{release}
+Requires:   qt5-qtdeclarative-qtquicktest = %{version}-%{release}
 
 %description qtquicktest-devel
 This package contains the development headers for QtQuickTest library
@@ -79,21 +78,39 @@ This package contains the QtQuick QML support library
 Summary:    Qt Declarative - QtQuick development files
 Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
-Requires:   qt5-qtqml-qtquick = %{version}-%{release}
+Requires:   qt5-qtdeclarative-qtquick = %{version}-%{release}
 
 %description qtquick-devel
 This package contains the development headers for legacy QtQuick 1
 QML support library
 
+%package qtquickparticles
+Summary:    Qt Declarative - QtQuick Particles library
+Group:      Qt/Qt
+Requires:   %{name} = %{version}-%{release}
 
-%package qtqmltools-devel
+%description qtquickparticles
+This package contains the QtQuick Particles support library
+
+%package qtquickparticles-devel
+Summary:    Qt Declarative - QtQuick Particles development files
+Group:      Qt/Qt
+Requires:   %{name} = %{version}-%{release}
+Requires:   qt5-qtdeclarative-qtquickparticles = %{version}-%{release}
+
+%description qtquickparticles-devel
+This package contains the development headers for QtQuickParticles
+QML support library
+
+
+%package qtdeclarativetools-devel
 Summary:    Qt Declarative QtQmlDevTools - development files
 Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   %{name}-devel = %{version}-%{release}
-Requires:   qt5-qtqml-devel = %{version}-%{release}
+Requires:   qt5-qtdeclarative-devel = %{version}-%{release}
 
-%description qtqmltools-devel
+%description qtdeclarativetools-devel
 This package contains the development headers for QtQmlDevTools
 
 
@@ -172,6 +189,22 @@ Requires:   %{name} = %{version}-%{release}
 %description import-qttest
 This package provides the QtQml QtTest plugin
 
+%package import-particles2
+Summary:    Qt Declarative Particles plugin
+Group:      Qt/Qt
+Requires:   %{name} = %{version}-%{release}
+
+%description import-particles2
+This package provides the QtQml Particles.2 plugin
+
+%package import-window2
+Summary:    Qt Declarative Window plugin
+Group:      Qt/Qt
+Requires:   %{name} = %{version}-%{release}
+
+%description import-window2
+This package provides the QtQml Window.2 plugin
+
 %package qmlscene
 Summary:    QML scene viewer
 Group:      Qt/Qt
@@ -196,12 +229,9 @@ This package contains QML debugging and development tools
 #### Build section
 
 %prep
-%setup -q -n %{_qtmodule_name}
+%setup -q -n qtdeclarative-opensource-src-%{_qtmodule_snapshot_version}
 %patch0 -p1
 %patch1 -p1
-%patch10 -p1
-%patch11 -p1
-#%patch50 -p1
 
 
 %build
@@ -220,6 +250,10 @@ find %{buildroot}%{_libdir} -type f -name '*.prl' \
 -exec sed -i -e "/^QMAKE_PRL_BUILD_DIR/d;s/\(QMAKE_PRL_LIBS =\).*/\1/" {} \;
 # Remove unneeded .la files
 rm -f %{buildroot}/%{_libdir}/*.la
+
+# We don't need qt5/Qt/
+rm -rf %{buildroot}/%{_includedir}/qt5/Qt
+
 # Manually copy qmldevtools static library
 cp lib/libQtQmlDevTools.a %{buildroot}/%{_libdir}
 %fdupes %{buildroot}/%{_libdir}
@@ -246,6 +280,12 @@ cp lib/libQtQmlDevTools.a %{buildroot}/%{_libdir}
 /sbin/ldconfig
 
 
+%post qtquickparticles
+/sbin/ldconfig
+%postun qtquickparticles
+/sbin/ldconfig
+
+
 
 
 
@@ -264,22 +304,7 @@ cp lib/libQtQmlDevTools.a %{buildroot}/%{_libdir}
 %{_libdir}/libQtQml.so
 %{_libdir}/libQtQml.prl
 %{_libdir}/pkgconfig/QtQml.pc
-%{_includedir}/qt5/Qt/qqml*.h
-%{_includedir}/qt5/Qt/qtqml*.h
-%{_includedir}/qt5/Qt/qsg*.h
-%{_includedir}/qt5/Qt/qjs*.h
-%{_includedir}/qt5/Qt/QJS*
-%{_includedir}/qt5/Qt/QDeclarative*
-%{_includedir}/qt5/Qt/designersupport.h
-%{_includedir}/qt5/Qt/QtQml
 %{_includedir}/qt5/QtQml/
-%{_includedir}/qt5/QtDeclarative/
-%{_includedir}/qt5/Qt/QtDeclarative
-%{_includedir}/qt5/Qt/QDeclarative*
-%{_includedir}/qt5/Qt/QJS*
-%{_includedir}/qt5/Qt/qdecl*.h
-%{_includedir}/qt5/Qt/qtdeclarativeversion.h
-%{_datadir}/qt5/mkspecs/modules/qt_declarative.pri
 %{_datadir}/qt5/mkspecs/modules/qt_qml.pri
 %{_libdir}/cmake/
 
@@ -294,10 +319,6 @@ cp lib/libQtQmlDevTools.a %{buildroot}/%{_libdir}
 %{_libdir}/libQtQuick.so
 %{_libdir}/libQtQuick.prl
 %{_libdir}/pkgconfig/QtQuick.pc
-%{_includedir}/qt5/Qt/qtquickversion.h
-%{_includedir}/qt5/Qt/qtquickglobal.h
-%{_includedir}/qt5/Qt/qquick*.h
-%{_includedir}/qt5/Qt/QtQuick
 %{_includedir}/qt5/QtQuick/
 %{_datadir}/qt5/mkspecs/modules/qt_quick.pri
 
@@ -316,7 +337,7 @@ cp lib/libQtQmlDevTools.a %{buildroot}/%{_libdir}
 %{_bindir}/qmlprofiler
 %{_bindir}/qmltestrunner
 %{_bindir}/qmlmin
-
+%{_bindir}/qmlbundle
 
 
 %files import-folderlistmodel
@@ -339,10 +360,6 @@ cp lib/libQtQmlDevTools.a %{buildroot}/%{_libdir}
 %defattr(-,root,root,-)
 %{_libdir}/qt5/plugins/qmltooling/*
 
-%files plugin-accessible
-%defattr(-,root,root,-)
-%{_libdir}/qt5/plugins/accessible/*
-
 
 %files import-qttest
 %defattr(-,root,root,-)
@@ -356,6 +373,14 @@ cp lib/libQtQmlDevTools.a %{buildroot}/%{_libdir}
 %defattr(-,root,root,-)
 %{_libdir}/qt5/imports/QtQuick.2/
 
+%files import-particles2
+%defattr(-,root,root,-)
+%{_libdir}/qt5/imports/QtQuick/Particles.2/
+
+%files import-window2
+%defattr(-,root,root,-)
+%{_libdir}/qt5/imports/QtQuick/Window.2/
+
 
 
 
@@ -367,18 +392,27 @@ cp lib/libQtQmlDevTools.a %{buildroot}/%{_libdir}
 
 %files qtquicktest-devel
 %defattr(-,root,root,-)
-%{_includedir}/qt5/Qt/qtquicktest*.h
-%{_includedir}/qt5/Qt/quicktest*.h
-%{_includedir}/qt5/Qt/QtQuickTest
 %{_includedir}/qt5/QtQuickTest/
 %{_libdir}/libQtQuickTest.so
 %{_libdir}/libQtQuickTest.prl
 %{_libdir}/pkgconfig/QtQuickTest.pc
 %{_datadir}/qt5/mkspecs/modules/qt_qmltest.pri
 
-%files qtqmltools-devel
+%files qtquickparticles
 %defattr(-,root,root,-)
-%{_includedir}/qt5/Qt/QtQmlDevTools
+%{_libdir}/libQtQuickParticles.so.5
+%{_libdir}/libQtQuickParticles.so.5.*
+
+%files qtquickparticles-devel
+%defattr(-,root,root,-)
+%{_includedir}/qt5/QtQuickParticles/
+%{_libdir}/libQtQuickParticles.so
+%{_libdir}/libQtQuickParticles.prl
+%{_libdir}/pkgconfig/QtQuickParticles.pc
+%{_datadir}/qt5/mkspecs/modules/qt_quickparticles.pri
+
+%files qtdeclarativetools-devel
+%defattr(-,root,root,-)
 %{_includedir}/qt5/QtQmlDevTools/
 %{_libdir}/libQtQmlDevTools.a
 %{_libdir}/libQtQmlDevTools.prl

@@ -1,13 +1,11 @@
-diff --git a/src/plugins/accessible/quick/quick.pro b/src/plugins/accessible/quick/quick.pro
-index f150cfe..213d2e8 100644
---- a/src/plugins/accessible/quick/quick.pro
-+++ b/src/plugins/accessible/quick/quick.pro
-@@ -5,7 +5,7 @@ load(qt_plugin)
- include ($$PWD/../shared/qaccessiblebase.pri)
- 
- QT += core-private gui-private v8-private qml-private quick-private
+diff -ru qt5-qtdeclarative/src/plugins/accessible/quick/quick.pro qt5-qtdeclarative-destdir/src/plugins/accessible/quick/quick.pro
+--- qt5-qtdeclarative/src/plugins/accessible/quick/quick.pro	2012-08-07 08:35:29.000000000 +0200
++++ qt5-qtdeclarative-destdir/src/plugins/accessible/quick/quick.pro	2012-08-18 17:00:09.370012973 +0200
+@@ -1,5 +1,5 @@
+ TARGET  = qtaccessiblequick
 -DESTDIR = $$QT.gui.plugins/accessible
 +#DESTDIR = $$QT.gui.plugins/accessible
  
- QTDIR_build:REQUIRES += "contains(QT_CONFIG, accessibility)"
- 
+ load(qt_plugin)
+ include ($$PWD/../shared/qaccessiblebase.pri)
+Only in qt5-qtdeclarative-destdir/src/plugins/accessible/quick: quick.pro~
