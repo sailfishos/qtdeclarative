@@ -1,9 +1,9 @@
-%define _qtmodule_snapshot_version 5.0.0
+%define _qtmodule_snapshot_version 5.0.1
 %define _qtmodule_name qt5-qtdeclarative
  
 Name:       qt5-qtdeclarative
 Summary:    Qt Declarative library
-Version:    5.0.0
+Version:    5.0.1
 Release:    1%{?dist}
 Group:      Qt/Qt
 License:    LGPLv2.1 with exception or GPLv3
@@ -224,7 +224,7 @@ This package contains QML debugging and development tools
 
 %build
 export QTDIR=/usr/share/qt5
-qmake
+qmake -qt=5
 make %{?_smp_flags}
 
 %install
@@ -317,15 +317,15 @@ cp lib/libQt5QmlDevTools.a %{buildroot}/%{_libdir}
 
 %files qmlscene
 %defattr(-,root,root,-)
-%{_bindir}/qmlscene
+%{_qt5_bindir}/qmlscene
 
 %files devel-tools
 %defattr(-,root,root,-)
-%{_bindir}/qmlplugindump
-%{_bindir}/qmlprofiler
-%{_bindir}/qmltestrunner
-%{_bindir}/qmlmin
-%{_bindir}/qmlbundle
+%{_qt5_bindir}/qmlplugindump
+%{_qt5_bindir}/qmlprofiler
+%{_qt5_bindir}/qmltestrunner
+%{_qt5_bindir}/qmlmin
+%{_qt5_bindir}/qmlbundle
 
 
 %files import-folderlistmodel
