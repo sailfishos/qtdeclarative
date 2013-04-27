@@ -1,15 +1,16 @@
-%define _qtmodule_snapshot_version 5.0.1
+%define _qtmodule_snapshot_version 5.0.2
 %define _qtmodule_name qt5-qtdeclarative
  
 Name:       qt5-qtdeclarative
 Summary:    Qt Declarative library
-Version:    5.0.1
+Version:    5.0.2
 Release:    1%{?dist}
 Group:      Qt/Qt
 License:    LGPLv2.1 with exception or GPLv3
 URL:        http://qt.nokia.com
 #Source0:    %{_qtmodule_name}-%{version}.tar.xz
 Source0:    qtdeclarative-opensource-src-%{_qtmodule_snapshot_version}.tar.xz
+Patch1:     link_qmltestrunner_with_qtquick.patch
 BuildRequires:  qt5-qtcore-devel
 BuildRequires:  qt5-qtgui-devel
 BuildRequires:  qt5-qtnetwork-devel
@@ -21,6 +22,7 @@ BuildRequires:  qt5-qtwidgets-devel
 BuildRequires:  qt5-qmake
 BuildRequires:  fdupes
 BuildRequires:  python
+BuildRequires:  gdb
 
 %description
 Qt is a cross-platform application and UI framework. Using Qt, you can
@@ -220,6 +222,7 @@ This package contains QML debugging and development tools
 
 %prep
 %setup -q -n qtdeclarative-opensource-src-%{_qtmodule_snapshot_version}
+%patch1 -p1
 
 
 %build

@@ -1,0 +1,10 @@
+diff -ru qtdeclarative-opensource-src-5.0.2/tools/qmltestrunner/qmltestrunner.pro b/tools/qmltestrunner/qmltestrunner.pro
+--- qtdeclarative-opensource-src-5.0.2/tools/qmltestrunner/qmltestrunner.pro	2013-04-09 10:11:22.000000000 +1000
++++ b/tools/qmltestrunner/qmltestrunner.pro	2013-04-23 22:37:11.058679306 +1000
+@@ -1,5 +1,6 @@
+ SOURCES += main.cpp
+ 
+ QT += qml qmltest
++LIBS += -L../../lib -lQt5Quick
+ 
+ load(qt_tool)
