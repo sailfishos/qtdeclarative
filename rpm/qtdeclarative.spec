@@ -217,8 +217,6 @@ This package contains QML debugging and development tools
 
 %prep
 %setup -q -n %{name}-%{version}/qtdeclarative
-%patch1 -p1
-
 
 %build
 export QTDIR=/usr/share/qt5
