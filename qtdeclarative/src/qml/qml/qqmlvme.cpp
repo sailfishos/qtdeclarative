@@ -91,6 +91,8 @@ using namespace QQmlVMETypes;
         goto exceptionExit; \
     }
 
+bool QQmlVME::s_enableComponentComplete = true;
+
 void QQmlVME::init(QQmlContextData *ctxt, QQmlCompiledData *comp, int start,
                            QQmlContextData *creation)
 {
@@ -558,6 +560,11 @@ QObject *QQmlVME::run(QList<QQmlError> *errors,
             QObject *o = 0;
             void *memory = 0;
             type.type->create(&o, &memory, sizeof(QQmlData));
+
+            if (!o)
+                VME_EXCEPTION(tr("Unable to create object of type %1").arg(type.type->elementName()),
+                              instr.line);
+
             QQmlData *ddata = new (memory) QQmlData;
             ddata->ownMemory = false;
             QObjectPrivate::get(o)->declarativeData = ddata;
@@ -571,10 +578,6 @@ QObject *QQmlVME::run(QList<QQmlError> *errors,
                 ddata->propertyCache = type.typePropertyCache;
                 ddata->propertyCache->addref();
             }
-
-            if (!o) 
-                VME_EXCEPTION(tr("Unable to create object of type %1").arg(type.type->elementName()),
-                              instr.line);
 
             if (states.count() == 1) {
                 // Keep a reference to the compiled data we rely on
@@ -1325,7 +1328,7 @@ QQmlContextData *QQmlVME::complete(const Interrupt &interrupt)
     bindValues.deallocate();
     }
 
-    if (!QQmlEnginePrivate::designerMode()) { // the qml designer does the component complete later
+    if (componentCompleteEnabled()) { // the qml designer does the component complete later
         QQmlTrace trace("VME Component Complete");
         while (!parserStatus.isEmpty()) {
             QQmlParserStatus *status = parserStatus.pop();
@@ -1373,7 +1376,8 @@ QQmlContextData *QQmlVME::complete(const Interrupt &interrupt)
         Q_ASSERT(d);
         Q_ASSERT(d->context);
         a->add(&d->context->componentAttached);
-        emit a->completed();
+        if (componentCompleteEnabled())
+            emit a->completed();
 
         if (watcher.hasRecursed() || interrupt.shouldInterrupt())
             return 0;
@@ -1387,6 +1391,21 @@ QQmlContextData *QQmlVME::complete(const Interrupt &interrupt)
     if (rv) rv->activeVMEData = data;
 
     return rv;
+}
+
+void QQmlVME::enableComponentComplete()
+{
+    s_enableComponentComplete = true;
+}
+
+void QQmlVME::disableComponentComplete()
+{
+    s_enableComponentComplete = false;
+}
+
+bool QQmlVME::componentCompleteEnabled()
+{
+    return s_enableComponentComplete;
 }
 
 void QQmlVME::blank(QFiniteStack<QQmlAbstractBinding *> &bs)
@@ -1450,7 +1469,7 @@ bool QQmlVMEGuard::isOK() const
             return false;
 
     for (int ii = 0; ii < m_contextCount; ++ii)
-        if (m_contexts[ii].isNull())
+        if (m_contexts[ii].isNull() || !m_contexts[ii]->engine)
             return false;
 
     return true;

@@ -464,8 +464,11 @@ v8::Handle<v8::Value> QQmlNumberExtension::toLocaleString(const v8::Arguments& a
         if (!args[1]->IsString())
             V8THROW_ERROR("Locale: Number.toLocaleString(): Invalid arguments");
         v8::Local<v8::String> fs = args[1]->ToString();
-        if (!fs.IsEmpty() && fs->Length())
-            format = fs->GetCharacter(0);
+        if (!fs.IsEmpty() && fs->Length()) {
+            v8::String::Value value(fs);
+            Q_ASSERT(*value != NULL);
+            format = **value;
+        }
     }
     int prec = 2;
     if (args.Length() > 2) {
@@ -766,7 +769,7 @@ V8_DEFINE_EXTENSION(QV8LocaleDataDeletable, localeV8Data);
 /*!
     \qmltype Locale
     \instantiates QQmlLocale
-    \inqmlmodule QtQuick 2
+    \inqmlmodule QtQml 2
     \brief Provides locale specific properties and formatted data
 
     The Locale object may only be created via the \l{QML:Qt::locale()}{Qt.locale()} function.
@@ -809,7 +812,7 @@ V8_DEFINE_EXTENSION(QV8LocaleDataDeletable, localeV8Data);
     }
     \endcode
 
-    QtQuick Locale's data is based on Common Locale Data Repository v1.8.1.
+    Qt Quick Locale's data is based on Common Locale Data Repository v1.8.1.
 
 
     \target FormatType
