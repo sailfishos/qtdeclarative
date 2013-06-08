@@ -192,6 +192,30 @@ Requires:   %{name} = %{version}-%{release}
 %description import-window2
 This package provides the QtQml Window.2 plugin
 
+%package import-models2
+Summary:    Qt Declarative models plugin
+Group:      Qt/Qt
+Requires:   %{name} = %{version}-%{release}
+
+%description import-models2
+This package provides the QtDeclarative models plugin for QtQuick 2.0
+
+%package import-dialogs
+Summary:    Qt Declarative dialogs plugin
+Group:      Qt/Qt
+Requires:   %{name} = %{version}-%{release}
+
+%description import-dialogs
+This package provides the QtDeclarative dialogs plugin for QtQuick 2.0
+
+%package import-privatewidgets
+Summary:    Qt Declarative private widgets plugin
+Group:      Qt/Qt
+Requires:   %{name} = %{version}-%{release}
+
+%description import-privatewidgets
+This package provides the QtDeclarative private widgets plugin for QtQuick 2.0
+
 %package qmlscene
 Summary:    QML scene viewer
 Group:      Qt/Qt
