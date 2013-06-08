@@ -40,6 +40,7 @@
 ****************************************************************************/
 
 #include "qqmlextensionplugin.h"
+#include "qqmlextensionplugin_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -120,7 +121,7 @@ QT_BEGIN_NAMESPACE
     The \l {Writing QML Extensions with C++} tutorial also contains a chapter
     on creating QML plugins.
 
-    Note that the QtQuick 1 version is called QDeclarativeExtensionPlugin.
+    Note that the \l {Qt Quick 1} version is called QDeclarativeExtensionPlugin.
 
     \sa QQmlEngine::importPlugin(), {How to Create Qt Plugins}
 */
@@ -144,7 +145,7 @@ QT_BEGIN_NAMESPACE
     explicitly.
 */
 QQmlExtensionPlugin::QQmlExtensionPlugin(QObject *parent)
-    : QObject(parent)
+    : QObject(*(new QQmlExtensionPluginPrivate), parent)
 {
 }
 
@@ -153,6 +154,12 @@ QQmlExtensionPlugin::QQmlExtensionPlugin(QObject *parent)
  */
 QQmlExtensionPlugin::~QQmlExtensionPlugin()
 {
+}
+
+QUrl QQmlExtensionPlugin::baseUrl() const
+{
+    Q_D(const QQmlExtensionPlugin);
+    return d->baseUrl;
 }
 
 /*!

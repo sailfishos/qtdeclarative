@@ -67,9 +67,17 @@
 #include <private/qobject_p.h>
 #include <qmutex.h>
 
+#include <private/qqmlprofilerservice_p.h>
+
 DEFINE_BOOL_CONFIG_OPTION(qmlFlashMode, QML_FLASH_MODE)
 DEFINE_BOOL_CONFIG_OPTION(qmlTranslucentMode, QML_TRANSLUCENT_MODE)
 DEFINE_BOOL_CONFIG_OPTION(qmlDisableDistanceField, QML_DISABLE_DISTANCEFIELD)
+
+
+#ifndef QSG_NO_RENDER_TIMING
+static bool qsg_render_timing = !qgetenv("QSG_RENDER_TIMING").isEmpty();
+static QElapsedTimer qsg_renderer_timer;
+#endif
 
 /*
     Comments about this class from Gunnar:
@@ -243,6 +251,14 @@ void QSGContext::initialize(QOpenGLContext *context)
 {
     Q_D(QSGContext);
 
+    // Sanity check the surface format, in case it was overridden by the application
+    QSurfaceFormat requested = defaultSurfaceFormat();
+    QSurfaceFormat actual = context->format();
+    if (requested.depthBufferSize() > 0 && actual.depthBufferSize() <= 0)
+        qWarning("QSGContext::initialize: depth buffer support missing, expect rendering errors");
+    if (requested.stencilBufferSize() > 0 && actual.stencilBufferSize() <= 0)
+        qWarning("QSGContext::initialize: stencil buffer support missing, expect rendering errors");
+
     Q_ASSERT(!d->gl);
     d->gl = context;
 
@@ -340,7 +356,11 @@ QSGDistanceFieldGlyphCache *QSGContext::distanceFieldGlyphCache(const QRawFont &
 */
 QSGGlyphNode *QSGContext::createNativeGlyphNode()
 {
+#if defined(QT_OPENGL_ES) && !defined(QT_OPENGL_ES_2_ANGLE)
+    return createGlyphNode();
+#else
     return new QSGDefaultGlyphNode;
+#endif
 }
 
 /*!
@@ -463,10 +483,26 @@ QSGMaterialShader *QSGContext::prepareMaterial(QSGMaterial *material)
     if (shader)
         return shader;
 
+#ifndef QSG_NO_RENDER_TIMING
+    if (qsg_render_timing  || QQmlProfilerService::enabled)
+        qsg_renderer_timer.start();
+#endif
+
     shader = material->createShader();
     shader->compile();
     shader->initialize();
     d->materials[type] = shader;
+
+#ifndef QSG_NO_RENDER_TIMING
+    if (qsg_render_timing)
+        printf("   - compiling material: %dms\n", (int) qsg_renderer_timer.elapsed());
+
+    if (QQmlProfilerService::enabled) {
+        QQmlProfilerService::sceneGraphFrame(
+                    QQmlProfilerService::SceneGraphContextFrame,
+                    qsg_renderer_timer.nsecsElapsed());
+    }
+#endif
 
     return shader;
 }

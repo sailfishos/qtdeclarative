@@ -1025,7 +1025,7 @@ QAbstractAnimationJob* QQuickScriptAction::transition(QQuickStateActions &action
     PropertyAction object) so that the rotation animation begins with the
     correct transform origin.
 
-    \sa {Animation and Transitions in Qt Quick}, QtQml
+    \sa {Animation and Transitions in Qt Quick}, {Qt QML}
 */
 QQuickPropertyAction::QQuickPropertyAction(QObject *parent)
 : QQuickAbstractAnimation(*(new QQuickPropertyActionPrivate), parent)
@@ -2563,6 +2563,11 @@ QAbstractAnimationJob* QQuickPropertyAnimation::transition(QQuickStateActions &a
     }
 
     return initInstance(animator);
+}
+
+QQuickAnimationPropertyUpdater::~QQuickAnimationPropertyUpdater()
+{
+    if (wasDeleted) *wasDeleted = true;
 }
 
 QT_END_NAMESPACE

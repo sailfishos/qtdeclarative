@@ -38,7 +38,7 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.1
 import QtTest 1.0
 
 Item {
@@ -67,14 +67,66 @@ Item {
         delegate: Text { text: model.name }
     }
 
+    ListView {
+        id: asyncLoaderCurrentIndexListView
+        width: 360
+        height: 360
+        model: asyncLoaderCurrentIndexListModel
+
+        currentIndex: 0
+
+        delegate: Loader {
+            width: asyncLoaderCurrentIndexListView.width
+            height: asyncLoaderCurrentIndexListView.height
+
+            source: component
+            asynchronous: true
+        }
+    }
+
+    ListView {
+        id: asyncListViewLoaderView
+        width: 360
+        height: 360
+        model: asyncListViewLoaderModel
+
+        currentIndex: 0
+
+        delegate: Loader {
+            width: asyncListViewLoaderView.width
+            height: asyncListViewLoaderView.height
+
+            source: component
+            asynchronous: true
+        }
+    }
+
     ListModel { id: emptymodel }
     ListModel { id: manyitems }
     ListModel { id: firstmodel; ListElement { name: "FirstModelElement0" } }
     ListModel { id: secondmodel; ListElement { name: "SecondModelElement0" } ListElement { name: "SecondModelElement1" } }
     ListModel { id: altermodel; ListElement { name: "AlterModelElement0" } ListElement { name: "AlterModelElement1" } }
+    ListModel {
+        id: asyncLoaderCurrentIndexListModel
+        ListElement { component: "data/asyncloadercurrentindex.qml" }
+        ListElement { component: "data/asyncloadercurrentindex.qml" }
+        ListElement { component: "data/asyncloadercurrentindex.qml" }
+        ListElement { component: "data/asyncloadercurrentindex.qml" }
+        ListElement { component: "data/asyncloadercurrentindex.qml" }
+        ListElement { component: "data/asyncloadercurrentindex.qml" }
+    }
+    ListModel {
+        id: asyncListViewLoaderModel
+        ListElement { component: "data/asynclistviewloader.qml" }
+        ListElement { component: "data/asynclistviewloader.qml" }
+        ListElement { component: "data/asynclistviewloader.qml" }
+        ListElement { component: "data/asynclistviewloader.qml" }
+        ListElement { component: "data/asynclistviewloader.qml" }
+    }
 
     TestCase {
         name: "ListView"
+        when: windowShown
 
         function test_empty() {
             compare(emptylist.count, 0)
@@ -168,8 +220,32 @@ Item {
             modelalter.currentIndex = 1;
             compare(modelalter.currentItem.text, "AlterModelElement1")
             altermodel.clear()
+            modelalter.forceLayout()
             tryCompare(modelalter.count, 0)
             compare(modelalter.currentItem, null)
+        }
+
+        function test_asyncLoaderCurrentIndexChange() {
+            for (var i = 0; i < 500; i++) {
+                asyncLoaderCurrentIndexListView.currentIndex = 0;
+                asyncLoaderCurrentIndexListView.currentIndex = 1;
+                asyncLoaderCurrentIndexListView.currentIndex = 2;
+                asyncLoaderCurrentIndexListView.currentIndex = 3;
+                asyncLoaderCurrentIndexListView.currentIndex = 4;
+                asyncLoaderCurrentIndexListView.currentIndex = 5;
+            }
+            wait(1000)
+        }
+
+        function test_asyncListViewLoader() {
+            for (var i = 0; i < 50; i++) {
+                wait(10);
+                asyncListViewLoaderView.currentIndex = 0;
+                asyncListViewLoaderView.currentIndex = 1;
+                asyncListViewLoaderView.currentIndex = 2;
+                asyncListViewLoaderView.currentIndex = 3;
+                asyncListViewLoaderView.currentIndex = 4;
+            }
         }
     }
 }

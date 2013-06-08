@@ -452,7 +452,6 @@ void QQuickBasePositioner::updateAttachedProperties(QQuickPositionerAttached *sp
     QQuickPositionerAttached *prevLastProperty = 0;
     QQuickPositionerAttached *lastProperty = 0;
 
-    int visibleItemIndex = 0;
     for (int ii = 0; ii < positionedItems.count(); ++ii) {
         const PositionedItem &child = positionedItems.at(ii);
         if (!child.item)
@@ -468,28 +467,47 @@ void QQuickBasePositioner::updateAttachedProperties(QQuickPositionerAttached *sp
             property = static_cast<QQuickPositionerAttached *>(qmlAttachedPropertiesObject<QQuickBasePositioner>(child.item, false));
         }
 
-        if (child.isVisible) {
-            if (property) {
-              property->setIndex(visibleItemIndex);
-              property->setIsFirstItem(visibleItemIndex == 0);
+        if (property) {
+            property->setIndex(ii);
+            property->setIsFirstItem(ii == 0);
 
-              if (property->isLastItem())
+            if (property->isLastItem()) {
+                if (prevLastProperty)
+                    prevLastProperty->setIsLastItem(false); // there can be only one last property
                 prevLastProperty = property;
             }
-
-            lastProperty = property;
-            ++visibleItemIndex;
-        } else if (property) {
-            property->setIndex(-1);
-            property->setIsFirstItem(false);
-            property->setIsLastItem(false);
         }
+
+        lastProperty = property;
     }
 
     if (prevLastProperty && prevLastProperty != lastProperty)
         prevLastProperty->setIsLastItem(false);
     if (lastProperty)
         lastProperty->setIsLastItem(true);
+
+    // clear attached properties for unpositioned items
+    for (int ii = 0; ii < unpositionedItems.count(); ++ii) {
+        const PositionedItem &child = unpositionedItems.at(ii);
+        if (!child.item)
+            continue;
+
+        QQuickPositionerAttached *property = 0;
+
+        if (specificProperty) {
+            if (specificPropertyOwner == child.item) {
+                property = specificProperty;
+            }
+        } else {
+            property = static_cast<QQuickPositionerAttached *>(qmlAttachedPropertiesObject<QQuickBasePositioner>(child.item, false));
+        }
+
+        if (property) {
+            property->setIndex(-1);
+            property->setIsFirstItem(false);
+            property->setIsLastItem(false);
+        }
+    }
 }
 
 /*!
@@ -682,8 +700,8 @@ void QQuickPositionerAttached::setIsLastItem(bool isLastItem)
     cases, these lists will be empty.  See the \l ViewTransition documentation for more details
     and examples on using these transitions.
 
-    \note In QtQuick 1, this transition was applied to all items that were part of the
-    positioner at the time of its creation. From QtQuick 2 onwards, positioners apply the
+    \note In \l {Qt Quick 1}, this transition was applied to all items that were part of the
+    positioner at the time of its creation. From \l {Qt Quick}{Qt Quick 2} onwards, positioners apply the
     \l populate transition to these items instead.
 
     \sa add, ViewTransition, {qml/positioners}{Positioners example}
@@ -836,8 +854,8 @@ void QQuickColumn::reportConflictingAnchors()
     cases, these lists will be empty.  See the \l ViewTransition documentation for more details
     and examples on using these transitions.
 
-    \note In QtQuick 1, this transition was applied to all items that were part of the
-    positioner at the time of its creation. From QtQuick 2 onwards, positioners apply the
+    \note In \l {Qt Quick 1}, this transition was applied to all items that were part of the
+    positioner at the time of its creation. From \l {Qt Quick}{QtQuick 2} onwards, positioners apply the
     \l populate transition to these items instead.
 
     \sa add, ViewTransition, {qml/positioners}{Positioners example}
@@ -1069,8 +1087,8 @@ void QQuickRow::reportConflictingAnchors()
     cases, these lists will be empty.  See the \l ViewTransition documentation for more details
     and examples on using these transitions.
 
-    \note In QtQuick 1, this transition was applied to all items that were part of the
-    positioner at the time of its creation. From QtQuick 2 onwards, positioners apply the
+    \note In \l {Qt Quick 1}, this transition was applied to all items that were part of the
+    positioner at the time of its creation. From \l {Qt Quick}{QtQuick 2} onwards, positioners apply the
     \l populate transition to these items instead.
 
     \sa add, ViewTransition, {qml/positioners}{Positioners example}
@@ -1102,6 +1120,8 @@ QQuickGrid::QQuickGrid(QQuickItem *parent)
     , m_useRowSpacing(false)
     , m_useColumnSpacing(false)
     , m_flow(LeftToRight)
+    , m_hItemAlign(AlignLeft)
+    , m_vItemAlign(AlignTop)
 {
 }
 
@@ -1178,7 +1198,7 @@ void QQuickGrid::setFlow(Flow flow)
     By default this property is not set.
 
     \sa columnSpacing
-    \since QtQuick2.0
+    \since QtQuick 2.0
 */
 void QQuickGrid::setRowSpacing(const qreal rowSpacing)
 {
@@ -1200,7 +1220,7 @@ void QQuickGrid::setRowSpacing(const qreal rowSpacing)
     By default this property is not set.
 
     \sa rowSpacing
-    \since QtQuick2.0
+    \since QtQuick 2.0
 */
 void QQuickGrid::setColumnSpacing(const qreal columnSpacing)
 {
@@ -1248,6 +1268,7 @@ void QQuickGrid::setLayoutDirection(Qt::LayoutDirection layoutDirection)
         prePositioning();
         emit layoutDirectionChanged();
         emit effectiveLayoutDirectionChanged();
+        emit effectiveHorizontalAlignmentChanged(effectiveHAlign());
     }
 }
 
@@ -1264,6 +1285,97 @@ void QQuickGrid::setLayoutDirection(Qt::LayoutDirection layoutDirection)
 Qt::LayoutDirection QQuickGrid::effectiveLayoutDirection() const
 {
     return QQuickBasePositionerPrivate::getEffectiveLayoutDirection(this);
+}
+
+/*!
+    \qmlproperty enumeration QtQuick2::Grid::horizontalItmeAlignment
+    \qmlproperty enumeration QtQuick2::Grid::verticalItemAlignment
+    \qmlproperty enumeration QtQuick2::Grid::effectiveHorizontalItemAlignment
+
+    Sets the horizontal and vertical alignment of items in the Grid. By default,
+    the items are vertically aligned to the top. Horizontal
+    alignment follows the layoutDirection of the Grid, for example when having a layoutDirection
+    from LeftToRight, the items will be aligned on the left.
+
+    The valid values for \c horizontalItemAlignment are, \c Grid.AlignLeft, \c Grid.AlignRight and
+    \c Grid.AlignHCenter.
+
+    The valid values for \c verticalItemAlignment are \c Grid.AlignTop, \c Grid.AlignBottom
+    and \c Grid.AlignVCenter.
+
+    The below images show three examples of how to align items.
+
+    \table
+    \row
+        \li
+        \li \inlineimage gridLayout_aligntopleft.png
+        \li \inlineimage gridLayout_aligntop.png
+        \li \inlineimage gridLayout_aligncenter.png
+    \row
+        \li Horizontal alignment
+        \li AlignLeft
+        \li AlignHCenter
+        \li AlignHCenter
+    \row
+        \li Vertical alignment
+        \li AlignTop
+        \li AlignTop
+        \li AlignVCenter
+    \endtable
+
+
+    When mirroring the layout using either the attached property LayoutMirroring::enabled or
+    by setting the layoutDirection, the horizontal alignment of items will be mirrored as well.
+    However, the property \c horizontalItemAlignment will remain unchanged.
+    To query the effective horizontal alignment of items, use the read-only property
+    \c effectiveHorizontalItemAlignment.
+
+    \sa Grid::layoutDirection, {LayoutMirroring}{LayoutMirroring}
+*/
+QQuickGrid::HAlignment QQuickGrid::hItemAlign() const
+{
+    return m_hItemAlign;
+}
+void QQuickGrid::setHItemAlign(HAlignment align)
+{
+    if (m_hItemAlign != align) {
+        m_hItemAlign = align;
+        prePositioning();
+        emit horizontalAlignmentChanged(align);
+        emit effectiveHorizontalAlignmentChanged(effectiveHAlign());
+    }
+}
+
+QQuickGrid::HAlignment QQuickGrid::effectiveHAlign() const
+{
+    HAlignment effectiveAlignment = m_hItemAlign;
+    if (effectiveLayoutDirection() == Qt::RightToLeft) {
+        switch (hItemAlign()) {
+        case AlignLeft:
+            effectiveAlignment = AlignRight;
+            break;
+        case AlignRight:
+            effectiveAlignment = AlignLeft;
+            break;
+        default:
+            break;
+        }
+    }
+    return effectiveAlignment;
+}
+
+
+QQuickGrid::VAlignment QQuickGrid::vItemAlign() const
+{
+    return m_vItemAlign;
+}
+void QQuickGrid::setVItemAlign(VAlignment align)
+{
+    if (m_vItemAlign != align) {
+        m_vItemAlign = align;
+        prePositioning();
+        emit verticalAlignmentChanged(align);
+    }
 }
 
 void QQuickGrid::doPositioning(QSizeF *contentSize)
@@ -1362,9 +1474,22 @@ void QQuickGrid::doPositioning(QSizeF *contentSize)
     for (int i = 0; i < positionedItems.count(); ++i) {
         PositionedItem &child = positionedItems[i];
         qreal childXOffset = xoffset;
+
+        if (effectiveHAlign() == AlignRight)
+            childXOffset += maxColWidth[curCol] - child.item->width();
+        else if (hItemAlign() == AlignHCenter)
+            childXOffset += (maxColWidth[curCol] - child.item->width())/2.0;
+
         if (!d->isLeftToRight())
-            childXOffset -= child.item->width();
-        positionItem(childXOffset, yoffset, &child);
+            childXOffset -= maxColWidth[curCol];
+
+        qreal alignYOffset = yoffset;
+        if (m_vItemAlign == AlignVCenter)
+            alignYOffset += (maxRowHeight[curRow] - child.item->height())/2.0;
+        else if (m_vItemAlign == AlignBottom)
+            alignYOffset += maxRowHeight[curRow] - child.item->height();
+
+        positionItem(childXOffset, alignYOffset, &child);
 
         if (m_flow == LeftToRight) {
             if (d->isLeftToRight())
@@ -1503,8 +1628,8 @@ void QQuickGrid::reportConflictingAnchors()
     cases, these lists will be empty.  See the \l ViewTransition documentation for more details
     and examples on using these transitions.
 
-    \note In QtQuick 1, this transition was applied to all items that were part of the
-    positioner at the time of its creation. From QtQuick 2 onwards, positioners apply the
+    \note In \l {Qt Quick 1}, this transition was applied to all items that were part of the
+    positioner at the time of its creation. From \l {Qt Quick}{QtQuick 2} onwards, positioners apply the
     \l populate transition to these items instead.
 
     \sa add, ViewTransition, {qml/positioners}{Positioners example}

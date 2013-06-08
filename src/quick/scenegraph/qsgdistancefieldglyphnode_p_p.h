@@ -39,8 +39,8 @@
 **
 ****************************************************************************/
 
-#ifndef DISTANCEFIELDTEXTMATERIAL_H
-#define DISTANCEFIELDTEXTMATERIAL_H
+#ifndef QSGDISTANCEFIELDGLYPHNODE_P_P_H
+#define QSGDISTANCEFIELDGLYPHNODE_P_P_H
 
 #include <QtQuick/qsgmaterial.h>
 #include "qsgdistancefieldglyphnode_p.h"
@@ -58,7 +58,7 @@ public:
     virtual QSGMaterialShader *createShader() const;
     virtual int compare(const QSGMaterial *other) const;
 
-    void setColor(const QColor &color) { m_color = color; }
+    virtual void setColor(const QColor &color);
     const QColor &color() const { return m_color; }
 
     void setGlyphCache(QSGDistanceFieldGlyphCache *a) { m_glyph_cache = a; }
@@ -92,7 +92,7 @@ public:
     virtual QSGMaterialShader *createShader() const = 0;
     virtual int compare(const QSGMaterial *other) const;
 
-    void setStyleColor(const QColor &color) { m_styleColor = color; }
+    void setStyleColor(const QColor &color);
     const QColor &styleColor() const { return m_styleColor; }
 
 protected:
@@ -130,6 +130,7 @@ class Q_QUICK_PRIVATE_EXPORT QSGHiQSubPixelDistanceFieldTextMaterial : public QS
 public:
     virtual QSGMaterialType *type() const;
     virtual QSGMaterialShader *createShader() const;
+    void setColor(const QColor &color) { m_color = color; }
 };
 
 class Q_QUICK_PRIVATE_EXPORT QSGLoQSubPixelDistanceFieldTextMaterial : public QSGDistanceFieldTextMaterial
@@ -137,8 +138,9 @@ class Q_QUICK_PRIVATE_EXPORT QSGLoQSubPixelDistanceFieldTextMaterial : public QS
 public:
     virtual QSGMaterialType *type() const;
     virtual QSGMaterialShader *createShader() const;
+    void setColor(const QColor &color) { m_color = color; }
 };
 
 QT_END_NAMESPACE
 
-#endif // DISTANCEFIELDTEXTMATERIAL_H
+#endif

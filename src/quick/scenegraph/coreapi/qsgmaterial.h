@@ -39,13 +39,11 @@
 **
 ****************************************************************************/
 
-#ifndef MATERIAL_H
-#define MATERIAL_H
+#ifndef QSGMATERIAL_H
+#define QSGMATERIAL_H
 
 #include <QtQuick/qtquickglobal.h>
-#include <qopenglshaderprogram.h>
-
-QT_BEGIN_HEADER
+#include <QtGui/qopenglshaderprogram.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -71,9 +69,11 @@ public:
         float opacity() const;
         QMatrix4x4 combinedMatrix() const;
         QMatrix4x4 modelViewMatrix() const;
+        QMatrix4x4 projectionMatrix() const;
         QRect viewportRect() const;
         QRect deviceRect() const;
         float determinant() const;
+        float devicePixelRatio() const;
 
         QOpenGLContext *context() const;
 
@@ -142,7 +142,5 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QSGMaterial::Flags)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QSGMaterialShader::RenderState::DirtyStates)
 
 QT_END_NAMESPACE
-
-QT_END_HEADER
 
 #endif
