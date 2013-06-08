@@ -364,6 +364,18 @@ cp lib/libQt5QmlDevTools.a %{buildroot}/%{_libdir}
 %defattr(-,root,root,-)
 %{_libdir}/qt5/qml/QtQuick/Window.2/
 
+%files import-models2
+%defattr(-,root,root,-)
+%{_libdir}/qt5/qml/QtQml/Models.2/
+
+%files import-dialogs
+%defattr(-,root,root,-)
+%{_libdir}/qt5/qml/QtQuick/Dialogs/
+
+%files import-privatewidgets
+%defattr(-,root,root,-)
+%{_libdir}/qt5/qml/QtQuick/PrivateWidgets/
+
 
 
 
@@ -396,7 +408,7 @@ cp lib/libQt5QmlDevTools.a %{buildroot}/%{_libdir}
 
 %files qtdeclarativetools-devel
 %defattr(-,root,root,-)
-%{_includedir}/qt5/QtQmlDevTools/
+#%{_includedir}/qt5/QtQmlDevTools/
 %{_libdir}/libQt5QmlDevTools.a
 %{_libdir}/libQt5QmlDevTools.prl
 %{_libdir}/pkgconfig/Qt5QmlDevTools.pc
