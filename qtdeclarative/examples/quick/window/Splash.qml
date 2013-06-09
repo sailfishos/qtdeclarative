@@ -39,51 +39,41 @@
 ****************************************************************************/
 
 import QtQuick 2.0
-import QtQuick.Window 2.0
+import QtQuick.Window 2.1
 
-QtObject {
-    property var win1: Window {
-        width: 320
-        height: 240
-        x: 0
-        y: 0
-        visible: true
-        color: "#ccffff"
-        title: "First Window"
-        Text {
-            anchors.centerIn: parent
-            text: "First Window"
-            Text {
-                id: statusText
-                anchors.top: parent.bottom
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-        }
+//! [splash-properties]
+Window {
+    id: splash
+    visible: true
+    width: splashImage.width
+    height: splashImage.height
+    color: "transparent"
+    title: "Splash Window"
+    modality: Qt.ApplicationModal
+    flags: Qt.SplashScreen
+    property int timeoutInterval: 2000
+    signal timeout
+//! [splash-properties]
+//! [screen-properties]
+    x: (Screen.width - splashImage.width) / 2
+    y: (Screen.height - splashImage.height) / 2
+//! [screen-properties]
+
+    Image {
+        id: splashImage
+        source: "../../shared/images/qt-logo.png"
         MouseArea {
             anchors.fill: parent
-            onClicked: win2.visible = !win2.visible
+            onClicked: Qt.quit()
         }
     }
-    property var win2: Window {
-        width: 320
-        height: 240
-        x: 220
-        y: 120
-        visible: true
-        color: "green"
-        title: "Second Window: " + color
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 10
-            Text {
-                anchors.centerIn: parent
-                text: "Second Window"
-            }
-            MouseArea {
-                anchors.fill: parent
-                onClicked: win2.color = "#ffffcc"
-            }
+    //! [timer]
+    Timer {
+        interval: timeoutInterval; running: true; repeat: false
+        onTriggered: {
+            visible = false
+            splash.timeout()
         }
-        onVisibleChanged: statusText.text = "second window is " + (visible ? "visible" : "invisible")
     }
+    //! [timer]
 }

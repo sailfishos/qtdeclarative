@@ -3,7 +3,7 @@
 ** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
-** This file is part of the documentation of the Qt Toolkit.
+** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
 ** You may use this file under the terms of the BSD license as follows:
@@ -38,24 +38,58 @@
 **
 ****************************************************************************/
 
-//![0]
-import QtQuick 2.0
-import Qt.labs.folderlistmodel 1.0
+import QtQuick 2.1
+import QtQuick.Window 2.1
 
-ListView {
-    width: 200; height: 400
+Item {
+    id: root
+    width: 400
+    height: propertyGrid.implicitHeight + 16
 
-    FolderListModel {
-        id: folderModel
-        nameFilters: ["*.qml"]
+    function orientationToString(o) {
+        switch (o) {
+        case Qt.PrimaryOrientation:
+            return "primary";
+        case Qt.PortraitOrientation:
+            return "portrait";
+        case Qt.LandscapeOrientation:
+            return "landscape";
+        case Qt.InvertedPortraitOrientation:
+            return "inverted portrait";
+        case Qt.InvertedLandscapeOrientation:
+            return "inverted landscape";
+        }
+        return "unknown";
     }
 
-    Component {
-        id: fileDelegate
-        Text { text: fileName }
-    }
+    Grid {
+        id: propertyGrid
+        columns: 2
+        spacing: 8
+        x: spacing
+        y: spacing
 
-    model: folderModel
-    delegate: fileDelegate
+        //! [screen]
+        Text {
+            text: "Screen \"" + Screen.name + "\":"
+            font.bold: true
+        }
+        Item { width: 1; height: 1 } // spacer
+
+        Text { text: "dimensions" }
+        Text { text: Screen.width + "x" + Screen.height }
+
+        Text { text: "logical pixel density" }
+        Text { text: Screen.logicalPixelDensity.toFixed(2) + " dots/mm" }
+
+        Text { text: "available virtual desktop" }
+        Text { text: Screen.desktopAvailableWidth + "x" + Screen.desktopAvailableHeight }
+
+        Text { text: "orientation" }
+        Text { text: orientationToString(Screen.orientation) + " (" + Screen.orientation + ")" }
+
+        Text { text: "primary orientation" }
+        Text { text: orientationToString(Screen.primaryOrientation) + " (" + Screen.primaryOrientation + ")" }
+        //! [screen]
+    }
 }
-//![0]

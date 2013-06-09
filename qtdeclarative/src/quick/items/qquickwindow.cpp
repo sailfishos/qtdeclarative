@@ -74,6 +74,8 @@ QT_BEGIN_NAMESPACE
 
 extern Q_GUI_EXPORT QImage qt_gl_read_framebuffer(const QSize &size, bool alpha_format, bool include_alpha);
 
+bool QQuickWindowPrivate::defaultAlphaBuffer(0);
+
 void QQuickWindowPrivate::updateFocusItemTransform()
 {
     Q_Q(QQuickWindow);
@@ -87,44 +89,49 @@ void QQuickWindowPrivate::updateFocusItemTransform()
 #endif
 }
 
-
 class QQuickWindowIncubationController : public QObject, public QQmlIncubationController
 {
     Q_OBJECT
 
 public:
-    QQuickWindowIncubationController(const QQuickWindow *window)
-        : m_window(QQuickWindowPrivate::get(const_cast<QQuickWindow *>(window)))
+    QQuickWindowIncubationController(QSGRenderLoop *loop)
+        : m_renderLoop(loop), m_timer(0)
     {
         // Allow incubation for 1/3 of a frame.
         m_incubation_time = qMax(1, int(1000 / QGuiApplication::primaryScreen()->refreshRate()) / 3);
 
-        m_animation_driver = m_window->windowManager->animationDriver();
+        m_animation_driver = m_renderLoop->animationDriver();
         if (m_animation_driver) {
             connect(m_animation_driver, SIGNAL(stopped()), this, SLOT(animationStopped()));
-            connect(window, SIGNAL(frameSwapped()), this, SLOT(incubate()));
+            connect(m_renderLoop, SIGNAL(timeToIncubate()), this, SLOT(incubate()));
         }
     }
 
 protected:
-    virtual bool event(QEvent *e)
+    void timerEvent(QTimerEvent *e)
     {
-        if (e->type() == QEvent::User) {
-            incubate();
-            return true;
+        killTimer(m_timer);
+        m_timer = 0;
+        incubate();
+    }
+
+    void incubateAgain() {
+        if (m_timer == 0) {
+            // Wait for a while before processing the next batch. Using a
+            // timer to avoid starvation of system events.
+            m_timer = startTimer(m_incubation_time);
         }
-        return QObject::event(e);
     }
 
 public slots:
     void incubate() {
         if (incubatingObjectCount()) {
-            if (m_animation_driver && m_animation_driver->isRunning()) {
+            if (m_renderLoop->interleaveIncubation()) {
                 incubateFor(m_incubation_time);
             } else {
                 incubateFor(m_incubation_time * 2);
                 if (incubatingObjectCount())
-                    QCoreApplication::postEvent(this, new QEvent(QEvent::User));
+                    incubateAgain();
             }
         }
     }
@@ -134,14 +141,15 @@ public slots:
 protected:
     virtual void incubatingObjectCountChanged(int count)
     {
-        if (count && (!m_animation_driver || !m_animation_driver->isRunning()))
-            QCoreApplication::postEvent(this, new QEvent(QEvent::User));
+        if (count && !m_renderLoop->interleaveIncubation())
+            incubateAgain();
     }
 
 private:
-    QQuickWindowPrivate *m_window;
+    QSGRenderLoop *m_renderLoop;
     int m_incubation_time;
     QAnimationDriver *m_animation_driver;
+    int m_timer;
 };
 
 #include "qquickwindow.moc"
@@ -347,6 +355,7 @@ QQuickWindowPrivate::QQuickWindowPrivate()
     , persistentGLContext(true)
     , persistentSceneGraph(true)
     , lastWheelEventAccepted(false)
+    , componentCompleted(true)
     , renderTarget(0)
     , renderTargetId(0)
     , incubationController(0)
@@ -840,6 +849,11 @@ void QQuickWindowPrivate::cleanup(QSGNode *n)
 
     Alternatively you can set or bind \l x and \l y to position the Window
     explicitly on the screen.
+
+    When the user attempts to close a window, the \a closing signal will be
+    emitted. You can force the window to stay open (for example to prompt the
+    user to save changes) by writing an onClosing handler and setting
+    close.accepted = false.
 */
 /*!
     \class QQuickWindow
@@ -1174,6 +1188,14 @@ bool QQuickWindow::event(QEvent *e)
     case QEvent::WindowDeactivate:
         contentItem()->windowDeactivateEvent();
         break;
+    case QEvent::Close: {
+        // TOOD Qt 6 (binary incompatible)
+        // closeEvent(static_cast<QCloseEvent *>(e));
+        QQuickCloseEvent qev;
+        qev.setAccepted(e->isAccepted());
+        emit closing(&qev);
+        e->setAccepted(qev.isAccepted());
+        } break;
     case QEvent::FocusAboutToChange:
 #ifndef QT_NO_IM
         if (d->activeFocusItem)
@@ -2558,6 +2580,57 @@ QOpenGLContext *QQuickWindow::openglContext() const
     This signal will be emitted from the scene graph rendering thread.
  */
 
+/*!
+    \class QQuickCloseEvent
+    \internal
+    \since QtQuick 2.1
+
+    \inmodule QtQuick.Window
+
+    \brief Notification that a \l QQuickWindow is about to be closed
+*/
+/*!
+    \qmltype CloseEvent
+    \instantiates QQuickCloseEvent
+    \inqmlmodule QtQuick.Window 2
+    \ingroup qtquick-visual
+    \brief Notification that a \l Window is about to be closed
+    \since Qt 5.1
+
+    Notification that a window is about to be closed by the windowing system
+    (e.g. the user clicked the titlebar close button). The CloseEvent contains
+    an accepted property which can be set to false to abort closing the window.
+
+    \sa Window.closing()
+*/
+
+/*!
+    \qmlproperty bool QtQuick.Window2::CloseEvent::accepted
+
+    This property indicates whether the application will allow the user to
+    close the window.  It is true by default.
+*/
+
+/*!
+    \fn void QQuickWindow::closing()
+    \since QtQuick 2.1
+
+    This signal is emitted when the window receives a QCloseEvent from the
+    windowing system.
+*/
+
+/*!
+    \qmlsignal QtQuick.Window2::closing(CloseEvent close)
+    \since Qt 5.1
+
+    This signal is emitted when the user tries to close the window.
+
+    This signal includes a closeEvent parameter. The \a close \l accepted
+    property is true by default so that the window is allowed to close; but you
+    can implement an onClosing() handler and set close.accepted = false if
+    you need to do something else before the window can be closed.
+ */
+
 
 /*!
     Sets the render target for this window to be \a fbo.
@@ -2713,7 +2786,7 @@ QQmlIncubationController *QQuickWindow::incubationController() const
     Q_D(const QQuickWindow);
 
     if (!d->incubationController)
-        d->incubationController = new QQuickWindowIncubationController(this);
+        d->incubationController = new QQuickWindowIncubationController(d->windowManager);
     return d->incubationController;
 }
 
@@ -2905,7 +2978,7 @@ QSGTexture *QQuickWindow::createTextureFromId(uint id, const QSize &size, Create
     Setting the clear color has no effect when clearing is disabled.
     By default, the clear color is white.
 
-    \sa setClearBeforeRendering()
+    \sa setClearBeforeRendering(), setDefaultAlphaBuffer()
  */
 
 void QQuickWindow::setColor(const QColor &color)
@@ -2915,7 +2988,7 @@ void QQuickWindow::setColor(const QColor &color)
         return;
 
     if (color.alpha() != d->clearColor.alpha()) {
-        QSurfaceFormat fmt = format();
+        QSurfaceFormat fmt = requestedFormat();
         if (color.alpha() < 255)
             fmt.setAlphaBufferSize(8);
         else
@@ -2930,6 +3003,31 @@ void QQuickWindow::setColor(const QColor &color)
 QColor QQuickWindow::color() const
 {
     return d_func()->clearColor;
+}
+
+/*!
+    \brief Returns whether to use alpha transparency on newly created windows.
+
+    \since Qt 5.1
+    \sa setDefaultAlphaBuffer()
+ */
+bool QQuickWindow::hasDefaultAlphaBuffer()
+{
+    return QQuickWindowPrivate::defaultAlphaBuffer;
+}
+
+/*!
+    \brief \a useAlpha specifies whether to use alpha transparency on newly created windows.
+    \since Qt 5.1
+
+    In any application which expects to create translucent windows, it's
+    necessary to set this to true before creating the first QQuickWindow,
+    because all windows will share the same \l QOpenGLContext. The default
+    value is false.
+ */
+void QQuickWindow::setDefaultAlphaBuffer(bool useAlpha)
+{
+    QQuickWindowPrivate::defaultAlphaBuffer = useAlpha;
 }
 
 /*!

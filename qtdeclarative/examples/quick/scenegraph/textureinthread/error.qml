@@ -38,21 +38,12 @@
 **
 ****************************************************************************/
 
-#include <QtGui/QGuiApplication>
-#include <QtQml/QQmlEngine>
-#include <QtQml/QQmlComponent>
-#include <QtCore/QUrl>
-#include <QDebug>
+import QtQuick 2.0
 
-int main(int argc, char* argv[])
-{
-    QGuiApplication app(argc, argv);
-    QQmlEngine engine;
-    QQmlComponent component(&engine);
-    component.loadUrl(QUrl("qrc:///window/window/Window.qml"));
-    if ( component.isReady() )
-        component.create();
-    else
-        qWarning() << component.errorString();
-    return app.exec();
+Text {
+    width: 400
+    height: 100
+    text: 'Platform does not support threaded OpenGL needed by this example.'
+    verticalAlignment: Text.AlignVCenter
+    horizontalAlignment: Text.AlignHCenter
 }
