@@ -31,7 +31,7 @@
 \brief The Qt QML module defines and implements the QML language
 
 The Qt QML module provides a framework for developing applications and libraries
-with the \l{The QML Language}{QML language}. It defines and implements the
+with the \l{QML Application Developer Resources}{QML language}. It defines and implements the
 language and engine infrastructure, and provides an API to enable application
 developers to extend the QML language with custom types and integrate QML code
 with JavaScript and C++. The Qt QML module provides both a \l{Qt QML QML Types}
@@ -82,6 +82,19 @@ various QML object types:
 \li \l Binding
 \li \l Connections
 \li \l Timer
+\endlist
+
+\section2 Lists and Models
+
+New in Qt 5.1, the model types are moved to a submodule, \c QtQml.Models. The
+\l{Qt QML Models QML Types}{Qt QML Models} page has more information.
+
+\list
+\li \l DelegateModel
+\li \l DelegateModelGroup
+\li \l ListElement
+\li \l ListModel
+\li \l ObjectModel
 \endlist
 
 \section1 JavaScript Environment for QML Applications

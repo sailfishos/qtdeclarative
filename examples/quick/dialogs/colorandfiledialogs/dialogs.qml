@@ -38,54 +38,22 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.1
-import QtQuick.Window 2.1
+import QtQuick 2.0
+import "../shared"
 
-Item {
-    id: root
-    width: 400
-    height: 200
+TabSet {
+    width: 580
+    height: 440
 
-    function orientationToString(o) {
-        switch (o) {
-        case Qt.PrimaryOrientation:
-            return "primary";
-        case Qt.PortraitOrientation:
-            return "portrait";
-        case Qt.LandscapeOrientation:
-            return "landscape";
-        case Qt.InvertedPortraitOrientation:
-            return "inverted portrait";
-        case Qt.InvertedLandscapeOrientation:
-            return "inverted landscape";
-        }
-        return "unknown";
+    FileDialogs {
+        property string title: "File Dialog"
+        anchors.fill: parent
+        color: "#e3e3e3" // to match tab.png
     }
 
-    Grid {
-        anchors.centerIn: parent
-        columns: 2
-        spacing: 8
-
-        Text {
-            text: "Screen \"" + Screen.name + "\":"
-            font.bold: true
-        }
-        Item { width: 1; height: 1 } // spacer
-
-        Text { text: "dimensions" }
-        Text { text: Screen.width + "x" + Screen.height }
-
-        Text { text: "logical pixel density" }
-        Text { text: Screen.logicalPixelDensity.toFixed(2) + " dots/mm" }
-
-        Text { text: "available virtual desktop" }
-        Text { text: Screen.desktopAvailableWidth + "x" + Screen.desktopAvailableHeight }
-
-        Text { text: "orientation" }
-        Text { text: orientationToString(Screen.orientation) + " (" + Screen.orientation + ")" }
-
-        Text { text: "primary orientation" }
-        Text { text: orientationToString(Screen.primaryOrientation) + " (" + Screen.primaryOrientation + ")" }
+    ColorDialogs {
+        property string title: "Color Dialog"
+        anchors.fill: parent
+        color: "#e3e3e3" // to match tab.png
     }
 }

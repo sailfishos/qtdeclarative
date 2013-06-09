@@ -1426,22 +1426,12 @@ QQmlListModelParser::ListInstruction *QQmlListModelParser::ListModelData::instru
     \qmltype ListModel
     \instantiates QQmlListModel
     \inqmlmodule QtQml.Models 2
-    \brief Defines a free-form list data source
-
-    The ListModel is a simple container of ListElement definitions, each containing data roles.
-    The contents can be defined dynamically, or explicitly in QML.
-
-    This type is also available in the \c {QtQuick 2} import. For full documentation, see \l QtQuick2::ListModel
-*/
-/*!
-    \qmltype ListModel
-    \instantiates QQmlListModel
-    \inqmlmodule QtQml 2
-    \brief Defines a free-form list data source
     \ingroup qtquick-models
+    \brief Defines a free-form list data source
 
-    The ListModel is a simple container of ListElement definitions, each containing data roles.
-    The contents can be defined dynamically, or explicitly in QML.
+    The ListModel is a simple container of ListElement definitions, each
+    containing data roles. The contents can be defined dynamically, or
+    explicitly in QML.
 
     The number of elements in the model can be obtained from its \l count property.
     A number of familiar methods are also provided to manipulate the contents of the
@@ -1801,7 +1791,7 @@ QHash<int, QByteArray> QQmlListModel::roleNames() const
 }
 
 /*!
-    \qmlproperty bool QtQml2::ListModel::dynamicRoles
+    \qmlproperty bool ListModel::dynamicRoles
 
     By default, the type of a role is fixed the first time
     the role is used. For example, if you create a role called
@@ -1847,7 +1837,7 @@ void QQmlListModel::setDynamicRoles(bool enableDynamicRoles)
 }
 
 /*!
-    \qmlproperty int QtQml2::ListModel::count
+    \qmlproperty int ListModel::count
     The number of data entries in the model.
 */
 int QQmlListModel::count() const
@@ -2536,16 +2526,6 @@ bool QQmlListModelParser::definesEmptyList(const QString &s)
     \qmltype ListElement
     \instantiates QQmlListElement
     \inqmlmodule QtQml.Models 2
-    \brief Defines a data item in a ListModel
-
-    List elements are defined inside ListModel definitions, and represent items in a list.
-
-    This type is also available in the \c {QtQuick 2} import. For full documentation, see \l QtQuick2::ListElement
-*/
-/*!
-    \qmltype ListElement
-    \instantiates QQmlListElement
-    \inqmlmodule QtQml 2
     \brief Defines a data item in a ListModel
     \ingroup qtquick-models
 

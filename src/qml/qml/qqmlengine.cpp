@@ -275,8 +275,9 @@ QQmlImageProviderBase::~QQmlImageProviderBase()
 
 /*!
 \qmltype Qt
-    \instantiates QQmlEnginePrivate
-  \ingroup qml-utility-elements
+\inqmlmodule QtQml 2
+\instantiates QQmlEnginePrivate
+\ingroup qml-utility-elements
 \brief The QML global Qt object provides useful enums and functions from Qt.
 
 \keyword QmlGlobalQtObject
@@ -1278,11 +1279,13 @@ void QQmlEnginePrivate::doDeleteInEngineThread()
         delete d;
 }
 
-Q_AUTOTEST_EXPORT void qmlExecuteDeferred(QObject *object)
+namespace QtQml {
+
+void qmlExecuteDeferred(QObject *object)
 {
     QQmlData *data = QQmlData::get(object);
 
-    if (data && data->compiledData && data->deferredIdx) {
+    if (data && data->deferredData) {
         QQmlObjectCreatingProfiler prof;
         if (prof.enabled) {
             QQmlType *type = QQmlMetaType::qmlType(object->metaObject());
@@ -1297,8 +1300,9 @@ Q_AUTOTEST_EXPORT void qmlExecuteDeferred(QObject *object)
         QQmlComponentPrivate::beginDeferred(ep, object, &state);
 
         // Release the reference for the deferral action (we still have one from construction)
-        data->compiledData->release();
-        data->compiledData = 0;
+        data->deferredData->compiledData->release();
+        delete data->deferredData;
+        data->deferredData = 0;
 
         QQmlComponentPrivate::complete(ep, &state);
     }
@@ -1350,6 +1354,41 @@ QObject *qmlAttachedPropertiesObject(int *idCache, const QObject *object,
 
     return qmlAttachedPropertiesObjectById(*idCache, object, create);
 }
+
+} // namespace QtQml
+
+#if QT_DEPRECATED_SINCE(5, 1)
+
+// Also define symbols outside namespace to keep binary compatibility with Qt 5.0
+
+Q_QML_EXPORT void qmlExecuteDeferred(QObject *obj)
+{
+    QtQml::qmlExecuteDeferred(obj);
+}
+
+Q_QML_EXPORT QQmlContext *qmlContext(const QObject *obj)
+{
+    return QtQml::qmlContext(obj);
+}
+
+Q_QML_EXPORT QQmlEngine *qmlEngine(const QObject *obj)
+{
+    return QtQml::qmlEngine(obj);
+}
+
+Q_QML_EXPORT QObject *qmlAttachedPropertiesObjectById(int id, const QObject *obj, bool create)
+{
+    return QtQml::qmlAttachedPropertiesObjectById(id, obj, create);
+}
+
+Q_QML_EXPORT QObject *qmlAttachedPropertiesObject(int *idCache, const QObject *object,
+                                                  const QMetaObject *attachedMetaObject,
+                                                  bool create)
+{
+    return QtQml::qmlAttachedPropertiesObject(idCache, object, attachedMetaObject, create);
+}
+
+#endif // QT_DEPRECATED_SINCE(5, 1)
 
 QQmlDebuggingEnabler::QQmlDebuggingEnabler(bool printWarning)
 {
@@ -1502,6 +1541,12 @@ void QQmlData::destroyed(QObject *object)
     if (compiledData) {
         compiledData->release();
         compiledData = 0;
+    }
+
+    if (deferredData) {
+        deferredData->compiledData->release();
+        delete deferredData;
+        deferredData = 0;
     }
 
     QQmlAbstractBoundSignal *signalHandler = signalHandlers;

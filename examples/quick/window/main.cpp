@@ -38,13 +38,23 @@
 **
 ****************************************************************************/
 
-import QtQml 2.0
+#include <QtGui/QGuiApplication>
+#include <QtQml/QQmlEngine>
+#include <QtQml/QQmlComponent>
+#include <QtQuick/QQuickWindow>
+#include <QtCore/QUrl>
+#include <QDebug>
 
-/*
-    This object's only functionality is to exist as a root object and
-    display nothing, proving that qmlscene can run without windows.
-    (A QtObject can't even have Component.onCompleted)
-*/
-QtObject {
-    property string philosophy: "hello bleak windowless world"
+int main(int argc, char* argv[])
+{
+    QGuiApplication app(argc, argv);
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    QQuickWindow::setDefaultAlphaBuffer(true);
+    component.loadUrl(QUrl("qrc:///window/window.qml"));
+    if ( component.isReady() )
+        component.create();
+    else
+        qWarning() << component.errorString();
+    return app.exec();
 }

@@ -626,7 +626,7 @@ void QQuickPositionerAttached::setIsLastItem(bool isLastItem)
     more information about its position within the Column.
 
     For more information on using Column and other related positioner-types, see
-    \l{Item Layouts}.
+    \l{Item Positioners}.
 
 
     \section1 Using Transitions
@@ -644,7 +644,7 @@ void QQuickPositionerAttached::setIsLastItem(bool isLastItem)
 
     \image verticalpositioner_transition.gif
 
-    \sa Row, Grid, Flow, Positioner, {qml/positioners}{Positioners example}
+    \sa Row, Grid, Flow, Positioner, ColumnLayout, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Column::populate
@@ -657,7 +657,7 @@ void QQuickPositionerAttached::setIsLastItem(bool isLastItem)
     the item that is being added. See the \l ViewTransition documentation for more details
     and examples on using these transitions.
 
-    \sa add, ViewTransition, {declarative/positioners}{Positioners example}
+    \sa add, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Column::add
@@ -679,7 +679,7 @@ void QQuickPositionerAttached::setIsLastItem(bool isLastItem)
     \note This transition is not applied to the items that already part of the positioner
     at the time of its creation. In this case, the \l populate transition is applied instead.
 
-    \sa populate, ViewTransition, {declarative/positioners}{Positioners example}
+    \sa populate, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Column::move
@@ -704,7 +704,7 @@ void QQuickPositionerAttached::setIsLastItem(bool isLastItem)
     positioner at the time of its creation. From \l {Qt Quick}{Qt Quick 2} onwards, positioners apply the
     \l populate transition to these items instead.
 
-    \sa add, ViewTransition, {qml/positioners}{Positioners example}
+    \sa add, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
   \qmlproperty real QtQuick2::Column::spacing
@@ -795,10 +795,10 @@ void QQuickColumn::reportConflictingAnchors()
     more information about its position within the Row.
 
     For more information on using Row and other related positioner-types, see
-    \l{Item Layouts}.
+    \l{Item Positioners}.
 
 
-    \sa Column, Grid, Flow, Positioner, {qml/positioners}{Positioners example}
+    \sa Column, Grid, Flow, Positioner, RowLayout, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Row::populate
@@ -811,7 +811,7 @@ void QQuickColumn::reportConflictingAnchors()
     the item that is being added. See the \l ViewTransition documentation for more details
     and examples on using these transitions.
 
-    \sa add, ViewTransition, {declarative/positioners}{Positioners example}
+    \sa add, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Row::add
@@ -833,7 +833,7 @@ void QQuickColumn::reportConflictingAnchors()
     \note This transition is not applied to the items that already part of the positioner
     at the time of its creation. In this case, the \l populate transition is applied instead.
 
-    \sa populate, ViewTransition, {declarative/positioners}{Positioners example}
+    \sa populate, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Row::move
@@ -858,7 +858,7 @@ void QQuickColumn::reportConflictingAnchors()
     positioner at the time of its creation. From \l {Qt Quick}{QtQuick 2} onwards, positioners apply the
     \l populate transition to these items instead.
 
-    \sa add, ViewTransition, {qml/positioners}{Positioners example}
+    \sa add, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
   \qmlproperty real QtQuick2::Row::spacing
@@ -887,7 +887,7 @@ QQuickRow::QQuickRow(QQuickItem *parent)
     the right anchor remains to the right of the row.
     \endlist
 
-    \sa Grid::layoutDirection, Flow::layoutDirection, {qml/righttoleft/layoutdirection}{Layout directions example}
+    \sa Grid::layoutDirection, Flow::layoutDirection, {Qt Quick Examples - Right to Left}
 */
 
 Qt::LayoutDirection QQuickRow::layoutDirection() const
@@ -1028,10 +1028,10 @@ void QQuickRow::reportConflictingAnchors()
     or anchor itself with any of the \l {Item::anchors}{anchor} properties.
 
     For more information on using Grid and other related positioner-types, see
-    \l{Item Layouts}.
+    \l{Item Positioners}.
 
 
-    \sa Flow, Row, Column, Positioner, {qml/positioners}{Positioners example}
+    \sa Flow, Row, Column, Positioner, GridLayout, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Grid::populate
@@ -1044,7 +1044,7 @@ void QQuickRow::reportConflictingAnchors()
     the item that is being added. See the \l ViewTransition documentation for more details
     and examples on using these transitions.
 
-    \sa add, ViewTransition, {declarative/positioners}{Positioners example}
+    \sa add, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Grid::add
@@ -1066,7 +1066,7 @@ void QQuickRow::reportConflictingAnchors()
     \note This transition is not applied to the items that already part of the positioner
     at the time of its creation. In this case, the \l populate transition is applied instead.
 
-    \sa populate, ViewTransition, {declarative/positioners}{Positioners example}
+    \sa populate, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Grid::move
@@ -1091,7 +1091,7 @@ void QQuickRow::reportConflictingAnchors()
     positioner at the time of its creation. From \l {Qt Quick}{QtQuick 2} onwards, positioners apply the
     \l populate transition to these items instead.
 
-    \sa add, ViewTransition, {qml/positioners}{Positioners example}
+    \sa add, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
   \qmlproperty qreal QtQuick2::Grid::spacing
@@ -1248,7 +1248,7 @@ void QQuickGrid::setColumnSpacing(const qreal columnSpacing)
     \l Grid::flow property.
     \endlist
 
-    \sa Flow::layoutDirection, Row::layoutDirection, {qml/righttoleft/layoutdirection}{Layout directions example}
+    \sa Flow::layoutDirection, Row::layoutDirection, {Qt Quick Examples - Right to Left}
 */
 Qt::LayoutDirection QQuickGrid::layoutDirection() const
 {
@@ -1570,9 +1570,9 @@ void QQuickGrid::reportConflictingAnchors()
     or anchor itself with any of the \l {Item::anchors}{anchor} properties.
 
     For more information on using Flow and other related positioner-types, see
-    \l{Item Layouts}.
+    \l{Item Positioners}.
 
-  \sa Column, Row, Grid, Positioner, {qml/positioners}{Positioners example}
+  \sa Column, Row, Grid, Positioner, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Flow::populate
@@ -1585,7 +1585,7 @@ void QQuickGrid::reportConflictingAnchors()
     the item that is being added. See the \l ViewTransition documentation for more details
     and examples on using these transitions.
 
-    \sa add, ViewTransition, {declarative/positioners}{Positioners example}
+    \sa add, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Flow::add
@@ -1607,7 +1607,7 @@ void QQuickGrid::reportConflictingAnchors()
     \note This transition is not applied to the items that already part of the positioner
     at the time of its creation. In this case, the \l populate transition is applied instead.
 
-    \sa populate, ViewTransition, {declarative/positioners}{Positioners example}
+    \sa populate, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
     \qmlproperty Transition QtQuick2::Flow::move
@@ -1632,7 +1632,7 @@ void QQuickGrid::reportConflictingAnchors()
     positioner at the time of its creation. From \l {Qt Quick}{QtQuick 2} onwards, positioners apply the
     \l populate transition to these items instead.
 
-    \sa add, ViewTransition, {qml/positioners}{Positioners example}
+    \sa add, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
   \qmlproperty real QtQuick2::Flow::spacing
@@ -1710,7 +1710,7 @@ void QQuickFlow::setFlow(Flow flow)
     \l Flow::flow property.
     \endlist
 
-    \sa Grid::layoutDirection, Row::layoutDirection, {qml/righttoleft/layoutdirection}{Layout directions example}
+    \sa Grid::layoutDirection, Row::layoutDirection, {Qt Quick Examples - Right to Left}
 */
 
 Qt::LayoutDirection QQuickFlow::layoutDirection() const
