@@ -38,4 +38,4 @@
 **
 ****************************************************************************/
 #include "../../shared/shared.h"
-DECLARATIVE_EXAMPLE_MAIN(dialogs/dialogs)
+DECLARATIVE_EXAMPLE_MAIN(dialogs/systemdialogs)
