@@ -96,8 +96,11 @@ public:
     virtual void exec() { m_dialog.exec(); }
 
     virtual bool show(Qt::WindowFlags f, Qt::WindowModality m, QWindow *parent) {
-        m_dialog.windowHandle()->setTransientParent(parent);
-        m_dialog.windowHandle()->setFlags(f);
+        m_dialog.winId();
+        QWindow *window = m_dialog.windowHandle();
+        Q_ASSERT(window);
+        window->setTransientParent(parent);
+        window->setFlags(f);
         m_dialog.setWindowModality(m);
         m_dialog.show();
         return m_dialog.isVisible();
@@ -132,14 +135,14 @@ private:
     \qmlsignal QtQuick::Dialogs::FileDialog::accepted
 
     The \a accepted signal is emitted when the user has finished using the
-    dialog. You can then inspect the \a filePath or \a filePaths properties to
+    dialog. You can then inspect the \a fileUrl or \a fileUrls properties to
     get the selection.
 
     Example:
 
     \qml
     FileDialog {
-        onAccepted: { console.log("Selected file: " + filePath) }
+        onAccepted: { console.log("Selected file: " + fileUrl) }
     }
     \endqml
 */

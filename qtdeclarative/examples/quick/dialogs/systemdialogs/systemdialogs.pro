@@ -2,10 +2,10 @@ TEMPLATE = app
 
 QT += quick qml
 SOURCES += main.cpp
-RESOURCES += colorandfiledialogs.qrc ../../shared/shared.qrc
+RESOURCES += systemdialogs.qrc ../../shared/shared.qrc
 
 OTHER_FILES += \
-    dialogs.qml \
+    systemdialogs.qml \
     FileDialogs.qml \
     ColorDialogs.qml
 
