@@ -349,6 +349,7 @@ public:
         QSize size;
     };
     QList<Window> m_windows;
+    QSet<QQuickWindow *> m_exposedPersistentWindows;
 
     // Local event queue stuff...
     bool stopEventProcessing;
@@ -412,7 +413,14 @@ bool QSGRenderThread::event(QEvent *e)
             if (sleeping)
                 stopEventProcessing = true;
         } else {
-            RLDEBUG1("    Render:  - not releasing anything because we have active windows...");
+            WMTryReleaseEvent *wme = static_cast<WMTryReleaseEvent *>(e);
+            if (gl && wme->window && (!wme->window->isPersistentSceneGraph() || wme->inDestructor)) {
+                RLDEBUG1("    Render:  - only releasing nodes as we have active windows...");
+                gl->makeCurrent(wme->window);
+                QQuickWindowPrivate *dd = QQuickWindowPrivate::get(wme->window);
+                dd->cleanupNodesOnShutdown();
+                gl->doneCurrent();
+            }
         }
         waitCondition.wakeOne();
         mutex.unlock();
@@ -470,13 +478,13 @@ void QSGRenderThread::invalidateOpenGL(QQuickWindow *window, bool inDestructor)
     bool persistentGL = false;
     bool persistentSG = false;
 
-    // GUI is locked so accessing the wm and window here is safe
-    for (int i=0; i<wm->m_windows.size(); ++i) {
-        const QSGThreadedRenderLoop::Window &w = wm->m_windows.at(i);
-        if (!inDestructor || w.window != window) {
-            persistentSG |= w.window->isPersistentSceneGraph();
-            persistentGL |= w.window->isPersistentOpenGLContext();
-        }
+    // GUI is locked so accessing the exposed windows is safe here
+    if (inDestructor || (!window->isPersistentSceneGraph() && !window->isPersistentOpenGLContext()))
+        m_exposedPersistentWindows.remove(window);
+
+    for (QSet<QQuickWindow *>::ConstIterator iter = m_exposedPersistentWindows.begin(); iter != m_exposedPersistentWindows.end(); ++iter) {
+        persistentSG |= (*iter)->isPersistentSceneGraph();
+        persistentGL |= (*iter)->isPersistentOpenGLContext();
     }
 
     gl->makeCurrent(window);
@@ -844,6 +852,7 @@ void QSGThreadedRenderLoop::handleExposure(QQuickWindow *window)
     if (!window->handle())
         window->create();
 
+    m_thread->m_exposedPersistentWindows.insert(window);
     m_thread->postEvent(new WMExposeEvent(window));
 
     // Start render thread if it is not running
