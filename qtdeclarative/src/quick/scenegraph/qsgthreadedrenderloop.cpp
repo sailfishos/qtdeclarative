@@ -962,8 +962,10 @@ void QSGThreadedRenderLoop::releaseResources(QQuickWindow *window, bool inDestru
     m_thread->mutex.lock();
     if (m_thread->isRunning() && !m_thread->shouldExit) {
         RLDEBUG1("GUI:  - posting release request to render thread");
+        m_thread->guiIsLocked = true;
         m_thread->postEvent(new WMTryReleaseEvent(window, inDestructor));
         m_thread->waitCondition.wait(&m_thread->mutex);
+        m_thread->guiIsLocked = false;
     }
     m_thread->mutex.unlock();
 }
