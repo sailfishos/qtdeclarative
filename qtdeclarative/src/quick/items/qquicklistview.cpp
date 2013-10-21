@@ -498,7 +498,7 @@ QString QQuickListViewPrivate::sectionAt(int modelIndex)
         return item->attached->section();
 
     QString section;
-    if (sectionCriteria) {
+    if (sectionCriteria && modelIndex >= 0 && modelIndex < itemCount) {
         QString propValue = model->stringValue(modelIndex, sectionCriteria->property());
         section = sectionCriteria->sectionString(propValue);
     }
@@ -584,11 +584,8 @@ FxViewItem *QQuickListViewPrivate::newViewItem(int modelIndex, QQuickItem *item)
             else
                 prevSection = sectionAt(modelIndex-1);
         }
-        if (modelIndex < model->count()) {
-            if (FxViewItem *item = visibleItem(modelIndex))
-                nextSection = static_cast<QQuickListViewAttached*>(item->attached)->section();
-            else
-                nextSection = sectionAt(modelIndex);
+        if (modelIndex < model->count()-1) {
+            nextSection = sectionAt(modelIndex+1);
         }
         listItem->attached->setSections(prevSection, section, nextSection);
     }
