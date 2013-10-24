@@ -479,9 +479,6 @@ void QSGRenderThread::invalidateOpenGL(QQuickWindow *window, bool inDestructor)
     bool persistentSG = false;
 
     // GUI is locked so accessing the exposed windows is safe here
-    if (inDestructor || (!window->isPersistentSceneGraph() && !window->isPersistentOpenGLContext()))
-        m_exposedPersistentWindows.remove(window);
-
     for (QSet<QQuickWindow *>::ConstIterator iter = m_exposedPersistentWindows.begin(); iter != m_exposedPersistentWindows.end(); ++iter) {
         persistentSG |= (*iter)->isPersistentSceneGraph();
         persistentGL |= (*iter)->isPersistentOpenGLContext();
@@ -963,6 +960,12 @@ void QSGThreadedRenderLoop::releaseResources(QQuickWindow *window, bool inDestru
     if (m_thread->isRunning() && !m_thread->shouldExit) {
         RLDEBUG1("GUI:  - posting release request to render thread");
         m_thread->guiIsLocked = true;
+
+        bool isPersistent = window->isPersistentSceneGraph() || 
+                            window->isPersistentOpenGLContext();
+        if (inDestructor || !isPersistent)
+            m_thread->m_exposedPersistentWindows.remove(window);
+
         m_thread->postEvent(new WMTryReleaseEvent(window, inDestructor));
         m_thread->waitCondition.wait(&m_thread->mutex);
         m_thread->guiIsLocked = false;
