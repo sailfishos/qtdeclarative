@@ -1243,6 +1243,7 @@ void QQuickFlickable::mouseMoveEvent(QMouseEvent *event)
 {
     Q_D(QQuickFlickable);
     if (d->interactive) {
+        d->handleMouseMoveEvent(event);
         if (d->delayedPressEvent) {
             // A move beyond the threshold replays the press to give nested Flickables
             // the opportunity to grab the gesture.
@@ -1252,7 +1253,6 @@ void QQuickFlickable::mouseMoveEvent(QMouseEvent *event)
                 d->replayDelayedPress();
             }
         }
-        d->handleMouseMoveEvent(event);
         event->accept();
     } else {
         QQuickItem::mouseMoveEvent(event);
@@ -2084,12 +2084,13 @@ bool QQuickFlickable::sendMouseEvent(QQuickItem *item, QMouseEvent *event)
         if ((grabber && stealThisEvent && !grabber->keepMouseGrab() && grabber != this) || grabberDisabled) {
             d->clearDelayedPress();
             grabMouse();
+        } else if (d->delayedPressEvent) {
+            grabMouse();
         }
 
-        // Do not accept this event when filtering, as this would force the mouse grab to the child
         const bool filtered = stealThisEvent || d->delayedPressEvent || grabberDisabled;
         if (filtered) {
-            event->setAccepted(false);
+            event->setAccepted(true);
         }
         return filtered;
     } else if (d->lastPosTime != -1) {

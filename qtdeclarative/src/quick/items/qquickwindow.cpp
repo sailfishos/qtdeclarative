@@ -567,6 +567,28 @@ bool QQuickWindowPrivate::translateTouchToMouse(QQuickItem *item, QTouchEvent *e
     return false;
 }
 
+void QQuickWindowPrivate::setMouseGrabber(QQuickItem *grabber)
+{
+    Q_Q(QQuickWindow);
+    if (mouseGrabberItem == grabber)
+        return;
+
+    QQuickItem *oldGrabber = mouseGrabberItem;
+    mouseGrabberItem = grabber;
+
+    if (touchMouseId != -1) {
+        // update the touch item for mouse touch id to the new grabber
+        itemForTouchPointId.remove(touchMouseId);
+        if (grabber)
+            itemForTouchPointId[touchMouseId] = grabber;
+    }
+
+    if (oldGrabber) {
+        QEvent ev(QEvent::UngrabMouse);
+        q->sendEvent(oldGrabber, &ev);
+    }
+}
+
 void QQuickWindowPrivate::transformTouchPoints(QList<QTouchEvent::TouchPoint> &touchPoints, const QTransform &transform)
 {
     QMatrix4x4 transformMatrix(transform);
@@ -1283,8 +1305,11 @@ bool QQuickWindow::event(QEvent *e)
     case QEvent::TouchEnd: {
         QTouchEvent *touch = static_cast<QTouchEvent*>(e);
         d->translateTouchEvent(touch);
-        // return in order to avoid the QWindow::event below
-        return d->deliverTouchEvent(touch);
+        d->deliverTouchEvent(touch);
+        // we consume all touch events ourselves to avoid duplicate
+        // mouse delivery by QtGui mouse synthesis
+        e->accept();
+        return true;
     }
         break;
     case QEvent::TouchCancel:
@@ -1831,7 +1856,10 @@ bool QQuickWindowPrivate::deliverMatchingPointsToItem(QQuickItem *item, QTouchEv
     // First check whether the parent wants to be a filter,
     // and if the parent accepts the event we are done.
     if (sendFilteredTouchEvent(item->parentItem(), item, event)) {
-        event->accept();
+        // If the touch was accepted (regardless by whom or in what form),
+        // update acceptedNewPoints.
+        foreach (int id, matchingNewPoints)
+            acceptedNewPoints->insert(id);
         return true;
     }
 
@@ -2131,13 +2159,11 @@ bool QQuickWindowPrivate::sendFilteredTouchEvent(QQuickItem *target, QQuickItem 
                     t = QEvent::MouseMove;
                     break;
                 }
-
                 // targetEvent is already transformed wrt local position, velocity, etc.
                 QScopedPointer<QMouseEvent> mouseEvent(touchToMouseEvent(t, targetEvent->touchPoints().first(), event, item, false));
                 if (target->childMouseEventFilter(item, mouseEvent.data())) {
                     itemForTouchPointId[tp.id()] = target;
                     touchMouseId = tp.id();
-                    target->grabMouse();
                     return true;
                 }
             }
