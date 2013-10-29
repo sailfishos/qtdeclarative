@@ -2164,6 +2164,7 @@ bool QQuickWindowPrivate::sendFilteredTouchEvent(QQuickItem *target, QQuickItem 
                 if (target->childMouseEventFilter(item, mouseEvent.data())) {
                     itemForTouchPointId[tp.id()] = target;
                     touchMouseId = tp.id();
+                    target->grabMouse();
                     return true;
                 }
             }
