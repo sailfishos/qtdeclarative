@@ -713,7 +713,7 @@ bool QQuickListViewPrivate::removeNonVisibleItems(qreal bufferFrom, qreal buffer
     // over by refill().
     int index = 0;
     while (visibleItems.count() > 1 && index < visibleItems.count()
-           && (item = visibleItems.at(index)) && item->endPosition() < bufferFrom) {
+           && (item = visibleItems.at(index)) && item->endPosition() + spacing < bufferFrom) {
         if (item->attached->delayRemove())
             break;
 
@@ -745,7 +745,7 @@ bool QQuickListViewPrivate::removeNonVisibleItems(qreal bufferFrom, qreal buffer
         }
     }
 
-    while (visibleItems.count() > 1 && (item = visibleItems.last()) && item->position() > bufferTo) {
+    while (visibleItems.count() > 1 && (item = visibleItems.last()) && item->position() - spacing > bufferTo) {
         if (item->attached->delayRemove())
             break;
 #ifdef DEBUG_DELEGATE_LIFECYCLE
