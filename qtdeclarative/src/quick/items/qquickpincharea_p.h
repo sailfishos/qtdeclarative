@@ -287,6 +287,7 @@ private slots:
     void setTouchEventsEnabledForWindow(QWindow *window);
 
 private:
+    void clearPinch();
     void updatePinch();
     void handlePress();
     void handleRelease();
