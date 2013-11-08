@@ -361,13 +361,6 @@ void QQuickPinchArea::updatePinch()
     QQuickWindow *win = window();
     QTouchEvent::TouchPoint touchPoint1 = d->touchPoints.at(0);
     QTouchEvent::TouchPoint touchPoint2 = d->touchPoints.at(d->touchPoints. count() >= 2 ? 1 : 0);
-    int touchMouseId = QQuickWindowPrivate::get(win)->touchMouseId;
-    if (touchPoint1.id() == touchMouseId || touchPoint2.id() == touchMouseId) {
-        if (win && win->mouseGrabberItem() != this) {
-            grabMouse();
-        }
-    }
-
     QRectF bounds = clipRect();
     // Pinch is not started unless there are exactly two touch points
     // AND one or more of the points has just now been pressed (wasn't pressed already)
@@ -380,6 +373,12 @@ void QQuickPinchArea::updatePinch()
         d->sceneStartPoint2 = touchPoint2.scenePos();
         d->pinchActivated = true;
         d->initPinch = true;
+        int touchMouseId = QQuickWindowPrivate::get(win)->touchMouseId;
+        if (touchPoint1.id() == touchMouseId || touchPoint2.id() == touchMouseId) {
+            if (win && win->mouseGrabberItem() != this && !win->mouseGrabberItem()->keepMouseGrab()) {
+                grabMouse();
+            }
+        }
     }
     if (d->pinchActivated && !d->pinchRejected) {
         const int dragThreshold = qApp->styleHints()->startDragDistance();
