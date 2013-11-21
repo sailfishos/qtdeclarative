@@ -210,6 +210,8 @@ private slots:
     void accessEmptyCurrentItem_QTBUG_30227();
     void delayedChanges_QTBUG_30555();
 
+    void typedModel();
+
 private:
     template <class T> void items(const QUrl &source);
     template <class T> void changed(const QUrl &source);
@@ -6878,6 +6880,24 @@ void tst_QQuickListView::delayedChanges_QTBUG_30555()
     QCOMPARE(listview->count(), 6);
 
     delete window;
+}
+
+void tst_QQuickListView::typedModel()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("typedModel.qml"));
+
+    QScopedPointer<QObject> object(component.create());
+
+    QQuickListView *listview = qobject_cast<QQuickListView *>(object.data());
+    QVERIFY(listview);
+
+    QCOMPARE(listview->count(), 6);
+
+    QQmlListModel *listModel = 0;
+
+    listview->setModel(QVariant::fromValue(listModel));
+    QCOMPARE(listview->count(), 0);
 }
 
 QTEST_MAIN(tst_QQuickListView)
