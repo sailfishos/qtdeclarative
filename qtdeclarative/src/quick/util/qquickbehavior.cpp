@@ -196,6 +196,11 @@ void QQuickBehavior::write(const QVariant &value)
         d->animationInstance->stop();
     }
 
+    if (d->targetValue == currentValue) {
+        QQmlPropertyPrivate::write(d->property, value, QQmlPropertyPrivate::BypassInterceptor | QQmlPropertyPrivate::DontRemoveBinding);
+        return;
+    }
+
     QQuickStateOperation::ActionList actions;
     QQuickAction action;
     action.property = d->property;
