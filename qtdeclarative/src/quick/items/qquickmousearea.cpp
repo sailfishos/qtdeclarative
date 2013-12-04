@@ -59,8 +59,6 @@ QT_BEGIN_NAMESPACE
 
 DEFINE_BOOL_CONFIG_OPTION(qmlVisualTouchDebugging, QML_VISUAL_TOUCH_DEBUGGING)
 
-static const int PressAndHoldDelay = 800;
-
 #ifndef QT_NO_DRAGANDDROP
 
 QQuickDrag::QQuickDrag(QObject *parent)
@@ -767,7 +765,7 @@ void QQuickMouseArea::mousePressEvent(QMouseEvent *event)
 #endif
         setHovered(true);
         d->startScene = event->windowPos();
-        d->pressAndHoldTimer.start(PressAndHoldDelay, this);
+        d->pressAndHoldTimer.start(qApp->styleHints()->mousePressAndHoldInterval(), this);
         setKeepMouseGrab(d->stealMouse);
         event->setAccepted(setPressed(event->button(), true));
     }
