@@ -135,6 +135,8 @@ public:
     void setClearMode(ClearMode mode) { m_clear_mode = mode; }
     ClearMode clearMode() const { return m_clear_mode; }
 
+    virtual void setCustomRenderMode(const QByteArray &) { };
+
     void clearChangedFlag() { m_changed_emitted = false; }
 
 Q_SIGNALS:
