@@ -575,7 +575,8 @@ FxViewItem *QQuickListViewPrivate::newViewItem(int modelIndex, QQuickItem *item)
 
     // initialise attached properties
     if (sectionCriteria) {
-        QString section = model->stringValue(modelIndex, sectionCriteria->property());
+        QString propValue = model->stringValue(modelIndex, sectionCriteria->property());
+        QString section = sectionCriteria->sectionString(propValue);
         QString prevSection;
         QString nextSection;
         if (modelIndex > 0) {
