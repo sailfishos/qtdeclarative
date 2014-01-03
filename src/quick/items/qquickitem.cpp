@@ -6451,6 +6451,17 @@ void QQuickItemPrivate::incrementCursorCount(int delta)
 #endif
 }
 
+void QQuickItemPrivate::markObjects(QV4::ExecutionEngine *e)
+{
+    Q_Q(QQuickItem);
+    QQmlData *ddata = QQmlData::get(q);
+    if (ddata)
+        ddata->jsWrapper.markOnce(e);
+
+    foreach (QQuickItem *child, childItems)
+        QQuickItemPrivate::get(child)->markObjects(e);
+}
+
 #ifndef QT_NO_CURSOR
 
 /*!
