@@ -785,8 +785,8 @@ void QQuickListViewPrivate::visibleItemsChanged()
 void QQuickListViewPrivate::layoutVisibleItems(int fromModelIndex)
 {
     if (!visibleItems.isEmpty()) {
-        const qreal from = isContentFlowReversed() ? -position() - size() : position();
-        const qreal to = isContentFlowReversed() ? -position() : position() + size();
+        const qreal from = isContentFlowReversed() ? -position()-displayMarginBeginning-size() : position()-displayMarginBeginning;
+        const qreal to = isContentFlowReversed() ? -position()+displayMarginEnd : position()+size()+displayMarginEnd;
 
         FxViewItem *firstItem = *visibleItems.constBegin();
         bool fixedCurrent = currentItem && firstItem->item == currentItem->item;
