@@ -2354,6 +2354,7 @@ void QQuickFlickable::timelineCompleted()
         return;
     }
     movementEnding();
+    d->updateBeginningEnd();
 }
 
 void QQuickFlickable::movementStarting()
