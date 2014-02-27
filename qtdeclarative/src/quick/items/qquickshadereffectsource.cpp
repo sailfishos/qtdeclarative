@@ -597,6 +597,8 @@ void QQuickShaderEffectSource::ensureTexture()
     connect(m_texture, SIGNAL(scheduledUpdateCompleted()), this, SIGNAL(scheduledUpdateCompleted()));
 }
 
+static void get_wrap_mode(QQuickShaderEffectSource::WrapMode mode, QSGTexture::WrapMode *hWrap, QSGTexture::WrapMode *vWrap);
+
 QSGTextureProvider *QQuickShaderEffectSource::textureProvider() const
 {
     if (!m_provider) {
@@ -609,6 +611,10 @@ QSGTextureProvider *QQuickShaderEffectSource::textureProvider() const
         const_cast<QQuickShaderEffectSource *>(this)->m_provider = new QQuickShaderEffectSourceTextureProvider();
         const_cast<QQuickShaderEffectSource *>(this)->ensureTexture();
         connect(m_texture, SIGNAL(updateRequested()), m_provider, SIGNAL(textureChanged()));
+
+        get_wrap_mode(m_wrapMode, &m_provider->horizontalWrap, &m_provider->verticalWrap);
+        m_provider->mipmapFiltering = mipmap() ? QSGTexture::Linear : QSGTexture::None;
+        m_provider->filtering = smooth() ? QSGTexture::Linear : QSGTexture::Nearest;
         m_provider->sourceTexture = m_texture;
     }
     return m_provider;
