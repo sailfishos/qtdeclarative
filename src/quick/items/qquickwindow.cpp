@@ -2208,6 +2208,8 @@ bool QQuickWindowPrivate::sendFilteredTouchEvent(QQuickItem *target, QQuickItem 
     if (!target)
         return false;
 
+    bool filtered = false;
+
     QQuickItemPrivate *targetPrivate = QQuickItemPrivate::get(target);
     if (targetPrivate->filtersChildMouseEvents) {
         QScopedPointer<QTouchEvent> targetEvent(touchEventForItemBounds(target, *event));
@@ -2221,7 +2223,7 @@ bool QQuickWindowPrivate::sendFilteredTouchEvent(QQuickItem *target, QQuickItem 
                     mouseGrabberItem->ungrabMouse();
                     touchMouseId = -1;
                 }
-                return true;
+                filtered = true;
             }
 
             // Only offer a mouse event to the filter if we have one point
@@ -2247,13 +2249,12 @@ bool QQuickWindowPrivate::sendFilteredTouchEvent(QQuickItem *target, QQuickItem 
                     itemForTouchPointId[tp.id()] = target;
                     touchMouseId = tp.id();
                     target->grabMouse();
-                    return true;
+                    filtered = true;
                 }
             }
         }
     }
-
-    return sendFilteredTouchEvent(target->parentItem(), item, event);
+    return sendFilteredTouchEvent(target->parentItem(), item, event) || filtered;
 }
 
 bool QQuickWindowPrivate::sendFilteredMouseEvent(QQuickItem *target, QQuickItem *item, QEvent *event)
@@ -2261,15 +2262,14 @@ bool QQuickWindowPrivate::sendFilteredMouseEvent(QQuickItem *target, QQuickItem 
     if (!target)
         return false;
 
+    bool filtered = false;
+
     QQuickItemPrivate *targetPrivate = QQuickItemPrivate::get(target);
     if (targetPrivate->filtersChildMouseEvents)
         if (target->childMouseEventFilter(item, event))
-            return true;
+            filtered = true;
 
-    if (sendFilteredMouseEvent(target->parentItem(), item, event))
-        return true;
-
-    return false;
+    return sendFilteredMouseEvent(target->parentItem(), item, event) || filtered;
 }
 
 bool QQuickWindowPrivate::dragOverThreshold(qreal d, Qt::Axis axis, QMouseEvent *event, int startDragThreshold)
