@@ -1647,17 +1647,6 @@ void QQmlData::destroyed(QObject *object)
         binding = next;
     }
 
-    if (compiledData) {
-        compiledData->release();
-        compiledData = 0;
-    }
-
-    if (deferredData) {
-        deferredData->compiledData->release();
-        delete deferredData;
-        deferredData = 0;
-    }
-
     QQmlAbstractBoundSignal *signalHandler = signalHandlers;
     while (signalHandler) {
         if (signalHandler->isEvaluating()) {
@@ -1712,6 +1701,17 @@ void QQmlData::destroyed(QObject *object)
     }
 
     disconnectNotifiers();
+
+    if (compiledData) {
+        compiledData->release();
+        compiledData = 0;
+    }
+
+    if (deferredData) {
+        deferredData->compiledData->release();
+        delete deferredData;
+        deferredData = 0;
+    }
 
     if (extendedData)
         delete extendedData;
