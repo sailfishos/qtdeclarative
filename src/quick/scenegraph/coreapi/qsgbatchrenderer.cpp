@@ -765,6 +765,8 @@ Renderer::Renderer(QSGRenderContext *ctx)
     , m_tmpOpaqueElements(16)
     , m_rebuild(FullRebuild)
     , m_zRange(0)
+    , m_renderOrderRebuildLower(-1)
+    , m_renderOrderRebuildUpper(-1)
     , m_currentMaterial(0)
     , m_currentShader(0)
     , m_currentClip(0)
@@ -1425,8 +1427,11 @@ void Renderer::invalidateBatchAndOverlappingRenderOrders(Batch *batch)
     Q_ASSERT(batch);
     Q_ASSERT(batch->first);
 
-    int first = batch->first->order;
-    int last = batch->lastOrderInBatch;
+    if (m_renderOrderRebuildLower < 0 || batch->first->order < m_renderOrderRebuildLower)
+        m_renderOrderRebuildLower = batch->first->order;
+    if (m_renderOrderRebuildUpper < 0 || batch->lastOrderInBatch > m_renderOrderRebuildUpper)
+        m_renderOrderRebuildUpper = batch->lastOrderInBatch;
+
     batch->invalidate();
 
     for (int i=0; i<m_alphaBatches.size(); ++i) {
@@ -1434,7 +1439,7 @@ void Renderer::invalidateBatchAndOverlappingRenderOrders(Batch *batch)
         if (b->first) {
             int bf = b->first->order;
             int bl = b->lastOrderInBatch;
-            if (bl > first && bf < last)
+            if (bl > m_renderOrderRebuildLower && bf < m_renderOrderRebuildUpper)
                 b->invalidate();
         }
     }
@@ -2421,6 +2426,8 @@ void Renderer::render()
     renderBatches();
 
     m_rebuild = 0;
+    m_renderOrderRebuildLower = -1;
+    m_renderOrderRebuildUpper = -1;
 
     if (m_vao)
         m_vao->release();
