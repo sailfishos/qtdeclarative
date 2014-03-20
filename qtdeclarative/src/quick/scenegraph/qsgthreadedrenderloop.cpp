@@ -773,10 +773,6 @@ void QSGThreadedRenderLoop::animationStopped()
 void QSGThreadedRenderLoop::show(QQuickWindow *window)
 {
     RLDEBUG1("GUI: show()");
-
-    Window win;
-    win.window = window;
-    m_windows << win;
 }
 
 
@@ -825,9 +821,6 @@ void QSGThreadedRenderLoop::windowDestroyed(QQuickWindow *window)
 void QSGThreadedRenderLoop::exposureChanged(QQuickWindow *window)
 {
     RLDEBUG1("GUI: exposureChanged()");
-    if (windowFor(m_windows, window) == 0)
-        return;
-
     if (window->isExposed()) {
         handleExposure(window);
     } else {
@@ -843,6 +836,13 @@ void QSGThreadedRenderLoop::exposureChanged(QQuickWindow *window)
 void QSGThreadedRenderLoop::handleExposure(QQuickWindow *window)
 {
     RLDEBUG1("GUI: handleExposure");
+
+    if (!windowFor(m_windows, window)) {
+        RLDEBUG1("GUI: - new window added");
+        Window win;
+        win.window = window;
+        m_windows << win;
+    }
 
     // Because we are going to bind a GL context to it, make sure it
     // is created.
@@ -898,6 +898,13 @@ void QSGThreadedRenderLoop::handleObscurity(QQuickWindow *window)
     if (!anyoneShowing() && m_animation_driver->isRunning() && m_animation_timer == 0) {
         m_animation_timer = startTimer(qsgrl_animation_interval());
     }
+
+    // Emit timeToIncubate here in case something is waiting for
+    // the incubation signal. Since this is emitted on the render thread
+    // they might otherwise never get it. The next time around,
+    // interleaveIncubation() will be based on the then state of
+    // m_windows
+    emit timeToIncubate();
 }
 
 
