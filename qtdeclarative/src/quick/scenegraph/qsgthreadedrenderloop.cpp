@@ -904,7 +904,11 @@ void QSGThreadedRenderLoop::handleObscurity(QQuickWindow *window)
     // they might otherwise never get it. The next time around,
     // interleaveIncubation() will be based on the then state of
     // m_windows
-    emit timeToIncubate();
+    // Made as a queued conneciton to avoid reentrancy issues with QQmlVME::execute
+    // as a result of handleObscurity being called from
+    // QWindowSystemInterface::flushWindowSystemEvents which is effectively doing
+    // event loop recursion.
+    QMetaObject::invokeMethod(this, "timeToIncubate", Qt::QueuedConnection);
 }
 
 
