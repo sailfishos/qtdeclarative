@@ -84,15 +84,17 @@ QSGRenderLoop::~QSGRenderLoop()
 
 void QSGRenderLoop::cleanup()
 {
-    foreach (QQuickWindow *w, windows()) {
+    if (!s_instance)
+        return;
+    foreach (QQuickWindow *w, s_instance->windows()) {
         QQuickWindowPrivate *wd = QQuickWindowPrivate::get(w);
-        if (wd->windowManager == this) {
-           windowDestroyed(w);
+        if (wd->windowManager == s_instance) {
+           s_instance->windowDestroyed(w);
            wd->windowManager = 0;
         }
     }
+    delete s_instance;
     s_instance = 0;
-    delete this;
 }
 
 class QSGGuiThreadRenderLoop : public QSGRenderLoop
@@ -211,7 +213,7 @@ QSGRenderLoop *QSGRenderLoop::instance()
             }
         }
 
-        QObject::connect(QCoreApplication::instance(), SIGNAL(aboutToQuit()), s_instance, SLOT(cleanup()));
+        qAddPostRoutine(QSGRenderLoop::cleanup);
     }
     return s_instance;
 }
