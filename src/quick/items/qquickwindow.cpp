@@ -210,32 +210,25 @@ QQuickRootItem::QQuickRootItem()
 void QQuickWindow::exposeEvent(QExposeEvent *)
 {
     Q_D(QQuickWindow);
-    if (d->windowManager)
-        d->windowManager->exposureChanged(this);
+    d->windowManager->exposureChanged(this);
 }
 
 /*! \reimp */
 void QQuickWindow::resizeEvent(QResizeEvent *)
 {
-    Q_D(QQuickWindow);
-    if (d->windowManager)
-        d->windowManager->resize(this);
+    d_func()->windowManager->resize(this);
 }
 
 /*! \reimp */
 void QQuickWindow::showEvent(QShowEvent *)
 {
-    Q_D(QQuickWindow);
-    if (d->windowManager)
-        d->windowManager->show(this);
+    d_func()->windowManager->show(this);
 }
 
 /*! \reimp */
 void QQuickWindow::hideEvent(QHideEvent *)
 {
-    Q_D(QQuickWindow);
-    if (d->windowManager)
-        d->windowManager->hide(this);
+    d_func()->windowManager->hide(this);
 }
 
 /*! \reimp */
@@ -285,8 +278,7 @@ void QQuickWindowPrivate::polishItems()
 void QQuickWindow::update()
 {
     Q_D(QQuickWindow);
-    if (d->windowManager)
-        d->windowManager->update(this);
+    d->windowManager->update(this);
 }
 
 void forcePolishHelper(QQuickItem *item)
@@ -425,7 +417,6 @@ void QQuickWindowPrivate::init(QQuickWindow *c)
     contentItemPrivate->flags |= QQuickItem::ItemIsFocusScope;
 
     windowManager = QSGRenderLoop::instance();
-    windowManager->addWindow(q);
     QSGContext *sg = windowManager->sceneGraphContext();
     context = windowManager->createRenderContext(sg);
     q->setSurfaceType(QWindow::OpenGLSurface);
@@ -1047,10 +1038,7 @@ QQuickWindow::~QQuickWindow()
     Q_D(QQuickWindow);
 
     d->animationController->deleteLater();
-    if (d->windowManager) {
-        d->windowManager->removeWindow(this);
-        d->windowManager->windowDestroyed(this);
-    }
+    d->windowManager->windowDestroyed(this);
 
     QCoreApplication::sendPostedEvents(0, QEvent::DeferredDelete);
     delete d->incubationController; d->incubationController = 0;
@@ -1059,6 +1047,8 @@ QQuickWindow::~QQuickWindow()
 #endif
     delete d->contentItem; d->contentItem = 0;
 }
+
+
 
 /*!
     This function tries to release redundant resources currently held by the QML scene.
@@ -1076,8 +1066,7 @@ QQuickWindow::~QQuickWindow()
 void QQuickWindow::releaseResources()
 {
     Q_D(QQuickWindow);
-    if (d->windowManager)
-        d->windowManager->releaseResources(this);
+    d->windowManager->releaseResources(this);
     QQuickPixmap::purgeCache();
 }
 
@@ -2596,8 +2585,7 @@ void QQuickWindowPrivate::updateDirtyNode(QQuickItem *item)
 void QQuickWindow::maybeUpdate()
 {
     Q_D(QQuickWindow);
-    if (d->windowManager)
-        d->windowManager->maybeUpdate(this);
+    d->windowManager->maybeUpdate(this);
 }
 
 void QQuickWindow::cleanupSceneGraph()
@@ -2856,9 +2844,7 @@ QImage QQuickWindow::grabWindow()
         return image;
     }
 
-    if (d->windowManager)
-        return d->windowManager->grab(this);
-    return QImage();
+    return d->windowManager->grab(this);
 }
 
 /*!
