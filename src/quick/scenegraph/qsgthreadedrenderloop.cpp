@@ -67,6 +67,7 @@
 #include <private/qquickopenglshadereffectnode_p.h>
 #endif
 #include <private/qsgdefaultrendercontext_p.h>
+#include <private/qsystrace_p.h>
 
 /*
    Overall design:
@@ -606,6 +607,7 @@ void QSGRenderThread::syncAndRender()
 
     if (syncRequested) {
         qCDebug(QSG_LOG_RENDERLOOP) << QSG_RT_PAD << "- updatePending, doing sync";
+        QSystraceEvent systrace("graphics", "QSGRT::sync");
         sync(exposeRequested);
     }
 #ifndef QSG_NO_RENDER_TIMING
@@ -618,6 +620,7 @@ void QSGRenderThread::syncAndRender()
     if (!syncResultedInChanges && !repaintRequested && sgrc->isValid()) {
         qCDebug(QSG_LOG_RENDERLOOP) << QSG_RT_PAD << "- no changes, render aborted";
         int waitTime = vsyncDelta - (int) waitTimer.elapsed();
+        QSystraceEvent systrace("graphics", "QSGRT::msleep");
         if (waitTime > 0)
             msleep(waitTime);
         return;
@@ -627,6 +630,7 @@ void QSGRenderThread::syncAndRender()
 
 
     if (animatorDriver->isRunning()) {
+        QSystraceEvent systrace("graphics", "QSGRT::animators");
         d->animationController->lock();
         animatorDriver->advance();
         d->animationController->unlock();
@@ -642,13 +646,21 @@ void QSGRenderThread::syncAndRender()
         QCoreApplication::postEvent(window, new QEvent(QEvent::Type(QQuickWindowPrivate::FullUpdateRequest)));
     }
     if (current) {
+        QSystraceEvent systrace("graphics", "QSGRT::renderSceneGraph");
         d->renderSceneGraph(windowSize);
         if (profileFrames)
             renderTime = threadTimer.nsecsElapsed();
+<<<<<<< HEAD
         Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphRenderLoopFrame,
                                   QQuickProfiler::SceneGraphRenderLoopRender);
         if (!d->customRenderStage || !d->customRenderStage->swap())
+=======
+        Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphRenderLoopFrame);
+        if (!d->customRenderStage || !d->customRenderStage->swap()) {
+            QSystraceEvent systrace("graphics", "QSGRT::swapBuffers");
+>>>>>>> MER: Add systrace support.
             gl->swapBuffers(window);
+        }
         d->fireFrameSwapped();
     } else {
         Q_QUICK_SG_PROFILE_SKIP(QQuickProfiler::SceneGraphRenderLoopFrame,
@@ -1185,13 +1197,16 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w, bool inExpose)
     Q_QUICK_SG_PROFILE_START(QQuickProfiler::SceneGraphPolishAndSync);
 
     QQuickWindowPrivate *d = QQuickWindowPrivate::get(window);
+    QSystrace::begin("graphics", "QSGTR::pAS::polish", "");
     d->polishItems();
+    QSystrace::end("graphics", "QSGTR::pAS::polish", "");
 
     if (profileFrames)
         polishTime = timer.nsecsElapsed();
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphPolishAndSync,
                               QQuickProfiler::SceneGraphPolishAndSyncPolish);
 
+    QSystrace::begin("graphics", "QSGTR::pAS::lock", "");
     w->updateDuringSync = false;
 
     emit window->afterAnimating();
@@ -1205,13 +1220,21 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w, bool inExpose)
     qCDebug(QSG_LOG_RENDERLOOP) << "- wait for sync";
     if (profileFrames)
         waitTime = timer.nsecsElapsed();
+<<<<<<< HEAD
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphPolishAndSync,
                               QQuickProfiler::SceneGraphPolishAndSyncWait);
+=======
+    Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphPolishAndSync);
+    QSystrace::end("graphics", "QSGTR::pAS::lock", "");
+    QSystrace::begin("graphics", "QSGTR::pAS::sync", "");
+
+>>>>>>> MER: Add systrace support.
     w->thread->waitCondition.wait(&w->thread->mutex);
     m_lockedForSync = false;
     w->thread->mutex.unlock();
     qCDebug(QSG_LOG_RENDERLOOP) << "- unlock after sync";
 
+    QSystrace::end("graphics", "QSGTR::pAS::sync", "");
     if (profileFrames)
         syncTime = timer.nsecsElapsed();
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphPolishAndSync,
@@ -1219,11 +1242,15 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w, bool inExpose)
 
     if (m_animation_timer == 0 && m_animation_driver->isRunning()) {
         qCDebug(QSG_LOG_RENDERLOOP) << "- advancing animations";
+        QSystrace::begin("graphics", "QSGTR::pAS::animations", "");
         m_animation_driver->advance();
+        QSystrace::end("graphics", "QSGTR::pAS::animations", "");
         qCDebug(QSG_LOG_RENDERLOOP) << "- animations done..";
         // We need to trigger another sync to keep animations running...
         maybePostPolishRequest(w);
+        QSystrace::begin("graphics", "QSGTR::pAS::incubate", "");
         emit timeToIncubate();
+        QSystrace::end("graphics", "QSGTR::pAS::incubate", "");
     } else if (w->updateDuringSync) {
         maybePostPolishRequest(w);
     }
