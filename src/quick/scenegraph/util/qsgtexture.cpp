@@ -44,6 +44,7 @@
 #include <QtGui/qopenglfunctions.h>
 
 #include <private/qsgmaterialshader_p.h>
+#include <private/qsystrace_p.h>
 
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && !defined(__UCLIBC__)
 #define CAN_BACKTRACE_EXECINFO
@@ -639,8 +640,11 @@ void QSGPlainTexture::bind()
                                           QQuickProfiler::SceneGraphTextureDeletion);
 
 
+    QSystrace::begin("graphics", "QSGPlainTexture::bind", "");
+
     if (m_image.isNull()) {
         if (m_texture_id && m_owns_texture) {
+            QSystraceEvent trace_bind("graphics", "QSGPlainTexture::delete");
             funcs->glDeleteTextures(1, &m_texture_id);
             qCDebug(QSG_LOG_TIME_TEXTURE, "plain texture deleted in %dms - %dx%d",
                     (int) qsg_renderer_timer.elapsed(),
@@ -659,10 +663,14 @@ void QSGPlainTexture::bind()
         funcs->glGenTextures(1, &m_texture_id);
     funcs->glBindTexture(GL_TEXTURE_2D, m_texture_id);
 
+    QSystrace::end("graphics", "QSGPlainTexture::bind", "");
+
     qint64 bindTime = 0;
     if (profileFrames)
         bindTime = qsg_renderer_timer.nsecsElapsed();
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphTexturePrepare);
+
+    QSystrace::begin("graphics", "QSGPlainTexture::convert", "");
 
     // ### TODO: check for out-of-memory situations...
 
@@ -700,10 +708,14 @@ void QSGPlainTexture::bind()
     if (tmp.width() * 4 != tmp.bytesPerLine())
         tmp = tmp.copy();
 
+    QSystrace::end("graphics", "QSGPlainTexture::convert", "");
+
     qint64 convertTime = 0;
     if (profileFrames)
         convertTime = qsg_renderer_timer.nsecsElapsed();
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphTexturePrepare);
+
+    QSystrace::begin("graphics", "QSGPlainTexture::swizzle", "");
 
     updateBindOptions(m_dirty_bind_options);
 
@@ -743,6 +755,9 @@ void QSGPlainTexture::bind()
         qsg_swizzleBGRAToRGBA(&tmp);
     }
 
+    QSystrace::end("graphics", "QSGPlainTexture::swizzle", "");
+    QSystrace::begin("graphics", "QSGPlainTexture::upload", "");
+
     qint64 swizzleTime = 0;
     if (profileFrames)
         swizzleTime = qsg_renderer_timer.nsecsElapsed();
@@ -750,14 +765,18 @@ void QSGPlainTexture::bind()
 
     funcs->glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_texture_size.width(), m_texture_size.height(), 0, externalFormat, GL_UNSIGNED_BYTE, tmp.constBits());
 
+    QSystrace::end("graphics", "QSGPlainTexture::upload", "");
+
     qint64 uploadTime = 0;
     if (profileFrames)
         uploadTime = qsg_renderer_timer.nsecsElapsed();
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphTexturePrepare);
 
     if (mipmapFiltering() != QSGTexture::None) {
+        QSystrace::begin("graphics", "QSGPlainTexture::mipmap", "");
         funcs->glGenerateMipmap(GL_TEXTURE_2D);
         m_mipmaps_generated = true;
+        QSystrace::end("graphics", "QSGPlainTexture::mipmap", "");
     }
 
     qint64 mipmapTime = 0;

@@ -65,6 +65,7 @@
 #include <QMetaMethod>
 
 #include <private/qquickprofiler_p.h>
+#include <private/qsystrace_p.h>
 
 #define IMAGEREQUEST_MAX_NETWORK_REQUEST_COUNT 8
 #define IMAGEREQUEST_MAX_REDIRECT_RECURSION 16
@@ -454,6 +455,7 @@ QQuickPixmapReader::~QQuickPixmapReader()
 void QQuickPixmapReader::networkRequestDone(QNetworkReply *reply)
 {
     QQuickPixmapReply *job = networkJobs.take(reply);
+    QSystrace::counter("network", "QQuickPixmapReader::jobCount", "%d", networkJobs.count());
 
     if (job) {
         job->redirectCount++;
@@ -471,6 +473,7 @@ void QQuickPixmapReader::networkRequestDone(QNetworkReply *reply)
                 QMetaObject::connect(reply, replyFinished, threadObject, threadNetworkRequestDone);
 
                 networkJobs.insert(reply, job);
+                QSystrace::counter("network", "QQuickPixmapReader::jobCount", "%d", networkJobs.count());
                 return;
             }
         }
@@ -483,6 +486,7 @@ void QQuickPixmapReader::networkRequestDone(QNetworkReply *reply)
             error = QQuickPixmapReply::Loading;
             errorString = reply->errorString();
         } else {
+            QSystraceEvent trace("graphics", "QQuickPixmapCache::networkRead");
             QByteArray all = reply->readAll();
             QBuffer buff(&all);
             buff.open(QIODevice::ReadOnly);
@@ -578,6 +582,7 @@ void QQuickPixmapReader::processJobs()
                     if (reply->isRunning()) {
                         // cancel any jobs already started
                         reply->close();
+                        QSystrace::counter("network", "QQuickPixmapReader::jobCount", "%d", networkJobs.count());
                     }
                 } else {
                     QQuickImageResponse *asyncResponse = asyncResponses.key(job);
@@ -720,6 +725,7 @@ void QQuickPixmapReader::processJob(QQuickPixmapReply *runningJob, const QUrl &u
     } else {
         if (!localFile.isEmpty()) {
             // Image is local - load/decode immediately
+            QSystraceEvent trace("graphics", "QQuickPixmapCache::localRead");
             QImage image;
             QQuickPixmapReply::ReadError errorCode = QQuickPixmapReply::NoError;
             QString errorStr;
@@ -746,6 +752,7 @@ void QQuickPixmapReader::processJob(QQuickPixmapReply *runningJob, const QUrl &u
             QMetaObject::connect(reply, replyFinished, threadObject, threadNetworkRequestDone);
 
             networkJobs.insert(reply, runningJob);
+            QSystrace::counter("network", "QQuickPixmapReader::jobCount", "%d", networkJobs.count());
         }
     }
 }
