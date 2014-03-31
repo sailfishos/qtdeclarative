@@ -45,6 +45,7 @@
 #include <private/qqmlbuiltinfunctions_p.h>
 #include <private/qqmlvmemetaobject_p.h>
 #include <private/qqmlvaluetypewrapper_p.h>
+#include <private/qsystrace_p.h>
 
 #include <QVariant>
 #include <QtCore/qdebug.h>
@@ -164,6 +165,7 @@ void QQmlBinding::update(QQmlPropertyPrivate::WriteFlags flags)
 
     QQmlBindingProfiler prof(ep->profiler, f);
     setUpdatingFlag(true);
+    QSystraceEvent systrace("qml", "QQmlBinding::update");
 
     QQmlJavaScriptExpression::DeleteWatcher watcher(this);
 

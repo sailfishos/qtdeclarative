@@ -45,6 +45,7 @@
 #include <QtGui/qpa/qplatformnativeinterface.h>
 
 #include <private/qsgtexture_p.h>
+#include <private/qsystrace_p.h>
 
 #include <private/qquickprofiler_p.h>
 
@@ -383,6 +384,7 @@ void Atlas::bind(QSGTexture::Filtering filtering)
 
     // Upload all pending images..
     for (int i=0; i<m_pending_uploads.size(); ++i) {
+        QSystrace::begin("graphics", "Atlas::bind", "");
 
         bool profileFrames = QSG_LOG_TIME_TEXTURE().isDebugEnabled();
         if (profileFrames)
@@ -398,6 +400,7 @@ void Atlas::bind(QSGTexture::Filtering filtering)
         } else {
             upload(t);
         }
+        QSystrace::end("graphics", "Atlas::bind", "");
         const QSize textureSize = t->textureSize();
         if (textureSize.width() > m_atlas_transient_image_threshold ||
                 textureSize.height() > m_atlas_transient_image_threshold)
