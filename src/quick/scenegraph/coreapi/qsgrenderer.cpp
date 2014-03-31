@@ -219,7 +219,9 @@ void QSGRenderer::renderScene(const QSGBindable &bindable)
     m_bindable = &bindable;
     preprocess();
 
+    QSystrace::begin("graphics", "QSGR::bind", "");
     bindable.bind();
+    QSystrace::end("graphics", "QSGR::bind", "");
     if (profileFrames)
         bindTime = frameTimer.nsecsElapsed();
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphRendererFrame,
@@ -240,7 +242,9 @@ void QSGRenderer::renderScene(const QSGBindable &bindable)
     }
 #endif
 
+    QSystrace::begin("graphics", "QSGR::render", "");
     render();
+    QSystrace::end("graphics", "QSGR::render", "");
     if (profileFrames)
         renderTime = frameTimer.nsecsElapsed();
     Q_QUICK_SG_PROFILE_END(QQuickProfiler::SceneGraphRendererFrame,
@@ -291,6 +295,7 @@ void QSGRenderer::preprocess()
 {
     QSGRootNode *root = rootNode();
     Q_ASSERT(root);
+    QSystrace::begin("graphics", "QSGR::preprocess", "");
 
     // We need to take a copy here, in case any of the preprocess calls deletes a node that
     // is in the preprocess list and thus, changes the m_nodes_to_preprocess behind our backs
@@ -306,12 +311,15 @@ void QSGRenderer::preprocess()
     }
 
     bool profileFrames = QSG_LOG_TIME_RENDERER().isDebugEnabled();
+    QSystrace::end("graphics", "QSGR::preprocess", "");
     if (profileFrames)
         preprocessTime = frameTimer.nsecsElapsed();
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphRendererFrame,
                               QQuickProfiler::SceneGraphRendererPreprocess);
 
+    QSystrace::begin("graphics", "QSGR::update", "");
     nodeUpdater()->updateStates(root);
+    QSystrace::end("graphics", "QSGR::update", "");
 
     if (profileFrames)
         updatePassTime = frameTimer.nsecsElapsed();

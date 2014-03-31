@@ -51,6 +51,7 @@
 #include <private/qqmlvaluetypewrapper_p.h>
 #include <private/qv4qobjectwrapper_p.h>
 #include <private/qv4variantobject_p.h>
+#include <private/qsystrace_p.h>
 
 #include <QVariant>
 #include <QtCore/qdebug.h>
@@ -154,6 +155,7 @@ void QQmlBinding::update(QQmlPropertyData::WriteFlags flags)
         return;
     }
     setUpdatingFlag(true);
+    QSystraceEvent systrace("qml", "QQmlBinding::update");
 
     DeleteWatcher watcher(this);
 

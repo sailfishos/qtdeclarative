@@ -67,6 +67,7 @@
 #include <QtCore/qcryptographichash.h>
 
 #include <functional>
+#include <private/qsystrace_p.h>
 
 #if defined (Q_OS_UNIX)
 #include <sys/types.h>
@@ -2589,7 +2590,12 @@ QString QQmlTypeData::stringAt(int index) const
 void QQmlTypeData::compile(const QQmlRefPointer<QQmlTypeNameCache> &typeNameCache, const QV4::CompiledData::ResolvedTypeReferenceMap &resolvedTypeCache,
                            const QV4::CompiledData::DependentTypesHasher &dependencyHasher)
 {
+<<<<<<< HEAD
     Q_ASSERT(m_compiledData.isNull());
+=======
+    Q_ASSERT(m_compiledData == 0);
+    QSystraceEvent systrace("qml", "QQmlTypeData::compile");
+>>>>>>> MER: Add systrace support.
 
     const bool typeRecompilation = m_document && m_document->javaScriptCompilationUnit && m_document->javaScriptCompilationUnit->data->flags & QV4::CompiledData::Unit::PendingTypeCompilation;
 
