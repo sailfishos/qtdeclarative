@@ -67,6 +67,7 @@
 #include <QtCore/qcryptographichash.h>
 
 #include <functional>
+#include <private/qsystrace_p.h>
 
 #if defined (Q_OS_UNIX)
 #include <sys/types.h>
@@ -2590,6 +2591,7 @@ void QQmlTypeData::compile(const QQmlRefPointer<QQmlTypeNameCache> &typeNameCach
                            const QV4::CompiledData::DependentTypesHasher &dependencyHasher)
 {
     Q_ASSERT(m_compiledData.isNull());
+    QSystraceEvent systrace("qml", "QQmlTypeData::compile");
 
     const bool typeRecompilation = m_document && m_document->javaScriptCompilationUnit && m_document->javaScriptCompilationUnit->data->flags & QV4::CompiledData::Unit::PendingTypeCompilation;
 

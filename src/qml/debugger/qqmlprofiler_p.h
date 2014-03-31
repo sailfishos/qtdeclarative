@@ -339,7 +339,7 @@ struct QQmlProfilerHelper : public QQmlProfilerDefinitions {
 struct QQmlBindingProfiler : public QQmlProfilerHelper {
     QQmlBindingProfiler(QQmlProfiler *profiler, QV4::Function *function) :
         QQmlProfilerHelper(profiler)
-        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlBinding::") + url + QLatin1String("::") + QString::number(line)))
+        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlBinding::") + function->sourceLocation().sourceFile + QLatin1String("::") + QString::number(function->sourceLocation().line)))
     {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileBinding, profiler,
                       startBinding(function));
@@ -375,7 +375,7 @@ struct QQmlHandlingSignalProfiler : public QQmlProfilerHelper {
 struct QQmlCompilingProfiler : public QQmlProfilerHelper {
     QQmlCompilingProfiler(QQmlProfiler *profiler, QQmlDataBlob *blob) :
         QQmlProfilerHelper(profiler)
-        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlCompiling::") + name))
+        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlCompiling::") + blob->urlString()))
     {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileCompiling, profiler, startCompiling(blob));
     }
