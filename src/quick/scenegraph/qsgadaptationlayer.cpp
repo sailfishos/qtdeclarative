@@ -49,6 +49,7 @@
 #include <qsgrendernode.h>
 
 #include <private/qquickprofiler_p.h>
+#include <private/qsystrace_p.h>
 #include <QElapsedTimer>
 
 QT_BEGIN_NAMESPACE
@@ -174,6 +175,8 @@ void QSGDistanceFieldGlyphCache::update()
         qsg_render_timer.start();
     Q_QUICK_SG_PROFILE_START(QQuickProfiler::SceneGraphAdaptationLayerFrame);
 
+    QSystrace::begin("graphics", "QSGDFGC::update::render", "");
+
     QList<QDistanceField> distanceFields;
     const int pendingGlyphsSize = m_pendingGlyphs.size();
     distanceFields.reserve(pendingGlyphsSize);
@@ -192,9 +195,11 @@ void QSGDistanceFieldGlyphCache::update()
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphAdaptationLayerFrame,
                               QQuickProfiler::SceneGraphAdaptationLayerGlyphRender);
 
+    QSystrace::begin("graphics", "QSGDFGC::update::store", "");
     m_pendingGlyphs.reset();
 
     storeGlyphs(distanceFields);
+    QSystrace::end("graphics", "QSGDFGC::update::store", "");
 
 #if defined(QSG_DISTANCEFIELD_CACHE_DEBUG)
     for (Texture texture : qAsConst(m_textures))

@@ -53,6 +53,7 @@
 #include <private/qquickrendercontrol_p.h>
 #include <private/qquickanimatorcontroller_p.h>
 #include <private/qquickprofiler_p.h>
+#include <private/qsystrace_p.h>
 
 #include <private/qguiapplication_p.h>
 #include <QtGui/QInputMethod>
@@ -1881,6 +1882,7 @@ bool QQuickWindowPrivate::deliverNativeGestureEvent(QQuickItem *item, QNativeGes
 bool QQuickWindowPrivate::deliverTouchCancelEvent(QTouchEvent *event)
 {
     qCDebug(DBG_TOUCH) << event;
+    QSystraceEvent systrace("graphics", "QQuickWindow::deliverTouchCancel");
     Q_Q(QQuickWindow);
 
     // A TouchCancel event will typically not contain any points.
@@ -1912,6 +1914,8 @@ void QQuickWindowPrivate::deliverDelayedTouchEvent()
 
 bool QQuickWindowPrivate::compressTouchEvent(QTouchEvent *event)
 {
+    qCDebug(DBG_TOUCH) << event;
+    QSystraceEvent systrace("graphics", "QQuickWindow::deliverTouchEvent");
     Q_Q(QQuickWindow);
     Qt::TouchPointStates states = event->touchPointStates();
     if (((states & (Qt::TouchPointMoved | Qt::TouchPointStationary)) == 0)
