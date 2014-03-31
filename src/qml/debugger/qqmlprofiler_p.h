@@ -191,7 +191,7 @@ struct QQmlProfilerHelper : public QQmlProfilerDefinitions {
 struct QQmlBindingProfiler : public QQmlProfilerHelper {
     QQmlBindingProfiler(QQmlProfiler *profiler, const QV4::FunctionObject *function) :
         QQmlProfilerHelper(profiler)
-        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlBinding::") + url + QLatin1String("::") + QString::number(line)))
+        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlBinding::") + function->sourceLocation().sourceFile + QLatin1String("::") + QString::number(function->sourceLocation().line)))
     {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileBinding, profiler,
                       startBinding(function->sourceLocation()));
@@ -227,7 +227,7 @@ struct QQmlHandlingSignalProfiler : public QQmlProfilerHelper {
 struct QQmlCompilingProfiler : public QQmlProfilerHelper {
     QQmlCompilingProfiler(QQmlProfiler *profiler, const QUrl &url) :
         QQmlProfilerHelper(profiler)
-        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlCompiling::") + name))
+        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlCompiling::") + url.toString()))
     {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileCompiling, profiler, startCompiling(url));
     }

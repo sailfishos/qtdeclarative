@@ -46,6 +46,7 @@
 #include <private/qsgrenderloop_p.h>
 #include <private/qquickrendercontrol_p.h>
 #include <private/qquickanimatorcontroller_p.h>
+#include <private/qsystrace_p.h>
 
 #include <private/qguiapplication_p.h>
 #include <QtGui/QInputMethod>
@@ -1882,6 +1883,7 @@ bool QQuickWindowPrivate::deliverNativeGestureEvent(QQuickItem *item, QNativeGes
 bool QQuickWindowPrivate::deliverTouchCancelEvent(QTouchEvent *event)
 {
     qCDebug(DBG_TOUCH) << event;
+    QSystraceEvent systrace("graphics", "QQuickWindow::deliverTouchCancel");
     Q_Q(QQuickWindow);
     // A TouchCancel event will typically not contain any points.
     // Deliver it to all items that have active touches.
@@ -1916,6 +1918,7 @@ static bool qquickwindow_no_touch_compression = qEnvironmentVariableIsSet("QML_N
 void QQuickWindowPrivate::deliverTouchEvent(QTouchEvent *event)
 {
     qCDebug(DBG_TOUCH) << event;
+    QSystraceEvent systrace("graphics", "QQuickWindow::deliverTouchEvent");
     Q_Q(QQuickWindow);
 
     if (qquickwindow_no_touch_compression || touchRecursionGuard) {

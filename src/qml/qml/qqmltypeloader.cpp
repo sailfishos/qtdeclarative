@@ -55,6 +55,7 @@
 #include <QtQml/qqmlcomponent.h>
 #include <QtCore/qwaitcondition.h>
 #include <QtQml/qqmlextensioninterface.h>
+#include <private/qsystrace_p.h>
 
 #if defined (Q_OS_UNIX)
 #include <sys/types.h>
@@ -2294,6 +2295,7 @@ QString QQmlTypeData::stringAt(int index) const
 void QQmlTypeData::compile()
 {
     Q_ASSERT(m_compiledData == 0);
+    QSystraceEvent systrace("qml", "QQmlTypeData::compile");
 
     m_compiledData = new QQmlCompiledData(typeLoader()->engine());
 
