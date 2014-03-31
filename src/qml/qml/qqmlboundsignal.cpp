@@ -52,6 +52,7 @@
 #include "qqmlglobal_p.h"
 #include <private/qqmlprofilerservice_p.h>
 #include <private/qv4debugservice_p.h>
+#include <private/qsystrace_p.h>
 #include "qqmlinfo.h"
 
 #include <private/qv4value_p.h>
@@ -353,6 +354,7 @@ void QQmlBoundSignal_callback(QQmlNotifierEndpoint *e, void **a)
     if (!s->m_expression)
         return;
 
+    QSystraceEvent trace("qml", "QQmlBoundSignal::callback");
     if (QQmlDebugService::isDebuggingEnabled())
         QV4DebugService::instance()->signalEmitted(QString::fromLatin1(QMetaObjectPrivate::signal(s->m_expression->target()->metaObject(), s->m_index).methodSignature()));
 

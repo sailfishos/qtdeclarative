@@ -51,6 +51,7 @@
 #include <QtGui/qpa/qplatformnativeinterface.h>
 
 #include <private/qsgtexture_p.h>
+#include <private/qsystrace_p.h>
 
 #include <private/qqmlprofilerservice_p.h>
 
@@ -371,7 +372,7 @@ bool Atlas::bind(QSGTexture::Filtering filtering)
 
     // Upload all pending images..
     for (int i=0; i<m_pending_uploads.size(); ++i) {
-
+        QSystrace::begin("graphics", "Atlas::bind", "");
 #ifndef QSG_NO_RENDER_TIMING
         bool profileFrames = qsg_render_timing || QQmlProfilerService::enabled;
         if (profileFrames)
@@ -385,6 +386,7 @@ bool Atlas::bind(QSGTexture::Filtering filtering)
             upload(m_pending_uploads.at(i));
         }
 
+        QSystrace::end("graphics", "Atlas::bind", "");
 #ifndef QSG_NO_RENDER_TIMING
         if (qsg_render_timing) {
             qDebug("   - AtlasTexture(%dx%d), uploaded in %d ms",

@@ -51,6 +51,7 @@
 #include <private/qqmlexpression_p.h>
 #include <private/qqmlscriptstring_p.h>
 #include <private/qqmlcontextwrapper_p.h>
+#include <private/qsystrace_p.h>
 
 #include <QVariant>
 #include <QtCore/qdebug.h>
@@ -225,6 +226,7 @@ void QQmlBinding::update(QQmlPropertyPrivate::WriteFlags flags)
     trace.addDetail("Column", columnNo);
 
     if (!updatingFlag()) {
+        QSystraceEvent systrace("qml", "QQmlBinding::update");
         QQmlBindingProfiler prof(m_url, lineNo, columnNo, QQmlProfilerService::QmlBinding);
         setUpdatingFlag(true);
 

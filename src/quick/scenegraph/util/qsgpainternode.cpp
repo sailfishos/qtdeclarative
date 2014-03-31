@@ -50,6 +50,7 @@
 #include <qopenglpaintdevice.h>
 #include <qmath.h>
 #include <qpainter.h>
+#include <private/qsystrace_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -128,6 +129,7 @@ QSGPainterNode::~QSGPainterNode()
 
 void QSGPainterNode::paint()
 {
+    QSystraceEvent systrace("graphics", "QSGPainterNode::paint");
     QRect dirtyRect = m_dirtyRect.isNull() ? QRect(0, 0, m_size.width(), m_size.height()) : m_dirtyRect;
 
     QPainter painter;

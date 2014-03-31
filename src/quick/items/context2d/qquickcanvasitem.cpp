@@ -57,6 +57,7 @@
 #include <private/qv4value_p.h>
 #include <private/qv4functionobject_p.h>
 #include <private/qv4scopedvalue_p.h>
+#include <private/qsystrace_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -637,6 +638,7 @@ void QQuickCanvasItem::itemChange(QQuickItem::ItemChange change, const QQuickIte
 
 void QQuickCanvasItem::updatePolish()
 {
+    QSystraceEvent systrace("graphics", "QQuickCanvasItem::updatePolish");
     QQuickItem::updatePolish();
 
     Q_D(QQuickCanvasItem);

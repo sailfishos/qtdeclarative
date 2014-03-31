@@ -50,6 +50,7 @@
 #include <QtGui/QOpenGLVertexArrayObject>
 
 #include <private/qqmlprofilerservice_p.h>
+#include <private/qsystrace_p.h>
 
 #include <algorithm>
 
@@ -128,6 +129,8 @@ ShaderManager::Shader *ShaderManager::prepareMaterial(QSGMaterial *material)
     if (shader)
         return shader;
 
+    QSystraceEvent systrace("graphics", "ShaderManager::prepareMaterial");
+
 #ifndef QSG_NO_RENDER_TIMING
     if (qsg_render_timing  || QQmlProfilerService::enabled)
         qsg_renderer_timer.start();
@@ -180,6 +183,8 @@ ShaderManager::Shader *ShaderManager::prepareMaterialNoRewrite(QSGMaterial *mate
     Shader *shader = stockShaders.value(type, 0);
     if (shader)
         return shader;
+
+    QSystraceEvent systrace("graphics", "ShaderManager::prepareMaterialNoRewrite");
 
 #ifndef QSG_NO_RENDER_TIMING
     if (qsg_render_timing  || QQmlProfilerService::enabled)

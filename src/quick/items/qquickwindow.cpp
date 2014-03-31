@@ -52,6 +52,7 @@
 #include <QtQuick/private/qsgtexture_p.h>
 #include <private/qsgrenderloop_p.h>
 #include <private/qquickanimatorcontroller_p.h>
+#include <private/qsystrace_p.h>
 
 #include <private/qguiapplication_p.h>
 #include <QtGui/QInputMethod>
@@ -1636,6 +1637,7 @@ void QQuickWindow::wheelEvent(QWheelEvent *event)
 
 bool QQuickWindowPrivate::deliverTouchCancelEvent(QTouchEvent *event)
 {
+    QSystraceEvent systrace("graphics", "QQuickWindow::deliverTouchCancel");
 #ifdef TOUCH_DEBUG
     qWarning("touchCancelEvent");
 #endif
@@ -1661,6 +1663,7 @@ bool QQuickWindowPrivate::deliverTouchCancelEvent(QTouchEvent *event)
 // call deliverTouchPoints to actually dispatch the points
 bool QQuickWindowPrivate::deliverTouchEvent(QTouchEvent *event)
 {
+    QSystraceEvent systrace("graphics", "QQuickWindow::deliverTouchEvent");
 #ifdef TOUCH_DEBUG
     if (event->type() == QEvent::TouchBegin)
         qWarning() << "touchBeginEvent";

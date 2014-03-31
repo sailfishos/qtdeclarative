@@ -63,6 +63,7 @@
 #include <QtQml/qqmlcomponent.h>
 #include <QtCore/qwaitcondition.h>
 #include <QtQml/qqmlextensioninterface.h>
+#include <private/qsystrace_p.h>
 
 #if defined (Q_OS_UNIX)
 #include <sys/types.h>
@@ -2303,6 +2304,7 @@ void QQmlTypeData::compile()
     m_compiledData->name = finalUrlString();
 
     QQmlCompilingProfiler prof(m_compiledData->name);
+    QSystraceEvent systrace("qml", "QQmlTypeData::compile");
 
     if (m_useNewCompiler) {
         m_compiledData->importCache = new QQmlTypeNameCache;

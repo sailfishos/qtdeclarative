@@ -49,6 +49,7 @@
 #include <private/qqmlglobal_p.h>
 #include <QtGui/qguiapplication.h>
 #include <QtGui/qpa/qplatformnativeinterface.h>
+#include <private/qsystrace_p.h>
 
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && !defined(__UCLIBC__)
 #define CAN_BACKTRACE_EXECINFO
@@ -626,8 +627,11 @@ void QSGPlainTexture::bind()
         qsg_renderer_timer.start();
 #endif
 
+    QSystrace::begin("graphics", "QSGPlainTexture::bind", "");
+
     if (m_image.isNull()) {
         if (m_texture_id && m_owns_texture) {
+            QSystraceEvent trace_bind("graphics", "QSGPlainTexture::delete");
             glDeleteTextures(1, &m_texture_id);
 #ifndef QSG_NO_RENDER_TIMING
             if (qsg_render_timing) {
@@ -657,11 +661,15 @@ void QSGPlainTexture::bind()
         glGenTextures(1, &m_texture_id);
     glBindTexture(GL_TEXTURE_2D, m_texture_id);
 
+    QSystrace::end("graphics", "QSGPlainTexture::bind", "");
+
 #ifndef QSG_NO_RENDER_TIMING
     qint64 bindTime = 0;
     if (profileFrames)
         bindTime = qsg_renderer_timer.nsecsElapsed();
 #endif
+
+    QSystrace::begin("graphics", "QSGPlainTexture::convert", "");
 
     // ### TODO: check for out-of-memory situations...
     int w = m_image.width();
@@ -673,11 +681,15 @@ void QSGPlainTexture::bind()
     if (tmp.width() * 4 != tmp.bytesPerLine())
         tmp = tmp.copy();
 
+    QSystrace::end("graphics", "QSGPlainTexture::convert", "");
+
 #ifndef QSG_NO_RENDER_TIMING
     qint64 convertTime = 0;
     if (profileFrames)
         convertTime = qsg_renderer_timer.nsecsElapsed();
 #endif
+
+    QSystrace::begin("graphics", "QSGPlainTexture::swizzle", "");
 
     updateBindOptions(m_dirty_bind_options);
 
@@ -714,6 +726,9 @@ void QSGPlainTexture::bind()
         qsg_swizzleBGRAToRGBA(&tmp);
     }
 
+    QSystrace::end("graphics", "QSGPlainTexture::swizzle", "");
+    QSystrace::begin("graphics", "QSGPlainTexture::upload", "");
+
 #ifndef QSG_NO_RENDER_TIMING
     qint64 swizzleTime = 0;
     if (profileFrames)
@@ -721,17 +736,22 @@ void QSGPlainTexture::bind()
 #endif
     glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, w, h, 0, externalFormat, GL_UNSIGNED_BYTE, tmp.constBits());
 
+    QSystrace::end("graphics", "QSGPlainTexture::upload", "");
+
 #ifndef QSG_NO_RENDER_TIMING
     qint64 uploadTime = 0;
     if (profileFrames)
         uploadTime = qsg_renderer_timer.nsecsElapsed();
 #endif
 
+    QSystrace::begin("graphics", "QSGPlainTexture::mipmap", "");
 
     if (m_has_mipmaps) {
         context->functions()->glGenerateMipmap(GL_TEXTURE_2D);
         m_mipmaps_generated = true;
     }
+
+    QSystrace::end("graphics", "QSGPlainTexture::mipmap", "");
 
 #ifndef QSG_NO_RENDER_TIMING
     qint64 mipmapTime = 0;

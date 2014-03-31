@@ -48,6 +48,7 @@
 #include <QtGui/qguiapplication.h>
 #include <qdir.h>
 
+#include <private/qsystrace_p.h>
 #include <private/qqmlprofilerservice_p.h>
 #include <QElapsedTimer>
 
@@ -169,12 +170,16 @@ void QSGDistanceFieldGlyphCache::update()
         qsg_render_timer.start();
 #endif
 
+    QSystrace::begin("graphics", "QSGDFGC::update::render", "");
+
     QList<QDistanceField> distanceFields;
     for (int i = 0; i < m_pendingGlyphs.size(); ++i) {
         distanceFields.append(QDistanceField(m_referenceFont,
                                              m_pendingGlyphs.at(i),
                                              m_doubleGlyphResolution));
     }
+
+    QSystrace::end("graphics", "QSGDFGC::update::render", "");
 
 #ifndef QSG_NO_RENDER_TIMING
     qint64 renderTime = 0;
@@ -183,9 +188,11 @@ void QSGDistanceFieldGlyphCache::update()
         renderTime = qsg_render_timer.nsecsElapsed();
 #endif
 
+    QSystrace::begin("graphics", "QSGDFGC::update::store", "");
     m_pendingGlyphs.reset();
 
     storeGlyphs(distanceFields);
+    QSystrace::end("graphics", "QSGDFGC::update::store", "");
 
 #ifndef QSG_NO_RENDER_TIMING
     if (qsg_render_timing) {
