@@ -316,6 +316,7 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
         return;
 
     QQuickWindowPrivate *cd = QQuickWindowPrivate::get(window);
+    cd->flushDelayedTouchEvent();
     cd->polishItems();
 
     qint64 renderTime = 0, syncTime = 0;
