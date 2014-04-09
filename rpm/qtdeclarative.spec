@@ -278,7 +278,7 @@ touch .git
     QMAKE_CFLAGS_RELEASE+=-mthumb        QMAKE_CFLAGS_DEBUG+=-mthumb \
     QMAKE_CXXFLAGS_RELEASE+=-mthumb      QMAKE_CXXFLAGS_DEBUG+=-mthumb
 %else
-%%qmake5
+%qmake5
 %endif
 
 make %{?_smp_mflags}
