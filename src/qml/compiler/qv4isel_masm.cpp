@@ -2487,6 +2487,15 @@ bool InstructionSelection::int32Binop(V4IR::AluOp oper, V4IR::Expr *leftSource,
 {
     Q_ASSERT(leftSource->type == V4IR::SInt32Type);
 
+    Assembler::RegisterID targetReg = Assembler::ReturnValueRegister;
+    if (target->kind == V4IR::Temp::PhysicalRegister) {
+        // We try to load leftSource into the target's register, but we can't do that if
+        // the target register is the same as rightSource.
+        V4IR::Temp *rhs = rightSource->asTemp();
+        if (!rhs || rhs->kind != V4IR::Temp::PhysicalRegister || rhs->index != target->index)
+            targetReg = (Assembler::RegisterID) target->index;
+    }
+
     switch (oper) {
     case V4IR::OpBitAnd: {
         Q_ASSERT(rightSource->type == V4IR::SInt32Type);
@@ -2497,11 +2506,6 @@ bool InstructionSelection::int32Binop(V4IR::AluOp oper, V4IR::Expr *leftSource,
                        (Assembler::RegisterID) target->index);
             return true;
         }
-        Assembler::RegisterID targetReg;
-        if (target->kind == V4IR::Temp::PhysicalRegister)
-            targetReg = (Assembler::RegisterID) target->index;
-        else
-            targetReg = Assembler::ReturnValueRegister;
 
         _as->and32(_as->toInt32Register(leftSource, targetReg),
                    _as->toInt32Register(rightSource, Assembler::ScratchRegister),
@@ -2517,11 +2521,6 @@ bool InstructionSelection::int32Binop(V4IR::AluOp oper, V4IR::Expr *leftSource,
                        (Assembler::RegisterID) target->index);
             return true;
         }
-        Assembler::RegisterID targetReg;
-        if (target->kind == V4IR::Temp::PhysicalRegister)
-            targetReg = (Assembler::RegisterID) target->index;
-        else
-            targetReg = Assembler::ReturnValueRegister;
 
         _as->or32(_as->toInt32Register(leftSource, targetReg),
                   _as->toInt32Register(rightSource, Assembler::ScratchRegister),
@@ -2537,11 +2536,6 @@ bool InstructionSelection::int32Binop(V4IR::AluOp oper, V4IR::Expr *leftSource,
                        (Assembler::RegisterID) target->index);
             return true;
         }
-        Assembler::RegisterID targetReg;
-        if (target->kind == V4IR::Temp::PhysicalRegister)
-            targetReg = (Assembler::RegisterID) target->index;
-        else
-            targetReg = Assembler::ReturnValueRegister;
 
         _as->xor32(_as->toInt32Register(leftSource, targetReg),
                    _as->toInt32Register(rightSource, Assembler::ScratchRegister),
@@ -2550,11 +2544,6 @@ bool InstructionSelection::int32Binop(V4IR::AluOp oper, V4IR::Expr *leftSource,
     } return true;
     case V4IR::OpLShift: {
         Q_ASSERT(rightSource->type == V4IR::SInt32Type);
-        Assembler::RegisterID targetReg;
-        if (target->kind == V4IR::Temp::PhysicalRegister)
-            targetReg = (Assembler::RegisterID) target->index;
-        else
-            targetReg = Assembler::ReturnValueRegister;
 
         _as->move(_as->toInt32Register(rightSource, Assembler::ScratchRegister),
                   Assembler::ScratchRegister);
@@ -2565,11 +2554,6 @@ bool InstructionSelection::int32Binop(V4IR::AluOp oper, V4IR::Expr *leftSource,
     } return true;
     case V4IR::OpRShift: {
         Q_ASSERT(rightSource->type == V4IR::SInt32Type);
-        Assembler::RegisterID targetReg;
-        if (target->kind == V4IR::Temp::PhysicalRegister)
-            targetReg = (Assembler::RegisterID) target->index;
-        else
-            targetReg = Assembler::ReturnValueRegister;
 
         _as->move(_as->toInt32Register(rightSource, Assembler::ScratchRegister),
                   Assembler::ScratchRegister);
@@ -2591,12 +2575,6 @@ bool InstructionSelection::int32Binop(V4IR::AluOp oper, V4IR::Expr *leftSource,
     case V4IR::OpAdd: {
         Q_ASSERT(rightSource->type == V4IR::SInt32Type);
 
-        Assembler::RegisterID targetReg;
-        if (target->kind == V4IR::Temp::PhysicalRegister)
-            targetReg = (Assembler::RegisterID) target->index;
-        else
-            targetReg = Assembler::ReturnValueRegister;
-
         _as->add32(_as->toInt32Register(leftSource, targetReg),
                    _as->toInt32Register(rightSource, Assembler::ScratchRegister),
                    targetReg);
@@ -2616,24 +2594,12 @@ bool InstructionSelection::int32Binop(V4IR::AluOp oper, V4IR::Expr *leftSource,
             return true;
         }
 
-        Assembler::RegisterID targetReg;
-        if (target->kind == V4IR::Temp::PhysicalRegister)
-            targetReg = (Assembler::RegisterID) target->index;
-        else
-            targetReg = Assembler::ReturnValueRegister;
-
         _as->move(_as->toInt32Register(leftSource, targetReg), targetReg);
         _as->sub32(_as->toInt32Register(rightSource, Assembler::ScratchRegister), targetReg);
         _as->storeInt32(targetReg, target);
     } return true;
     case V4IR::OpMul: {
         Q_ASSERT(rightSource->type == V4IR::SInt32Type);
-
-        Assembler::RegisterID targetReg;
-        if (target->kind == V4IR::Temp::PhysicalRegister)
-            targetReg = (Assembler::RegisterID) target->index;
-        else
-            targetReg = Assembler::ReturnValueRegister;
 
         _as->mul32(_as->toInt32Register(leftSource, targetReg),
                    _as->toInt32Register(rightSource, Assembler::ScratchRegister),
