@@ -50,6 +50,8 @@
 #include <QtGui/QScreen>
 #include <QtGui/QOffscreenSurface>
 
+#include <qpa/qwindowsysteminterface.h>
+
 #include <QtQuick/QQuickWindow>
 #include <private/qquickwindow_p.h>
 
@@ -1187,6 +1189,9 @@ bool QSGThreadedRenderLoop::event(QEvent *e)
             emit timeToIncubate();
         } else {
             QSG_GUI_DEBUG((void *) 0, "QEvent::Timer -> Polish & Sync");
+            QWindowSystemInterface::flushWindowSystemEvents();
+            QSG_GUI_DEBUG((void *) 0, " - done flushing events before polishAndSync");
+
             Window *w = 0;
             for (int i=0; i<m_windows.size(); ++i) {
                 if (m_windows.at(i).timerId == te->timerId()) {
@@ -1194,8 +1199,10 @@ bool QSGThreadedRenderLoop::event(QEvent *e)
                     break;
                 }
             }
-            if (w)
+            if (w) {
+                QQuickWindowPrivate::get(w->window)->flushDelayedTouchEvent();
                 polishAndSync(w);
+            }
         }
         return true;
     }
