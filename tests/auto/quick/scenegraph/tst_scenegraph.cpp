@@ -326,6 +326,8 @@ void tst_SceneGraph::render_data()
           << "data/render_BreakOpacityBatch.qml"
           << "data/render_OutOfFloatRange.qml"
           << "data/render_StackingOrder.qml"
+          << "data/render_ImageFiltering.qml"
+          << "data/render_bug37555.qml"
         ;
 
     QRegExp sampleCount("#samples: *(\\d+)");

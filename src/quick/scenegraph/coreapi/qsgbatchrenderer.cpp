@@ -108,7 +108,7 @@ bool qsg_sort_batch_is_valid(Batch *a, Batch *b) { return a->first && !b->first;
 bool qsg_sort_batch_increasing_order(Batch *a, Batch *b) { return a->first->order < b->first->order; }
 bool qsg_sort_batch_decreasing_order(Batch *a, Batch *b) { return a->first->order > b->first->order; }
 
-QSGMaterial::Flag QSGMaterial_RequiresFullMatrixBit = (QSGMaterial::Flag) (QSGMaterial::RequiresFullMatrix & ~QSGMaterial::RequiresFullMatrixExceptTranslate);
+QSGMaterial::Flag QSGMaterial_FullMatrix = (QSGMaterial::Flag) (QSGMaterial::RequiresFullMatrix & ~QSGMaterial::RequiresFullMatrixExceptTranslate);
 
 struct QMatrix4x4_Accessor
 {
@@ -607,12 +607,12 @@ void Element::computeBounds()
     boundsOutsideFloatRange = bounds.isOutsideFloatRange();
 }
 
-bool Batch::isMaterialCompatible(Element *e) const
+BatchCompatibility Batch::isMaterialCompatible(Element *e) const
 {
     // If material has changed between opaque and translucent, it is not compatible
     QSGMaterial *m = e->node->activeMaterial();
     if (isOpaque != ((m->flags() & QSGMaterial::Blending) == 0))
-        return false;
+        return BatchBreaksOnBlending;
 
     Element *n = first;
     // Skip to the first node other than e which has not been removed
@@ -622,10 +622,12 @@ bool Batch::isMaterialCompatible(Element *e) const
     // Only 'e' in this batch, so a material change doesn't change anything as long as
     // its blending is still in sync with this batch...
     if (!n)
-        return true;
+        return BatchIsCompatible;
 
     QSGMaterial *nm = n->node->activeMaterial();
-    return nm->type() == m->type() && nm->compare(m) == 0;
+    return (nm->type() == m->type() && nm->compare(m) == 0)
+            ? BatchIsCompatible
+            : BatchBreaksOnCompare;
 }
 
 /*
@@ -763,6 +765,8 @@ Renderer::Renderer(QSGRenderContext *ctx)
     , m_tmpOpaqueElements(16)
     , m_rebuild(FullRebuild)
     , m_zRange(0)
+    , m_renderOrderRebuildLower(-1)
+    , m_renderOrderRebuildUpper(-1)
     , m_currentMaterial(0)
     , m_currentShader(0)
     , m_currentClip(0)
@@ -1184,7 +1188,10 @@ void Renderer::nodeChanged(QSGNode *node, QSGNode::DirtyState state)
         Element *e = shadowNode->element();
         if (e) {
             if (e->batch) {
-                if (!e->batch->isMaterialCompatible(e))
+                BatchCompatibility compat = e->batch->isMaterialCompatible(e);
+                if (compat == BatchBreaksOnBlending)
+                    m_rebuild |= Renderer::FullRebuild;
+                else if (compat == BatchBreaksOnCompare)
                     invalidateBatchAndOverlappingRenderOrders(e->batch);
             } else {
                 m_rebuild |= Renderer::BuildBatches;
@@ -1420,8 +1427,11 @@ void Renderer::invalidateBatchAndOverlappingRenderOrders(Batch *batch)
     Q_ASSERT(batch);
     Q_ASSERT(batch->first);
 
-    int first = batch->first->order;
-    int last = batch->lastOrderInBatch;
+    if (m_renderOrderRebuildLower < 0 || batch->first->order < m_renderOrderRebuildLower)
+        m_renderOrderRebuildLower = batch->first->order;
+    if (m_renderOrderRebuildUpper < 0 || batch->lastOrderInBatch > m_renderOrderRebuildUpper)
+        m_renderOrderRebuildUpper = batch->lastOrderInBatch;
+
     batch->invalidate();
 
     for (int i=0; i<m_alphaBatches.size(); ++i) {
@@ -1429,7 +1439,7 @@ void Renderer::invalidateBatchAndOverlappingRenderOrders(Batch *batch)
         if (b->first) {
             int bf = b->first->order;
             int bl = b->lastOrderInBatch;
-            if (bl > first && bf < last)
+            if (bl > m_renderOrderRebuildLower && bf < m_renderOrderRebuildUpper)
                 b->invalidate();
         }
     }
@@ -1442,7 +1452,7 @@ void Renderer::invalidateBatchAndOverlappingRenderOrders(Batch *batch)
  */
 void Renderer::cleanupBatches(QDataBuffer<Batch *> *batches) {
     if (batches->size()) {
-        std::sort(&batches->first(), &batches->last() + 1, qsg_sort_batch_is_valid);
+        std::stable_sort(&batches->first(), &batches->last() + 1, qsg_sort_batch_is_valid);
         int count = 0;
         while (count < batches->size() && batches->at(count)->first)
             ++count;
@@ -1714,14 +1724,12 @@ void Renderer::uploadBatch(Batch *b)
 
         QSGGeometryNode *gn = b->first->node;
         QSGGeometry *g =  gn->geometry();
-
+        QSGMaterial::Flags flags = gn->activeMaterial()->flags();
         bool canMerge = (g->drawingMode() == GL_TRIANGLES || g->drawingMode() == GL_TRIANGLE_STRIP)
                         && b->positionAttribute >= 0
                         && g->indexType() == GL_UNSIGNED_SHORT
-                        && (gn->activeMaterial()->flags() & QSGMaterial::CustomCompileStep) == 0
-                        && (((gn->activeMaterial()->flags() & QSGMaterial::RequiresDeterminant) == 0)
-                            || (((gn->activeMaterial()->flags() & QSGMaterial_RequiresFullMatrixBit) == 0) && b->isTranslateOnlyToRoot())
-                            )
+                        && (flags & (QSGMaterial::CustomCompileStep | QSGMaterial_FullMatrix)) == 0
+                        && ((flags & QSGMaterial::RequiresFullMatrixExceptTranslate) == 0 || b->isTranslateOnlyToRoot())
                         && b->isSafeToBatch();
 
         b->merged = canMerge;
@@ -2393,16 +2401,19 @@ void Renderer::render()
 
     deleteRemovedElements();
 
-    // Then sort opaque batches so that we're drawing the batches with the highest
-    // order first, maximizing the benefit of front-to-back z-ordering.
-    if (m_opaqueBatches.size())
-        std::sort(&m_opaqueBatches.first(), &m_opaqueBatches.last() + 1, qsg_sort_batch_decreasing_order);
+    if (m_rebuild != 0) {
+        // Then sort opaque batches so that we're drawing the batches with the highest
+        // order first, maximizing the benefit of front-to-back z-ordering.
+        if (m_opaqueBatches.size())
+            std::sort(&m_opaqueBatches.first(), &m_opaqueBatches.last() + 1, qsg_sort_batch_decreasing_order);
 
-    // Sort alpha batches back to front so that they render correctly.
-    if (m_alphaBatches.size())
-        std::sort(&m_alphaBatches.first(), &m_alphaBatches.last() + 1, qsg_sort_batch_increasing_order);
+        // Sort alpha batches back to front so that they render correctly.
+        if (m_alphaBatches.size())
+            std::sort(&m_alphaBatches.first(), &m_alphaBatches.last() + 1, qsg_sort_batch_increasing_order);
 
-    m_zRange = 1.0 / (m_nextRenderOrder);
+        m_zRange = 1.0 / (m_nextRenderOrder);
+    }
+
 
     if (Q_UNLIKELY(debug_upload)) qDebug() << "Uploading Opaque Batches:";
     for (int i=0; i<m_opaqueBatches.size(); ++i)
@@ -2415,6 +2426,8 @@ void Renderer::render()
     renderBatches();
 
     m_rebuild = 0;
+    m_renderOrderRebuildLower = -1;
+    m_renderOrderRebuildUpper = -1;
 
     if (m_vao)
         m_vao->release();
