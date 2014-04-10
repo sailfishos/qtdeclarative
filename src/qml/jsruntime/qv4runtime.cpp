@@ -1273,6 +1273,8 @@ ReturnedValue __qmljs_get_id_array(NoThrowContext *ctx)
 ReturnedValue __qmljs_get_context_object(NoThrowContext *ctx)
 {
     QQmlContextData *context = QmlContextWrapper::callingContext(ctx->engine);
+    if (!context)
+        return Encode::undefined();
     return QObjectWrapper::wrap(ctx->engine, context->contextObject);
 }
 
@@ -1320,6 +1322,8 @@ void __qmljs_set_qobject_property(ExecutionContext *ctx, const ValueRef object, 
 ReturnedValue __qmljs_get_imported_scripts(NoThrowContext *ctx)
 {
     QQmlContextData *context = QmlContextWrapper::callingContext(ctx->engine);
+    if (!context)
+        return Encode::undefined();
     return context->importedScripts.value();
 }
 
