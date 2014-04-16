@@ -106,6 +106,7 @@ struct SequencePrototype;
 struct EvalFunction;
 struct IdentifierTable;
 struct InternalClass;
+struct InternalClassPool;
 class MultiplyWrappedQObjectMap;
 class RegExp;
 class RegExpCache;
@@ -191,7 +192,7 @@ public:
     SafeValue uRIErrorCtor;
     SafeValue sequencePrototype;
 
-    QQmlJS::MemoryPool classPool;
+    InternalClassPool *classPool;
     InternalClass *emptyClass;
     InternalClass *executionContextClass;
     InternalClass *stringClass;
