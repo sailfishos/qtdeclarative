@@ -168,6 +168,16 @@ void QQmlIncubatorPrivate::clear()
         nextWaitingFor.remove();
         waitingOnMe = 0;
     }
+
+    // if we're waiting on any incubators then they should be cleared too.
+    while (waitingFor.first()) {
+        QQmlIncubator * i = static_cast<QQmlIncubatorPrivate*>(waitingFor.first())->q;
+        if (i)
+            i->clear();
+    }
+
+    vme.reset();
+    vmeGuard.clear();
 }
 
 /*!
@@ -556,16 +566,6 @@ void QQmlIncubator::clear()
     }
 
     d->clear();
-
-    // if we're waiting on any incubators then they should be cleared too.
-    while (d->waitingFor.first()) {
-        QQmlIncubator * i = static_cast<QQmlIncubatorPrivate*>(d->waitingFor.first())->q;
-        if (i)
-            i->clear();
-    }
-
-    d->vme.reset();
-    d->vmeGuard.clear();
 
     Q_ASSERT(d->compiledData == 0);
     Q_ASSERT(d->waitingOnMe.data() == 0);
