@@ -208,7 +208,9 @@ ExecutionEngine::ExecutionEngine(QQmlJS::EvalISelFactory *factory)
 
     identifierTable = new IdentifierTable(this);
 
-    emptyClass =  new (classPool.allocate(sizeof(InternalClass))) InternalClass(this);
+    classPool = new InternalClassPool;
+
+    emptyClass =  new (classPool) InternalClass(this);
     executionContextClass = emptyClass->changeVTable(&ExecutionContext::static_vtbl);
     stringClass = emptyClass->changeVTable(&String::static_vtbl);
     regExpValueClass = emptyClass->changeVTable(&RegExp::static_vtbl);
@@ -411,6 +413,7 @@ ExecutionEngine::~ExecutionEngine()
 
     delete m_qmlExtensions;
     emptyClass->destroy();
+    delete classPool;
     delete bumperPointerAllocator;
     delete regExpCache;
     delete regExpAllocator;
@@ -439,7 +442,7 @@ void ExecutionEngine::initRootContext()
 
 InternalClass *ExecutionEngine::newClass(const InternalClass &other)
 {
-    return new (classPool.allocate(sizeof(InternalClass))) InternalClass(other);
+    return new (classPool) InternalClass(other);
 }
 
 ExecutionContext *ExecutionEngine::pushGlobalContext()
@@ -843,7 +846,7 @@ void ExecutionEngine::markObjects()
     if (m_qmlExtensions)
         m_qmlExtensions->markObjects(this);
 
-    emptyClass->markObjects();
+    classPool->markObjects(this);
 
     for (QSet<CompiledData::CompilationUnit*>::ConstIterator it = compilationUnits.constBegin(), end = compilationUnits.constEnd();
          it != end; ++it)
