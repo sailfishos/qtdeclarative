@@ -191,6 +191,7 @@ static void qt_quickitems_defineModule(const char *uri, int major, int minor)
     qmlRegisterType<QQuickTextInput,2>(uri,2,2,"TextInput");
     qmlRegisterType<QQuickViewSection>(uri,major,minor,"ViewSection");
 
+    qmlRegisterType<QQuickItemGrabResult>();
     qmlRegisterType<QQuickItemLayer>();
     qmlRegisterType<QQuickAnchors>();
     qmlRegisterType<QQuickKeyEvent>();
