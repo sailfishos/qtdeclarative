@@ -138,10 +138,8 @@ public:
 #endif
     bool deliverTouchPoints(QQuickItem *, QTouchEvent *, const QList<QTouchEvent::TouchPoint> &, QSet<int> *,
             QHash<QQuickItem *, QList<QTouchEvent::TouchPoint> > *);
-    void deliverTouchEvent(QTouchEvent *);
-    void reallyDeliverTouchEvent(QTouchEvent *);
+    bool deliverTouchEvent(QTouchEvent *);
     bool deliverTouchCancelEvent(QTouchEvent *);
-    void flushDelayedTouchEvent();
     bool deliverHoverEvent(QQuickItem *, const QPointF &scenePos, const QPointF &lastScenePos, Qt::KeyboardModifiers modifiers, bool &accepted);
     bool deliverMatchingPointsToItem(QQuickItem *item, QTouchEvent *event, QSet<int> *acceptedNewPoints, const QSet<int> &matchingNewPoints, const QList<QTouchEvent::TouchPoint> &matchingPoints);
     QTouchEvent *touchEventForItemBounds(QQuickItem *target, const QTouchEvent &originalEvent);
@@ -203,7 +201,6 @@ public:
 
     QSGRenderLoop *windowManager;
     QQuickAnimatorController *animationController;
-    QTouchEvent *delayedTouch;
 
     QColor clearColor;
 

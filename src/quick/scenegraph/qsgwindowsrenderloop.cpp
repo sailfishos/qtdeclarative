@@ -442,8 +442,6 @@ void QSGWindowsRenderLoop::renderWindow(QQuickWindow *window)
     if (!m_gl->makeCurrent(window))
         return;
 
-    d->flushDelayedTouchEvent();
-
     QSG_RENDER_TIMING_SAMPLE(time_start);
 
     RLDEBUG(" - polishing");
