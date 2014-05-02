@@ -95,7 +95,6 @@ private:
 
     void releaseResources(QQuickWindow *window, bool inDestructor);
     bool checkAndResetForceUpdate(QQuickWindow *window);
-    Window *windowForTimer(int timerId) const;
 
     bool anyoneShowing() const;
     void initialize();

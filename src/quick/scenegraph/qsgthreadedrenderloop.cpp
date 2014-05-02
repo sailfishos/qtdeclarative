@@ -1181,17 +1181,6 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w)
 #endif
 }
 
-QSGThreadedRenderLoop::Window *QSGThreadedRenderLoop::windowForTimer(int timerId) const
-{
-    for (int i=0; i<m_windows.size(); ++i) {
-        if (m_windows.at(i).timerId == timerId) {
-            return const_cast<Window *>(&m_windows.at(i));
-            break;
-        }
-    }
-    return 0;
-}
-
 bool QSGThreadedRenderLoop::event(QEvent *e)
 {
     switch ((int) e->type()) {
@@ -1206,19 +1195,17 @@ bool QSGThreadedRenderLoop::event(QEvent *e)
             QSG_GUI_DEBUG((void *) 0, "QEvent::Timer -> Polish & Sync");
             QWindowSystemInterface::flushWindowSystemEvents();
             QSG_GUI_DEBUG((void *) 0, " - done flushing events before polishAndSync");
-            Window *w = windowForTimer(te->timerId());
 
+            Window *w = 0;
+            for (int i=0; i<m_windows.size(); ++i) {
+                if (m_windows.at(i).timerId == te->timerId()) {
+                    w = const_cast<Window *>(&m_windows.at(i));
+                    break;
+                }
+            }
             if (w) {
                 QQuickWindowPrivate::get(w->window)->flushDelayedTouchEvent();
-
-                // To flush pending meta-calls triggered from the recently flushed touch events.
-                QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-
-                // Since processing events can also trigger QQuickWindow deletion, we need to
-                // verify that the window is still present in the list afterwards.
-                w = windowForTimer(te->timerId());
-                if (w)
-                    polishAndSync(w);
+                polishAndSync(w);
             }
         }
         return true;
