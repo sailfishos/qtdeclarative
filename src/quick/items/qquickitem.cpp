@@ -5372,6 +5372,17 @@ void QQuickItemPrivate::setEffectiveEnableRecur(QQuickItem *scope, bool newEffec
     emit q->enabledChanged();
 }
 
+bool QQuickItemPrivate::isTransparentForPositioner() const
+{
+    return extra.isAllocated() && extra.value().transparentForPositioner;
+}
+
+void QQuickItemPrivate::setTransparentForPositioner(bool transparent)
+{
+    extra.value().transparentForPositioner = transparent;
+}
+
+
 QString QQuickItemPrivate::dirtyToString() const
 {
 #define DIRTY_TO_STRING(value) if (dirtyAttributes & value) { \
@@ -7205,6 +7216,7 @@ void QQuickItemLayer::activate()
 {
     Q_ASSERT(!m_effectSource);
     m_effectSource = new QQuickShaderEffectSource();
+    QQuickItemPrivate::get(m_effectSource)->setTransparentForPositioner(true);
 
     QQuickItem *parentItem = m_item->parentItem();
     if (parentItem) {
@@ -7270,6 +7282,7 @@ void QQuickItemLayer::activateEffect()
     }
     m_effect->setVisible(m_item->isVisible());
     m_effect->setProperty(m_name, qVariantFromValue<QObject *>(m_effectSource));
+    QQuickItemPrivate::get(m_effect)->setTransparentForPositioner(true);
     m_effectComponent->completeCreate();
 }
 
@@ -7583,7 +7596,8 @@ QQuickItemPrivate::ExtraData::ExtraData()
   keyHandler(0), layer(0),
   effectRefCount(0), hideRefCount(0),
   opacityNode(0), clipNode(0), rootNode(0),
-  acceptedMouseButtons(0), origin(QQuickItem::Center)
+  acceptedMouseButtons(0), origin(QQuickItem::Center),
+  transparentForPositioner(false)
 {
 }
 
