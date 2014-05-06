@@ -1087,8 +1087,28 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w)
 {
     QSG_GUI_DEBUG(w->window, "polishAndSync()");
 
-    if (!w->window->isExposed() || !w->window->isVisible() || w->window->size().isEmpty()) {
+    QQuickWindow *window = w->window;
+    if (!window->isExposed() || !window->isVisible() || window->size().isEmpty()) {
         QSG_GUI_DEBUG(w->window, " - not exposed, aborting...");
+        killTimer(w->timerId);
+        w->timerId = 0;
+        return;
+    }
+
+    // Flush pending touch events.
+    // First we force flushing of the windowing system events, so that we're
+    // working with the latest possible data. This can trigger event processing
+    // which in turn can stop rendering this window, so verify that before
+    // proceeding. Then we flush the touch event and as that also does event
+    // processing, verify again that we still are active and rendering.
+    QWindowSystemInterface::flushWindowSystemEvents();
+    w = windowFor(m_windows, window);
+    if (w) {
+        QQuickWindowPrivate::get(window)->flushDelayedTouchEvent();
+        w = windowFor(m_windows, window);
+    }
+    if (!w) {
+        QSG_GUI_DEBUG(w->window, " - removed after event flushing..");
         killTimer(w->timerId);
         w->timerId = 0;
         return;
@@ -1123,7 +1143,7 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w)
     m_locked = true;
     w->thread->postEvent(new QEvent(WM_RequestSync));
 
-    QSG_GUI_DEBUG(w->window, " - wait for sync...");
+    QSG_GUI_DEBUG(window, " - wait for sync...");
 #ifndef QSG_NO_RENDER_TIMING
     if (profileFrames)
         waitTime = timer.nsecsElapsed();
@@ -1134,7 +1154,7 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w)
     w->thread->waitCondition.wait(&w->thread->mutex);
     m_locked = false;
     w->thread->mutex.unlock();
-    QSG_GUI_DEBUG(w->window, " - unlocked after sync...");
+    QSG_GUI_DEBUG(window, " - unlocked after sync...");
 
     QSystrace::end("graphics", "QSGTR::pAS::sync", "");
 #ifndef QSG_NO_RENDER_TIMING
@@ -1164,7 +1184,7 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w)
 #ifndef QSG_NO_RENDER_TIMING
     if (qsg_render_timing)
         qDebug(" - Gui Thread: window=%p, polish=%d, lock=%d, block/sync=%d -- animations=%d",
-               w->window,
+               window,
                int(polishTime/1000000),
                int((waitTime - polishTime)/1000000),
                int((syncTime - waitTime)/1000000),
@@ -1204,22 +1224,9 @@ bool QSGThreadedRenderLoop::event(QEvent *e)
             emit timeToIncubate();
         } else {
             QSG_GUI_DEBUG((void *) 0, "QEvent::Timer -> Polish & Sync");
-            QWindowSystemInterface::flushWindowSystemEvents();
-            QSG_GUI_DEBUG((void *) 0, " - done flushing events before polishAndSync");
             Window *w = windowForTimer(te->timerId());
-
-            if (w) {
-                QQuickWindowPrivate::get(w->window)->flushDelayedTouchEvent();
-
-                // To flush pending meta-calls triggered from the recently flushed touch events.
-                QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-
-                // Since processing events can also trigger QQuickWindow deletion, we need to
-                // verify that the window is still present in the list afterwards.
-                w = windowForTimer(te->timerId());
-                if (w)
-                    polishAndSync(w);
-            }
+            if (w)
+                polishAndSync(w);
         }
         return true;
     }

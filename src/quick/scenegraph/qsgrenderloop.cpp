@@ -316,7 +316,12 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
         return;
 
     QQuickWindowPrivate *cd = QQuickWindowPrivate::get(window);
-    cd->flushDelayedTouchEvent();
+    if (!data.grabOnly) {
+        cd->flushDelayedTouchEvent();
+        // Event delivery/processing triggered the window to be deleted or stop rendering.
+        if (!m_windows.contains(window))
+            return;
+    }
     cd->polishItems();
 
     qint64 renderTime = 0, syncTime = 0;

@@ -49,6 +49,7 @@
 #include <QtQuick/private/qquickrectangle_p.h>
 #include "../../shared/util.h"
 #include "../shared/visualtestutil.h"
+#include "../shared/viewtestutil.h"
 #include <QSignalSpy>
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qquickwindow_p.h>
@@ -478,7 +479,7 @@ void tst_qquickwindow::touchEvent_basic()
     // press multiple points
     QTest::touchEvent(window, touchDevice).press(0, topItem->mapToScene(pos).toPoint(),window)
             .press(1, bottomItem->mapToScene(pos).toPoint(), window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QCOMPARE(topItem->lastEvent.touchPoints.count(), 1);
     QVERIFY(middleItem->lastEvent.touchPoints.isEmpty());
     QCOMPARE(bottomItem->lastEvent.touchPoints.count(), 1);
@@ -489,9 +490,9 @@ void tst_qquickwindow::touchEvent_basic()
 
     // touch point on top item moves to bottom item, but top item should still receive the event
     QTest::touchEvent(window, touchDevice).press(0, topItem->mapToScene(pos).toPoint(), window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QTest::touchEvent(window, touchDevice).move(0, bottomItem->mapToScene(pos).toPoint(), window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QCOMPARE(topItem->lastEvent.touchPoints.count(), 1);
     COMPARE_TOUCH_DATA(topItem->lastEvent, makeTouchData(QEvent::TouchUpdate, window, Qt::TouchPointMoved,
             makeTouchPoint(topItem, topItem->mapFromItem(bottomItem, pos), pos)));
@@ -499,9 +500,9 @@ void tst_qquickwindow::touchEvent_basic()
 
     // touch point on bottom item moves to top item, but bottom item should still receive the event
     QTest::touchEvent(window, touchDevice).press(0, bottomItem->mapToScene(pos).toPoint(), window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QTest::touchEvent(window, touchDevice).move(0, topItem->mapToScene(pos).toPoint(), window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QCOMPARE(bottomItem->lastEvent.touchPoints.count(), 1);
     COMPARE_TOUCH_DATA(bottomItem->lastEvent, makeTouchData(QEvent::TouchUpdate, window, Qt::TouchPointMoved,
             makeTouchPoint(bottomItem, bottomItem->mapFromItem(topItem, pos), pos)));
@@ -509,10 +510,10 @@ void tst_qquickwindow::touchEvent_basic()
 
     // a single stationary press on an item shouldn't cause an event
     QTest::touchEvent(window, touchDevice).press(0, topItem->mapToScene(pos).toPoint(), window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QTest::touchEvent(window, touchDevice).stationary(0)
             .press(1, bottomItem->mapToScene(pos).toPoint(), window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QCOMPARE(topItem->lastEvent.touchPoints.count(), 1);    // received press only, not stationary
     QVERIFY(middleItem->lastEvent.touchPoints.isEmpty());
     QCOMPARE(bottomItem->lastEvent.touchPoints.count(), 1);
@@ -524,12 +525,13 @@ void tst_qquickwindow::touchEvent_basic()
     // Otherwise you will get an assertion failure:
     // ASSERT: "itemForTouchPointId.isEmpty()" in file items/qquickwindow.cpp
     QTest::touchEvent(window, touchDevice).release(0, pos.toPoint(), window).release(1, pos.toPoint(), window);
+    QQuickTouchUtils::flush(window);
 
     // move touch point from top item to bottom, and release
     QTest::touchEvent(window, touchDevice).press(0, topItem->mapToScene(pos).toPoint(),window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QTest::touchEvent(window, touchDevice).release(0, bottomItem->mapToScene(pos).toPoint(),window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QCOMPARE(topItem->lastEvent.touchPoints.count(), 1);
     COMPARE_TOUCH_DATA(topItem->lastEvent, makeTouchData(QEvent::TouchEnd, window, Qt::TouchPointReleased,
             makeTouchPoint(topItem, topItem->mapFromItem(bottomItem, pos), pos)));
@@ -538,12 +540,12 @@ void tst_qquickwindow::touchEvent_basic()
     // release while another point is pressed
     QTest::touchEvent(window, touchDevice).press(0, topItem->mapToScene(pos).toPoint(),window)
             .press(1, bottomItem->mapToScene(pos).toPoint(), window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QTest::touchEvent(window, touchDevice).move(0, bottomItem->mapToScene(pos).toPoint(), window);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QTest::touchEvent(window, touchDevice).release(0, bottomItem->mapToScene(pos).toPoint(), window)
                              .stationary(1);
-    QTest::qWait(50);
+    QQuickTouchUtils::flush(window);
     QCOMPARE(topItem->lastEvent.touchPoints.count(), 1);
     QVERIFY(middleItem->lastEvent.touchPoints.isEmpty());
     QCOMPARE(bottomItem->lastEvent.touchPoints.count(), 1);
@@ -791,12 +793,15 @@ void tst_qquickwindow::touchEvent_velocity()
     tp.area = QRectF(pos, QSizeF(4, 4));
     points << tp;
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
+    QGuiApplication::processEvents();
+    QQuickTouchUtils::flush(window);
     points[0].state = Qt::TouchPointMoved;
     points[0].area.adjust(5, 5, 5, 5);
     QVector2D velocity(1.5, 2.5);
     points[0].velocity = velocity;
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
-    QCoreApplication::processEvents();
+    QGuiApplication::processEvents();
+    QQuickTouchUtils::flush(window);
     QCOMPARE(item->touchEventCount, 2);
     QCOMPARE(item->lastEvent.touchPoints.count(), 1);
     QCOMPARE(item->lastVelocity, velocity);
@@ -808,7 +813,8 @@ void tst_qquickwindow::touchEvent_velocity()
     QVector2D transformedVelocity = transformMatrix.mapVector(velocity).toVector2D();
     points[0].area.adjust(5, 5, 5, 5);
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
-    QCoreApplication::processEvents();
+    QGuiApplication::processEvents();
+    QQuickTouchUtils::flush(window);
     QCOMPARE(item->lastVelocity, transformedVelocity);
     QPoint itemLocalPos = item->mapFromScene(window->mapFromGlobal(points[0].area.center().toPoint())).toPoint();
     QPoint itemLocalPosFromEvent = item->lastEvent.touchPoints[0].pos().toPoint();
@@ -816,7 +822,8 @@ void tst_qquickwindow::touchEvent_velocity()
 
     points[0].state = Qt::TouchPointReleased;
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
-    QCoreApplication::processEvents();
+    QGuiApplication::processEvents();
+    QQuickTouchUtils::flush(window);
     delete item;
 }
 
@@ -848,14 +855,19 @@ void tst_qquickwindow::mouseFromTouch_basic()
     tp.area = QRectF(pos, QSizeF(4, 4));
     points << tp;
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
+    QGuiApplication::processEvents();
+    QQuickTouchUtils::flush(window);
     points[0].state = Qt::TouchPointMoved;
     points[0].area.adjust(5, 5, 5, 5);
     QVector2D velocity(1.5, 2.5);
     points[0].velocity = velocity;
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
+    QGuiApplication::processEvents();
+    QQuickTouchUtils::flush(window);
     points[0].state = Qt::TouchPointReleased;
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
-    QCoreApplication::processEvents();
+    QGuiApplication::processEvents();
+    QQuickTouchUtils::flush(window);
 
     // The item should have received a mouse press, move, and release.
     QCOMPARE(item->mousePressNum, 1);
@@ -874,16 +886,20 @@ void tst_qquickwindow::mouseFromTouch_basic()
     points[0].velocity = velocity;
     points[0].area = QRectF(pos, QSizeF(4, 4));
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
+    QGuiApplication::processEvents();
+    QQuickTouchUtils::flush(window);
     points[0].state = Qt::TouchPointMoved;
     points[0].area.adjust(5, 5, 5, 5);
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
-    QCoreApplication::processEvents();
+    QGuiApplication::processEvents();
+    QQuickTouchUtils::flush(window);
     QCOMPARE(item->lastMousePos.toPoint(), item->mapFromScene(window->mapFromGlobal(points[0].area.center().toPoint())).toPoint());
     QCOMPARE(item->lastVelocityFromMouseMove, transformedVelocity);
 
     points[0].state = Qt::TouchPointReleased;
     QWindowSystemInterface::handleTouchEvent(window, touchDeviceWithVelocity, points);
     QCoreApplication::processEvents();
+    QQuickTouchUtils::flush(window);
     delete item;
 }
 

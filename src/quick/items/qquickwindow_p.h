@@ -204,6 +204,7 @@ public:
     QSGRenderLoop *windowManager;
     QQuickAnimatorController *animationController;
     QTouchEvent *delayedTouch;
+    int touchRecursionGuard;
 
     QColor clearColor;
 

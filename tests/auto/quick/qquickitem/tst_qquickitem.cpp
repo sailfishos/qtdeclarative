@@ -50,6 +50,7 @@
 #include <QDebug>
 #include <QTimer>
 #include "../../shared/util.h"
+#include "../shared/viewtestutil.h"
 
 class TestItem : public QQuickItem
 {
@@ -1308,6 +1309,7 @@ void tst_qquickitem::touchEventAcceptIgnore()
         item->touchEventReached = false;
 
         bool accepted = window.event(&event);
+        QQuickTouchUtils::flush(&window);
 
         QVERIFY(item->touchEventReached);
 
@@ -1331,6 +1333,7 @@ void tst_qquickitem::touchEventAcceptIgnore()
         item->touchEventReached = false;
 
         bool accepted = window.event(&event);
+        QQuickTouchUtils::flush(&window);
 
         QCOMPARE(item->touchEventReached, itemSupportsTouch);
 
@@ -1354,6 +1357,7 @@ void tst_qquickitem::touchEventAcceptIgnore()
         item->touchEventReached = false;
 
         bool accepted = window.event(&event);
+        QQuickTouchUtils::flush(&window);
 
         QCOMPARE(item->touchEventReached, itemSupportsTouch);
 
