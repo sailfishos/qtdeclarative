@@ -283,6 +283,12 @@ void QQuickTransformAnimatorJob::initialize(QQuickAnimatorController *controller
     }
 }
 
+void QQuickTransformAnimatorJob::nodeWasDestroyed()
+{
+    if (m_helper)
+        m_helper->node = 0;
+}
+
 void QQuickTransformAnimatorJob::Helper::sync()
 {
     const quint32 mask = QQuickItemPrivate::Position
@@ -328,7 +334,7 @@ void QQuickTransformAnimatorJob::Helper::sync()
 
 void QQuickTransformAnimatorJob::Helper::apply()
 {
-    if (!wasChanged)
+    if (!wasChanged || !node)
         return;
 
     QMatrix4x4 m;
@@ -414,6 +420,11 @@ void QQuickOpacityAnimatorJob::initialize(QQuickAnimatorController *controller)
     }
 }
 
+void QQuickOpacityAnimatorJob::nodeWasDestroyed()
+{
+    m_opacityNode = 0;
+}
+
 void QQuickOpacityAnimatorJob::writeBack()
 {
     if (m_target)
@@ -422,7 +433,7 @@ void QQuickOpacityAnimatorJob::writeBack()
 
 void QQuickOpacityAnimatorJob::updateCurrentTime(int time)
 {
-    if (!m_controller)
+    if (!m_controller || !m_opacityNode)
         return;
     Q_ASSERT(m_controller->m_window->openglContext()->thread() == QThread::currentThread());
 
@@ -506,13 +517,18 @@ void QQuickUniformAnimatorJob::setTarget(QQuickItem *target)
         m_target = target;
 }
 
+void QQuickUniformAnimatorJob::nodeWasDestroyed()
+{
+    m_node = 0;
+    m_uniformIndex = -1;
+    m_uniformType = -1;
+}
+
 void QQuickUniformAnimatorJob::afterNodeSync()
 {
     m_node = static_cast<QQuickShaderEffectNode *>(QQuickItemPrivate::get(m_target)->paintNode);
 
-    if (m_node) {
-        m_uniformIndex = -1;
-        m_uniformType = -1;
+    if (m_node && m_uniformIndex == -1 && m_uniformType == -1) {
         QQuickShaderEffectMaterial *material =
                 static_cast<QQuickShaderEffectMaterial *>(m_node->material());
         bool found = false;
