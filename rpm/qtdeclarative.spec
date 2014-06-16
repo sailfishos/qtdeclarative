@@ -19,6 +19,8 @@ BuildRequires:  qt5-qmake
 BuildRequires:  fdupes
 BuildRequires:  python
 BuildRequires:  gdb
+Obsoletes: qt5-qtjsbackend <= 5.1.0+git4
+Provides: qt5-qtjsbackend > 5.1.0+git4
 
 %description
 Qt is a cross-platform application and UI framework. Using Qt, you can
