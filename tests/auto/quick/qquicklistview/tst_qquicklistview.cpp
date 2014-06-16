@@ -41,6 +41,8 @@
 
 #include <QtTest/QtTest>
 #include <QtCore/QStringListModel>
+#include <QtCore/QSortFilterProxyModel>
+#include <QtGui/QStandardItemModel>
 #include <QtQuick/qquickview.h>
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlcontext.h>
@@ -50,6 +52,7 @@
 #include <QtQuick/private/qquicktext_p.h>
 #include <QtQml/private/qqmlobjectmodel_p.h>
 #include <QtQml/private/qqmllistmodel_p.h>
+#include <QtQml/private/qqmldelegatemodel_p.h>
 #include "../../shared/util.h"
 #include "../shared/viewtestutil.h"
 #include "../shared/visualtestutil.h"
@@ -62,6 +65,7 @@ Q_DECLARE_METATYPE(QQuickItemView::VerticalLayoutDirection)
 Q_DECLARE_METATYPE(QQuickItemView::PositionMode)
 Q_DECLARE_METATYPE(QQuickListView::Orientation)
 Q_DECLARE_METATYPE(Qt::Key)
+Q_DECLARE_METATYPE(QPersistentModelIndex)
 
 using namespace QQuickViewTestUtil;
 using namespace QQuickVisualTestUtil;
@@ -220,6 +224,9 @@ private slots:
     void highlightItemGeometryChanges();
 
     void QTBUG_36481();
+
+    void QTBUG_39492_data();
+    void QTBUG_39492();
 
 private:
     template <class T> void items(const QUrl &source);
@@ -7117,8 +7124,246 @@ void tst_QQuickListView::displayMargin()
     delete window;
 }
 
+<<<<<<< HEAD
+QTEST_MAIN(tst_QQuickListView)
+=======
+void tst_QQuickListView::negativeDisplayMargin()
+{
+    QQuickItem *item;
+    QQuickView *window = createView();
+    window->setSource(testFileUrl("negativeDisplayMargin.qml"));
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    QQuickItem *listview = window->rootObject();
+    QQuickListView *innerList = findItem<QQuickListView>(window->rootObject(), "innerList");
+    QVERIFY(innerList != 0);
+
+    QTRY_COMPARE(innerList->property("createdItems").toInt(), 11);
+    QCOMPARE(innerList->property("destroyedItem").toInt(), 0);
+
+    QQuickItem *content = innerList->contentItem();
+    QVERIFY(content != 0);
+
+    QVERIFY(item = findItem<QQuickItem>(content, "delegate", 0));
+    QCOMPARE(delegateVisible(item), true);
+
+    QVERIFY(item = findItem<QQuickItem>(content, "delegate", 7));
+    QCOMPARE(delegateVisible(item), true);
+
+    QVERIFY(item = findItem<QQuickItem>(content, "delegate", 8));
+    QCOMPARE(delegateVisible(item), false);
+
+    // Flick until contentY means that delegate8 should be visible
+    listview->setProperty("contentY", 500);
+    QVERIFY(item = findItem<QQuickItem>(content, "delegate", 8));
+    QTRY_COMPARE(delegateVisible(item), true);
+
+    listview->setProperty("contentY", 1000);
+    QTRY_VERIFY(item = findItem<QQuickItem>(content, "delegate", 14));
+    QTRY_COMPARE(delegateVisible(item), true);
+
+    listview->setProperty("contentY", 0);
+    QTRY_VERIFY(item = findItem<QQuickItem>(content, "delegate", 4));
+    QTRY_COMPARE(delegateVisible(item), true);
+
+    delete window;
+}
+
+void tst_QQuickListView::highlightItemGeometryChanges()
+{
+    QScopedPointer<QQuickView> window(createView());
+    window->setSource(testFileUrl("HighlightResize.qml"));
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window.data()));
+
+    QQuickListView *listview = qobject_cast<QQuickListView *>(window->rootObject());
+    QVERIFY(listview);
+
+    QCOMPARE(listview->count(), 5);
+
+    for (int i = 0; i < listview->count(); ++i) {
+        listview->setCurrentIndex(i);
+        QTRY_COMPARE(listview->highlightItem()->width(), qreal(100 + i * 20));
+        QTRY_COMPARE(listview->highlightItem()->height(), qreal(100 + i * 10));
+    }
+}
+
+void tst_QQuickListView::QTBUG_36481()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("headerCrash.qml"));
+
+    // just testing that we don't crash when creating
+    QScopedPointer<QObject> object(component.create());
+}
+
+void tst_QQuickListView::QTBUG_35920()
+{
+    QScopedPointer<QQuickView> window(createView());
+    window->setSource(testFileUrl("qtbug35920.qml"));
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window.data()));
+
+    QQuickListView *listview = qobject_cast<QQuickListView *>(window->rootObject());
+    QVERIFY(listview);
+
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(10,0));
+    for (int i = 0; i < 100; ++i) {
+        QTest::mouseMove(window.data(), QPoint(10,i));
+        if (listview->isMoving()) {
+            // do not fixup() the position while in movement to avoid flicker
+            const qreal contentY = listview->contentY();
+            listview->setPreferredHighlightBegin(i);
+            QCOMPARE(listview->contentY(), contentY);
+            listview->resetPreferredHighlightBegin();
+            QCOMPARE(listview->contentY(), contentY);
+
+            listview->setPreferredHighlightEnd(i+10);
+            QCOMPARE(listview->contentY(), contentY);
+            listview->resetPreferredHighlightEnd();
+            QCOMPARE(listview->contentY(), contentY);
+        }
+    }
+    QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(10,100));
+}
+
+void tst_QQuickListView::roundingErrors()
+{
+    QFETCH(bool, pixelAligned);
+
+    QScopedPointer<QQuickView> window(createView());
+    window->setSource(testFileUrl("roundingErrors.qml"));
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window.data()));
+
+    QQuickListView *listview = qobject_cast<QQuickListView *>(window->rootObject());
+    QVERIFY(listview);
+    listview->setPixelAligned(pixelAligned);
+    listview->positionViewAtIndex(20, QQuickListView::Beginning);
+
+    QQuickItem *content = listview->contentItem();
+    QVERIFY(content);
+
+    const QPoint viewPos(150, 36);
+    const QPointF contentPos = content->mapFromItem(listview, viewPos);
+
+    QPointer<QQuickItem> item = listview->itemAt(contentPos.x(), contentPos.y());
+    QVERIFY(item);
+
+    // QTBUG-37339: drag an item and verify that it doesn't
+    // get prematurely released due to rounding errors
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, viewPos);
+    for (int i = 0; i < 150; i += 5) {
+        QTest::mouseMove(window.data(), viewPos - QPoint(i, 0));
+        QVERIFY(item);
+    }
+    QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(0, 36));
+
+    // maintain position relative to the right edge
+    listview->setLayoutDirection(Qt::RightToLeft);
+    const qreal contentX = listview->contentX();
+    listview->setContentX(contentX + 0.2);
+    QCOMPARE(listview->contentX(), pixelAligned ? qRound(contentX + 0.2) : contentX + 0.2);
+    listview->setWidth(listview->width() - 0.2);
+    QCOMPARE(listview->contentX(), pixelAligned ? qRound(contentX + 0.2) : contentX + 0.2);
+
+    // maintain position relative to the bottom edge
+    listview->setOrientation(QQuickListView::Vertical);
+    listview->setVerticalLayoutDirection(QQuickListView::BottomToTop);
+    const qreal contentY = listview->contentY();
+    listview->setContentY(contentY + 0.2);
+    QCOMPARE(listview->contentY(), pixelAligned ? qRound(contentY + 0.2) : contentY + 0.2);
+    listview->setHeight(listview->height() - 0.2);
+    QCOMPARE(listview->contentY(), pixelAligned ? qRound(contentY + 0.2) : contentY + 0.2);
+}
+
+void tst_QQuickListView::roundingErrors_data()
+{
+    QTest::addColumn<bool>("pixelAligned");
+    QTest::newRow("pixelAligned=true") << true;
+    QTest::newRow("pixelAligned=false") << false;
+}
+
+void tst_QQuickListView::QTBUG_39492_data()
+{
+    QStandardItemModel *sourceModel = new QStandardItemModel(this);
+    for (int i = 0; i < 5; ++i) {
+        QStandardItem *item = new QStandardItem(QString::number(i));
+        for (int j = 0; j < 5; ++j) {
+            QStandardItem *subItem = new QStandardItem(QString("%1-%2").arg(i).arg(j));
+            item->appendRow(subItem);
+        }
+        sourceModel->appendRow(item);
+    }
+
+    QSortFilterProxyModel *sortModel = new QSortFilterProxyModel(this);
+    sortModel->setSourceModel(sourceModel);
+
+    QTest::addColumn<QSortFilterProxyModel*>("model");
+    QTest::addColumn<QPersistentModelIndex>("rootIndex");
+
+    QTest::newRow("invalid rootIndex")
+        << sortModel
+        << QPersistentModelIndex();
+
+    QTest::newRow("rootIndex 1")
+        << sortModel
+        << QPersistentModelIndex(sortModel->index(1, 0));
+
+    QTest::newRow("rootIndex 3")
+        << sortModel
+        << QPersistentModelIndex(sortModel->index(3, 0));
+
+    const QModelIndex rootIndex2 = sortModel->index(2, 0);
+    QTest::newRow("rootIndex 2-1")
+        << sortModel
+        << QPersistentModelIndex(sortModel->index(1, 0, rootIndex2));
+}
+
+void tst_QQuickListView::QTBUG_39492()
+{
+    QFETCH(QSortFilterProxyModel*, model);
+    QFETCH(QPersistentModelIndex, rootIndex);
+
+    QQuickView *window = getView();
+    window->rootContext()->setContextProperty("testModel", QVariant::fromValue(model));
+    window->setSource(testFileUrl("qtbug39492.qml"));
+
+    QQuickListView *listview = window->rootObject()->findChild<QQuickListView *>("listView");
+    QVERIFY(listview);
+
+    QQmlDelegateModel *delegateModel = window->rootObject()->findChild<QQmlDelegateModel *>("delegateModel");
+    QVERIFY(delegateModel);
+
+    delegateModel->setRootIndex(QVariant::fromValue(QModelIndex(rootIndex)));
+    model->sort(0, Qt::AscendingOrder);
+    listview->forceLayout();
+
+    for (int i = 0; i < model->rowCount(rootIndex); ++i) {
+        QQuickItem *delegateItem = listview->itemAt(10, 10 + i * 20);
+        QVERIFY(delegateItem);
+        QQuickItem *delegateText = delegateItem->findChild<QQuickItem *>("delegateText");
+        QVERIFY(delegateText);
+        QCOMPARE(delegateText->property("text").toString(),
+                 model->index(i, 0, rootIndex).data().toString());
+    }
+
+    model->sort(0, Qt::DescendingOrder);
+    listview->forceLayout();
+
+    for (int i = 0; i < model->rowCount(rootIndex); ++i) {
+        QQuickItem *delegateItem = listview->itemAt(10, 10 + i * 20);
+        QVERIFY(delegateItem);
+        QQuickItem *delegateText = delegateItem->findChild<QQuickItem *>("delegateText");
+        QVERIFY(delegateText);
+        QCOMPARE(delegateText->property("text").toString(),
+                 model->index(i, 0, rootIndex).data().toString());
+    }
+
+    releaseView(window);
+}
+
 QTEST_MAIN(tst_QQuickListView)
 
 #include "tst_qquicklistview.moc"
-
-
