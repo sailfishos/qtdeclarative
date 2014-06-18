@@ -9,10 +9,8 @@ Source0:    %{name}-%{version}.tar.bz2
 BuildRequires:  qt5-qtcore-devel
 BuildRequires:  qt5-qtgui-devel
 BuildRequires:  qt5-qtnetwork-devel
-BuildRequires:  qt5-qtopengl-devel
 BuildRequires:  qt5-qtsql-devel
 BuildRequires:  qt5-qttest-devel
-BuildRequires:  qt5-qtwidgets-devel
 BuildRequires:  qt5-qtxmlpatterns-devel
 BuildRequires:  qt5-qmake
 BuildRequires:  fdupes
@@ -194,22 +192,6 @@ Requires:   %{name} = %{version}-%{release}
 %description import-models2
 This package provides the QtDeclarative models plugin for QtQuick 2.0
 
-%package import-dialogs
-Summary:    Qt Declarative dialogs plugin
-Group:      Qt/Qt
-Requires:   %{name} = %{version}-%{release}
-
-%description import-dialogs
-This package provides the QtDeclarative dialogs plugin for QtQuick 2.0
-
-%package import-privatewidgets
-Summary:    Qt Declarative private widgets plugin
-Group:      Qt/Qt
-Requires:   %{name} = %{version}-%{release}
-
-%description import-privatewidgets
-This package provides the QtDeclarative private widgets plugin for QtQuick 2.0
-
 %package import-xmllistmodel
 Summary:    Qt Declarative XmlListModel plugin
 Group:      Qt/Qt
@@ -277,9 +259,10 @@ touch .git
     QMAKE_CFLAGS_RELEASE-=-mno-thumb     QMAKE_CFLAGS_DEBUG-=-mno-thumb \
     QMAKE_CXXFLAGS_RELEASE-=-mno-thumb   QMAKE_CXXFLAGS_DEBUG-=-mno-thumb \
     QMAKE_CFLAGS_RELEASE+=-mthumb        QMAKE_CFLAGS_DEBUG+=-mthumb \
-    QMAKE_CXXFLAGS_RELEASE+=-mthumb      QMAKE_CXXFLAGS_DEBUG+=-mthumb
+    QMAKE_CXXFLAGS_RELEASE+=-mthumb      QMAKE_CXXFLAGS_DEBUG+=-mthumb \
+    QT.widgets.name= DEFINES+=QT_NO_WIDGETS
 %else
-%qmake5
+%qmake5 QT.widgets.name= DEFINES+=QT_NO_WIDGETS
 %endif
 
 make %{?_smp_mflags}
@@ -435,14 +418,6 @@ cp lib/libQt5QmlDevTools.a %{buildroot}/%{_libdir}
 %files import-models2
 %defattr(-,root,root,-)
 %{_libdir}/qt5/qml/QtQml/Models.2/
-
-%files import-dialogs
-%defattr(-,root,root,-)
-%{_libdir}/qt5/qml/QtQuick/Dialogs/
-
-%files import-privatewidgets
-%defattr(-,root,root,-)
-%{_libdir}/qt5/qml/QtQuick/PrivateWidgets/
 
 %files import-xmllistmodel
 %defattr(-,root,root,-)
