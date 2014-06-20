@@ -57,7 +57,7 @@ struct QQmlTypeCompiler;
 class QQmlInstantiationInterrupt;
 struct QQmlVmeProfiler;
 
-struct QQmlObjectCreatorSharedState
+struct QQmlObjectCreatorSharedState : public QSharedData
 {
     QQmlContextData *rootContext;
     QQmlContextData *creationContext;
@@ -129,7 +129,8 @@ private:
     const QVector<QQmlPropertyCache *> &propertyCaches;
     const QVector<QByteArray> &vmeMetaObjectData;
     QHash<int, int> objectIndexToId;
-    QFlagPointer<QQmlObjectCreatorSharedState> sharedState;
+    QExplicitlySharedDataPointer<QQmlObjectCreatorSharedState> sharedState;
+    bool topLevelCreator;
     void *activeVMEDataForRootContext;
 
     QObject *_qobject;
@@ -143,6 +144,19 @@ private:
     QQmlVMEMetaObject *_vmeMetaObject;
     QQmlListProperty<void> _currentList;
     QV4::ExecutionContext *_qmlContext;
+
+    friend struct QQmlObjectCreatorRecursionWatcher;
+};
+
+struct QQmlObjectCreatorRecursionWatcher
+{
+    QQmlObjectCreatorRecursionWatcher(QQmlObjectCreator *creator);
+
+    bool hasRecursed() const { return watcher.hasRecursed(); }
+
+private:
+    QExplicitlySharedDataPointer<QQmlObjectCreatorSharedState> sharedState;
+    QRecursionWatcher<QQmlObjectCreatorSharedState, &QQmlObjectCreatorSharedState::recursionNode> watcher;
 };
 
 QT_END_NAMESPACE
