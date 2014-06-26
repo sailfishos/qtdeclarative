@@ -42,7 +42,6 @@
 #include "qsgwindowsrenderloop_p.h"
 
 #include <QtCore/QCoreApplication>
-#include <QtCore/QLibraryInfo>
 
 #include <QtGui/QScreen>
 #include <QtGui/QGuiApplication>

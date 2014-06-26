@@ -378,7 +378,7 @@ public:
         float lastOpacity;
     };
 
-    ShaderManager(QSGRenderContext *ctx) : blitProgram(0), visualizeProgram(0), context(ctx) { }
+    ShaderManager(QSGRenderContext *ctx) : blitProgram(0), context(ctx) { }
     ~ShaderManager() {
         qDeleteAll(rewrittenShaders.values());
         qDeleteAll(stockShaders.values());
@@ -395,7 +395,6 @@ public:
     QHash<QSGMaterialType *, Shader *> stockShaders;
 
     QOpenGLShaderProgram *blitProgram;
-    QOpenGLShaderProgram *visualizeProgram;
     QSGRenderContext *context;
 };
 
@@ -404,14 +403,6 @@ class Q_QUICK_PRIVATE_EXPORT Renderer : public QSGRenderer
 public:
     Renderer(QSGRenderContext *);
     ~Renderer();
-
-    enum VisualizeMode {
-        VisualizeNothing,
-        VisualizeBatches,
-        VisualizeClipping,
-        VisualizeChanges,
-        VisualizeOverdraw
-    };
 
 protected:
     void nodeChanged(QSGNode *node, QSGNode::DirtyState state);
@@ -468,16 +459,6 @@ private:
     inline Batch *newBatch();
     void invalidateAndRecycleBatch(Batch *b);
 
-    void visualize();
-    void visualizeBatch(Batch *b);
-    void visualizeClipping(QSGNode *node);
-    void visualizeChangesPrepare(Node *n, uint parentChanges = 0);
-    void visualizeChanges(Node *n);
-    void visualizeOverdraw();
-    void visualizeOverdraw_helper(Node *node);
-    void visualizeDrawGeometry(const QSGGeometry *g);
-    void setCustomRenderMode(const QByteArray &mode);
-
     QSet<Node *> m_taggedRoots;
     QDataBuffer<Element *> m_opaqueRenderList;
     QDataBuffer<Element *> m_alphaRenderList;
@@ -516,9 +497,6 @@ private:
 
     // For minimal OpenGL core profile support
     QOpenGLVertexArrayObject *m_vao;
-
-    QHash<Node *, uint> m_visualizeChanceSet;
-    VisualizeMode m_visualizeMode;
 };
 
 Batch *Renderer::newBatch()

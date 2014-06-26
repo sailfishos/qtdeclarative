@@ -48,9 +48,11 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
 #include <QtGui/QSurface>
+#include <QtGui/QWindow>
 #include <QtGui/qpa/qplatformnativeinterface.h>
 
 #include <private/qsgtexture_p.h>
+#include <private/qsystrace_p.h>
 
 #include <private/qquickprofiler_p.h>
 
@@ -103,6 +105,15 @@ Manager::Manager()
     int w = qMin(max, qsg_envInt("QSG_ATLAS_WIDTH", qMax(512, qsg_powerOfTwo(surfaceSize.width()))));
     int h = qMin(max, qsg_envInt("QSG_ATLAS_HEIGHT", qMax(512, qsg_powerOfTwo(surfaceSize.height()))));
 
+    if (surface->surfaceClass() == QSurface::Window) {
+        QWindow *window = static_cast<QWindow *>(surface);
+        // Coverwindows, optimize for memory rather than speed
+        if ((window->type() & Qt::CoverWindow) == Qt::CoverWindow) {
+            w /= 2;
+            h /= 2;
+        }
+    }
+
     m_atlas_size_limit = qsg_envInt("QSG_ATLAS_SIZE_LIMIT", qMax(w, h) / 2);
     m_atlas_size = QSize(w, h);
 
@@ -143,23 +154,16 @@ Atlas::Atlas(const QSize &size)
     , m_allocated(false)
 {
 
-    m_internalFormat = GL_RGBA;
-    m_externalFormat = GL_BGRA;
-
-#ifndef QT_OPENGL_ES
-    if (QOpenGLContext::currentContext()->isOpenGLES()) {
-#endif
-
+#ifdef QT_OPENGL_ES
 #if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
     QString *deviceName =
             static_cast<QString *>(QGuiApplication::platformNativeInterface()->nativeResourceForIntegration("AndroidDeviceName"));
-    static bool wrongfullyReportsBgra8888Support = deviceName != 0
-                                                    && (deviceName->compare(QStringLiteral("samsung SM-T211"), Qt::CaseInsensitive) == 0
-                                                        || deviceName->compare(QStringLiteral("samsung SM-T210"), Qt::CaseInsensitive) == 0
-                                                        || deviceName->compare(QStringLiteral("samsung SM-T215"), Qt::CaseInsensitive) == 0);
+    static bool wrongfullyReportsBgra8888Support = deviceName->compare(QStringLiteral("samsung SM-T211"), Qt::CaseInsensitive) == 0
+                                                || deviceName->compare(QStringLiteral("samsung SM-T210"), Qt::CaseInsensitive) == 0
+                                                || deviceName->compare(QStringLiteral("samsung SM-T215"), Qt::CaseInsensitive) == 0;
 #else
     static bool wrongfullyReportsBgra8888Support = false;
-#endif // ANDROID
+#endif
 
     const char *ext = (const char *) glGetString(GL_EXTENSIONS);
     if (!wrongfullyReportsBgra8888Support
@@ -171,13 +175,13 @@ Atlas::Atlas(const QSize &size)
     } else if (strstr(ext, "GL_APPLE_texture_format_BGRA8888")) {
         m_internalFormat = GL_RGBA;
         m_externalFormat = GL_BGRA;
-#endif // IOS
+#endif
     } else {
         m_internalFormat = m_externalFormat = GL_RGBA;
     }
-
-#ifndef QT_OPENGL_ES
-    }
+#else
+    m_internalFormat = GL_RGBA;
+    m_externalFormat = GL_BGRA;
 #endif
 
     m_use_bgra_fallback = qEnvironmentVariableIsSet("QSG_ATLAS_USE_BGRA_FALLBACK");
@@ -334,8 +338,7 @@ void Atlas::bind(QSGTexture::Filtering filtering)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 #if !defined(QT_OPENGL_ES_2)
-        if (!QOpenGLContext::currentContext()->isOpenGLES())
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 #endif
         glTexImage2D(GL_TEXTURE_2D, 0, m_internalFormat, m_size.width(), m_size.height(), 0, m_externalFormat, GL_UNSIGNED_BYTE, 0);
 
@@ -376,7 +379,7 @@ void Atlas::bind(QSGTexture::Filtering filtering)
 
     // Upload all pending images..
     for (int i=0; i<m_pending_uploads.size(); ++i) {
-
+        QSystrace::begin("graphics", "Atlas::bind", "");
 #ifndef QSG_NO_RENDER_TIMING
         bool profileFrames = qsg_render_timing || QQuickProfiler::enabled;
         if (profileFrames)
@@ -390,6 +393,7 @@ void Atlas::bind(QSGTexture::Filtering filtering)
             upload(m_pending_uploads.at(i));
         }
 
+        QSystrace::end("graphics", "Atlas::bind", "");
 #ifndef QSG_NO_RENDER_TIMING
         if (qsg_render_timing) {
             qDebug("   - AtlasTexture(%dx%d), uploaded in %d ms",
@@ -458,7 +462,6 @@ QSGTexture *Texture::removedFromAtlas() const
         m_nonatlas_texture = new QSGPlainTexture();
         m_nonatlas_texture->setImage(m_image);
         m_nonatlas_texture->setFiltering(filtering());
-        m_nonatlas_texture->setMipmapFiltering(mipmapFiltering());
     }
     return m_nonatlas_texture;
 }

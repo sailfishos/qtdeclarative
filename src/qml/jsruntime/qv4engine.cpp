@@ -72,8 +72,6 @@
 
 #include <QtCore/QTextStream>
 
-#include <QtCore/QTextStream>
-
 #ifdef V4_ENABLE_JIT
 #include "qv4isel_masm_p.h"
 #endif // V4_ENABLE_JIT
