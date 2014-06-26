@@ -56,11 +56,13 @@ public:
 
     QJSValue value;
     QV4::PersistentValue iterator;
+    QV4::Property currentProperty;
     QV4::PropertyAttributes currentAttributes;
-    QV4::SafeString currentName;
+    QV4::StringValue currentName;
     uint currentIndex;
+    QV4::Property nextProperty;
     QV4::PropertyAttributes nextAttributes;
-    QV4::SafeString nextName;
+    QV4::StringValue nextName;
     uint nextIndex;
 };
 

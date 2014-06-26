@@ -51,11 +51,10 @@
 #include <QOpenGLShaderProgram>
 #include <qopenglframebufferobject.h>
 #include <QtGui/qguiapplication.h>
-#include <private/qsystrace_p.h>
 
 #include <qdatetime.h>
 
-#include <private/qqmlprofilerservice_p.h>
+#include <private/qquickprofiler_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -228,7 +227,7 @@ void QSGRenderer::renderScene(const QSGBindable &bindable)
 
 
 #ifndef QSG_NO_RENDER_TIMING
-    bool profileFrames = qsg_render_timing || QQmlProfilerService::enabled;
+    bool profileFrames = qsg_render_timing || QQuickProfiler::enabled;
     if (profileFrames)
         frameTimer.start();
     qint64 bindTime = 0;
@@ -238,9 +237,7 @@ void QSGRenderer::renderScene(const QSGBindable &bindable)
     m_bindable = &bindable;
     preprocess();
 
-    QSystrace::begin("graphics", "QSGR::bind", "");
     bindable.bind();
-    QSystrace::end("graphics", "QSGR::bind", "");
 #ifndef QSG_NO_RENDER_TIMING
     if (profileFrames)
         bindTime = frameTimer.nsecsElapsed();
@@ -259,9 +256,7 @@ void QSGRenderer::renderScene(const QSGBindable &bindable)
         }
     }
 
-    QSystrace::begin("graphics", "QSGR::render", "");
     render();
-    QSystrace::end("graphics", "QSGR::render", "");
 #ifndef QSG_NO_RENDER_TIMING
     if (profileFrames)
         renderTime = frameTimer.nsecsElapsed();
@@ -292,14 +287,11 @@ void QSGRenderer::renderScene(const QSGBindable &bindable)
                int(renderTime / 1000000));
     }
 
-    if (QQmlProfilerService::enabled) {
-        QQmlProfilerService::sceneGraphFrame(
-                    QQmlProfilerService::SceneGraphRendererFrame,
-                    preprocessTime,
-                    updatePassTime - preprocessTime,
-                    bindTime - updatePassTime,
-                    renderTime - bindTime);
-    }
+    Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphRendererFrame, (
+            preprocessTime,
+            updatePassTime - preprocessTime,
+            bindTime - updatePassTime,
+            renderTime - bindTime));
 
 #endif
 }
@@ -367,7 +359,6 @@ void QSGRenderer::materialChanged(QSGGeometryNode *, QSGMaterial *, QSGMaterial 
 
 void QSGRenderer::preprocess()
 {
-    QSystrace::begin("graphics", "QSGR::preprocess", "");
     Q_ASSERT(m_root_node);
 
     // We need to take a copy here, in case any of the preprocess calls deletes a node that
@@ -383,16 +374,13 @@ void QSGRenderer::preprocess()
         }
     }
 
-    QSystrace::end("graphics", "QSGR::preprocess", "");
 #ifndef QSG_NO_RENDER_TIMING
-    bool profileFrames = qsg_render_timing || QQmlProfilerService::enabled;
+    bool profileFrames = qsg_render_timing || QQuickProfiler::enabled;
     if (profileFrames)
         preprocessTime = frameTimer.nsecsElapsed();
 #endif
 
-    QSystrace::begin("graphics", "QSGR::update", "");
     nodeUpdater()->updateStates(m_root_node);
-    QSystrace::end("graphics", "QSGR::update", "");
 
 #ifndef QSG_NO_RENDER_TIMING
     if (profileFrames)

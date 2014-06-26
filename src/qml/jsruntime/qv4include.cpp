@@ -131,8 +131,8 @@ void QV4Include::finished()
         QVariant redirect = m_reply->attribute(QNetworkRequest::RedirectionTargetAttribute);
         if (redirect.isValid()) {
             m_url = m_url.resolved(redirect.toUrl());
-            delete m_reply; 
-            
+            delete m_reply;
+
             QNetworkRequest request;
             request.setUrl(m_url);
 
@@ -148,7 +148,7 @@ void QV4Include::finished()
         QByteArray data = m_reply->readAll();
 
         QString code = QString::fromUtf8(data);
-        QQmlScript::Parser::extractPragmas(code);
+        QmlIR::Document::removeScriptPragmas(code);
 
         QV4::ScopedObject qmlglobal(scope, m_qmlglobal.value());
         QV4::Script script(v4, qmlglobal, code, m_url.toString());
@@ -209,14 +209,14 @@ QV4::ReturnedValue QV4Include::method_include(QV4::CallContext *ctx)
                                        callbackFunction);
         result = i->result();
 
-    } else { 
+    } else {
 
         QFile f(localFile);
 
         if (f.open(QIODevice::ReadOnly)) {
             QByteArray data = f.readAll();
             QString code = QString::fromUtf8(data);
-            QQmlScript::Parser::extractPragmas(code);
+            QmlIR::Document::removeScriptPragmas(code);
 
             QV4::Script script(v4, qmlcontextobject, code, url.toString());
 

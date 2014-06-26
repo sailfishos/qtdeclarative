@@ -42,7 +42,7 @@
 #define QMLJS_ENVIRONMENT_H
 
 #include "qv4global_p.h"
-#include "qv4value_def_p.h"
+#include "qv4scopedvalue_p.h"
 #include "qv4managed_p.h"
 #include "qv4engine_p.h"
 
@@ -69,7 +69,11 @@ struct WithContext;
 
 struct Q_QML_EXPORT ExecutionContext : public Managed
 {
-    Q_MANAGED
+    V4_MANAGED
+    Q_MANAGED_TYPE(ExecutionContext)
+    enum {
+        IsExecutionContext = true
+    };
 
     enum ContextType {
         Type_GlobalContext = 0x1,
@@ -91,7 +95,6 @@ struct Q_QML_EXPORT ExecutionContext : public Managed
         lookups = 0;
         compilationUnit = 0;
         currentEvalCode = 0;
-        interpreterInstructionPointer = 0;
         lineNumber = -1;
         engine->current = this;
     }
@@ -114,19 +117,12 @@ struct Q_QML_EXPORT ExecutionContext : public Managed
     };
     EvalCode *currentEvalCode;
 
-    const uchar **interpreterInstructionPointer;
     int lineNumber;
 
     CallContext *newCallContext(FunctionObject *f, CallData *callData);
     WithContext *newWithContext(ObjectRef with);
     CatchContext *newCatchContext(const StringRef exceptionVarName, const ValueRef exceptionValue);
     CallContext *newQmlContext(FunctionObject *f, ObjectRef qml);
-
-    // formals are in reverse order
-    String * const *formals() const;
-    unsigned int formalCount() const;
-    String * const *variables() const;
-    unsigned int variableCount() const;
 
     void createMutableBinding(const StringRef name, bool deletable);
 
@@ -170,12 +166,22 @@ struct CallContext : public ExecutionContext
 
     FunctionObject *function;
     int realArgumentCount;
-    SafeValue *locals;
+    Value *locals;
     Object *activation;
+
+    // formals are in reverse order
+    String * const *formals() const;
+    unsigned int formalCount() const;
+    String * const *variables() const;
+    unsigned int variableCount() const;
 
     inline ReturnedValue argument(int i);
     bool needsOwnArguments() const;
 };
+
+inline ReturnedValue CallContext::argument(int i) {
+    return i < callData->argc ? callData->args[i].asReturnedValue() : Primitive::undefinedValue().asReturnedValue();
+}
 
 struct GlobalContext : public ExecutionContext
 {
@@ -188,8 +194,8 @@ struct CatchContext : public ExecutionContext
 {
     CatchContext(ExecutionEngine *engine, const StringRef exceptionVarName, const ValueRef exceptionValue);
 
-    SafeString exceptionVarName;
-    SafeValue exceptionValue;
+    StringValue exceptionVarName;
+    Value exceptionValue;
 };
 
 struct WithContext : public ExecutionContext
@@ -239,9 +245,18 @@ struct ExecutionContextSaver
     }
 };
 
+inline Scope::Scope(ExecutionContext *ctx)
+    : engine(ctx->engine)
+#ifndef QT_NO_DEBUG
+    , size(0)
+#endif
+{
+    mark = engine->jsStackTop;
+}
+
 /* Function *f, int argc */
 #define requiredMemoryForExecutionContect(f, argc) \
-    ((sizeof(CallContext) + 7) & ~7) + sizeof(Value) * (f->varCount + qMax((uint)argc, f->formalParameterCount)) + sizeof(CallData)
+    ((sizeof(CallContext) + 7) & ~7) + sizeof(Value) * (f->varCount() + qMax((uint)argc, f->formalParameterCount())) + sizeof(CallData)
 
 } // namespace QV4
 

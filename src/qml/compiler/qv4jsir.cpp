@@ -42,12 +42,13 @@
 #include "qv4jsir_p.h"
 #include <private/qqmljsast_p.h>
 
+#ifndef V4_BOOTSTRAP
 #include <private/qqmlpropertycache_p.h>
+#endif
 #include <QtCore/qtextstream.h>
 #include <QtCore/qdebug.h>
 #include <QtCore/qset.h>
 #include <cmath>
-#include <cassert>
 
 #ifdef CONST
 #undef CONST
@@ -55,8 +56,8 @@
 
 QT_BEGIN_NAMESPACE
 
-namespace QQmlJS {
-namespace V4IR {
+namespace QV4 {
+namespace IR {
 
 QString typeName(Type t)
 {
@@ -154,7 +155,7 @@ AluOp binaryOperator(int op)
     }
 }
 
-struct RemoveSharedExpressions: V4IR::StmtVisitor, V4IR::ExprVisitor
+struct RemoveSharedExpressions: IR::StmtVisitor, IR::ExprVisitor
 {
     CloneExpr clone;
     QSet<Expr *> subexpressions; // contains all the non-cloned subexpressions in the given function
@@ -162,7 +163,7 @@ struct RemoveSharedExpressions: V4IR::StmtVisitor, V4IR::ExprVisitor
 
     RemoveSharedExpressions(): uniqueExpr(0) {}
 
-    void operator()(V4IR::Function *function)
+    void operator()(IR::Function *function)
     {
         subexpressions.clear();
 
@@ -185,7 +186,7 @@ struct RemoveSharedExpressions: V4IR::StmtVisitor, V4IR::ExprVisitor
         }
 
         subexpressions.insert(expr);
-        V4IR::Expr *e = expr;
+        IR::Expr *e = expr;
         qSwap(uniqueExpr, e);
         expr->accept(this);
         qSwap(uniqueExpr, e);
@@ -219,7 +220,7 @@ struct RemoveSharedExpressions: V4IR::StmtVisitor, V4IR::ExprVisitor
         s->expr = cleanup(s->expr);
     }
 
-    virtual void visitPhi(V4IR::Phi *) { Q_UNIMPLEMENTED(); }
+    virtual void visitPhi(IR::Phi *) { Q_UNIMPLEMENTED(); }
 
     // expressions
     virtual void visitConst(Const *) {}
@@ -248,14 +249,14 @@ struct RemoveSharedExpressions: V4IR::StmtVisitor, V4IR::ExprVisitor
     virtual void visitCall(Call *e)
     {
         e->base = cleanup(e->base);
-        for (V4IR::ExprList *it = e->args; it; it = it->next)
+        for (IR::ExprList *it = e->args; it; it = it->next)
             it->expr = cleanup(it->expr);
     }
 
     virtual void visitNew(New *e)
     {
         e->base = cleanup(e->base);
-        for (V4IR::ExprList *it = e->args; it; it = it->next)
+        for (IR::ExprList *it = e->args; it; it = it->next)
             it->expr = cleanup(it->expr);
     }
 
@@ -277,12 +278,14 @@ static QString dumpStart(const Expr *e) {
         return QString();
 
     QString result = typeName(e->type);
+#ifndef V4_BOOTSTRAP
     const Temp *temp = const_cast<Expr*>(e)->asTemp();
     if (e->type == QObjectType && temp && temp->memberResolver.isQObjectResolver) {
         result += QLatin1Char('<');
         result += QString::fromUtf8(static_cast<QQmlPropertyCache*>(temp->memberResolver.data)->className());
         result += QLatin1Char('>');
     }
+#endif
     result += QLatin1Char('{');
     return result;
 }
@@ -299,16 +302,16 @@ void Const::dump(QTextStream &out) const
     if (type != UndefinedType && type != NullType)
         out << dumpStart(this);
     switch (type) {
-    case QQmlJS::V4IR::UndefinedType:
+    case QV4::IR::UndefinedType:
         out << "undefined";
         break;
-    case QQmlJS::V4IR::NullType:
+    case QV4::IR::NullType:
         out << "null";
         break;
-    case QQmlJS::V4IR::BoolType:
+    case QV4::IR::BoolType:
         out << (value ? "true" : "false");
         break;
-    case QQmlJS::V4IR::MissingType:
+    case QV4::IR::MissingType:
         out << "missing";
         break;
     default:
@@ -417,35 +420,31 @@ static const char *builtin_to_string(Name::Builtin b)
         return "builtin_unwind_exception";
     case Name::builtin_push_catch_scope:
         return "builtin_push_catch_scope";
-    case V4IR::Name::builtin_foreach_iterator_object:
+    case IR::Name::builtin_foreach_iterator_object:
         return "builtin_foreach_iterator_object";
-    case V4IR::Name::builtin_foreach_next_property_name:
+    case IR::Name::builtin_foreach_next_property_name:
         return "builtin_foreach_next_property_name";
-    case V4IR::Name::builtin_push_with_scope:
+    case IR::Name::builtin_push_with_scope:
         return "builtin_push_with_scope";
-    case V4IR::Name::builtin_pop_scope:
+    case IR::Name::builtin_pop_scope:
         return "builtin_pop_scope";
-    case V4IR::Name::builtin_declare_vars:
+    case IR::Name::builtin_declare_vars:
         return "builtin_declare_vars";
-    case V4IR::Name::builtin_define_property:
-        return "builtin_define_property";
-    case V4IR::Name::builtin_define_array:
+    case IR::Name::builtin_define_array:
         return "builtin_define_array";
-    case V4IR::Name::builtin_define_getter_setter:
-        return "builtin_define_getter_setter";
-    case V4IR::Name::builtin_define_object_literal:
+    case IR::Name::builtin_define_object_literal:
         return "builtin_define_object_literal";
-    case V4IR::Name::builtin_setup_argument_object:
+    case IR::Name::builtin_setup_argument_object:
         return "builtin_setup_argument_object";
-    case V4IR::Name::builtin_convert_this_to_object:
+    case IR::Name::builtin_convert_this_to_object:
         return "builtin_convert_this_to_object";
-    case V4IR::Name::builtin_qml_id_array:
+    case IR::Name::builtin_qml_id_array:
         return "builtin_qml_id_array";
-    case V4IR::Name::builtin_qml_imported_scripts_object:
+    case IR::Name::builtin_qml_imported_scripts_object:
         return "builtin_qml_imported_scripts_object";
-    case V4IR::Name::builtin_qml_scope_object:
+    case IR::Name::builtin_qml_scope_object:
         return "builtin_qml_scope_object";
-    case V4IR::Name::builtin_qml_context_object:
+    case IR::Name::builtin_qml_context_object:
         return "builtin_qml_context_object";
     }
     return "builtin_(###FIXME)";
@@ -559,8 +558,10 @@ void Member::dump(QTextStream &out) const
     else
         base->dump(out);
     out << '.' << *name;
+#ifndef V4_BOOTSTRAP
     if (property)
         out << " (meta-property " << property->coreIndex << " <" << QMetaType::typeName(property->propType) << ">)";
+#endif
 }
 
 void Exp::dump(QTextStream &out, Mode)
@@ -636,7 +637,7 @@ Function *Module::newFunction(const QString &name, Function *outer)
     functions.append(f);
     if (!outer) {
         if (!isQmlModule) {
-            assert(!rootFunction);
+            Q_ASSERT(!rootFunction);
             rootFunction = f;
         }
     } else {
@@ -663,8 +664,8 @@ Function::~Function()
 {
     // destroy the Stmt::Data blocks manually, because memory pool cleanup won't
     // call the Stmt destructors.
-    foreach (V4IR::BasicBlock *b, basicBlocks)
-        foreach (V4IR::Stmt *s, b->statements)
+    foreach (IR::BasicBlock *b, basicBlocks)
+        foreach (IR::Stmt *s, b->statements)
             s->destroyData();
 
     qDeleteAll(basicBlocks);
@@ -740,7 +741,7 @@ Temp *BasicBlock::LOCAL(unsigned index, unsigned scope)
 }
 
 Expr *BasicBlock::CONST(Type type, double value)
-{ 
+{
     Const *e = function->New<Const>();
     if (type == NumberType) {
         int ival = (int)value;
@@ -749,7 +750,12 @@ Expr *BasicBlock::CONST(Type type, double value)
             type = SInt32Type;
         else
             type = DoubleType;
+    } else if (type == NullType) {
+        value = 0;
+    } else if (type == UndefinedType) {
+        value = qSNaN();
     }
+
     e->init(type, value);
     return e;
 }
@@ -769,7 +775,7 @@ Expr *BasicBlock::REGEXP(const QString *value, int flags)
 }
 
 Name *BasicBlock::NAME(const QString &id, quint32 line, quint32 column)
-{ 
+{
     Name *e = function->New<Name>();
     e->init(function->newString(id), line, column);
     return e;
@@ -805,7 +811,7 @@ Expr *BasicBlock::CONVERT(Expr *expr, Type type)
 }
 
 Expr *BasicBlock::UNOP(AluOp op, Expr *expr)
-{ 
+{
     Unop *e = function->New<Unop>();
     e->init(op, expr);
     return e;
@@ -819,7 +825,7 @@ Expr *BasicBlock::BINOP(AluOp op, Expr *left, Expr *right)
 }
 
 Expr *BasicBlock::CALL(Expr *base, ExprList *args)
-{ 
+{
     Call *e = function->New<Call>();
     e->init(base, args);
     int argc = 0;
@@ -851,7 +857,7 @@ Expr *BasicBlock::MEMBER(Expr *base, const QString *name, QQmlPropertyData *prop
 }
 
 Stmt *BasicBlock::EXP(Expr *expr)
-{ 
+{
     if (isTerminated())
         return 0;
 
@@ -862,7 +868,7 @@ Stmt *BasicBlock::EXP(Expr *expr)
 }
 
 Stmt *BasicBlock::MOVE(Expr *target, Expr *source)
-{ 
+{
     if (isTerminated())
         return 0;
 
@@ -872,7 +878,7 @@ Stmt *BasicBlock::MOVE(Expr *target, Expr *source)
     return s;
 }
 
-Stmt *BasicBlock::JUMP(BasicBlock *target) 
+Stmt *BasicBlock::JUMP(BasicBlock *target)
 {
     if (isTerminated())
         return 0;
@@ -881,16 +887,16 @@ Stmt *BasicBlock::JUMP(BasicBlock *target)
     s->init(target);
     appendStatement(s);
 
-    assert(! out.contains(target));
+    Q_ASSERT(! out.contains(target));
     out.append(target);
 
-    assert(! target->in.contains(this));
+    Q_ASSERT(! target->in.contains(this));
     target->in.append(this);
 
     return s;
 }
 
-Stmt *BasicBlock::CJUMP(Expr *cond, BasicBlock *iftrue, BasicBlock *iffalse) 
+Stmt *BasicBlock::CJUMP(Expr *cond, BasicBlock *iftrue, BasicBlock *iffalse)
 {
     if (isTerminated())
         return 0;
@@ -904,16 +910,16 @@ Stmt *BasicBlock::CJUMP(Expr *cond, BasicBlock *iftrue, BasicBlock *iffalse)
     s->init(cond, iftrue, iffalse);
     appendStatement(s);
 
-    assert(! out.contains(iftrue));
+    Q_ASSERT(! out.contains(iftrue));
     out.append(iftrue);
 
-    assert(! iftrue->in.contains(this));
+    Q_ASSERT(! iftrue->in.contains(this));
     iftrue->in.append(this);
 
-    assert(! out.contains(iffalse));
+    Q_ASSERT(! out.contains(iffalse));
     out.append(iffalse);
 
-    assert(! iffalse->in.contains(this));
+    Q_ASSERT(! iffalse->in.contains(this));
     iffalse->in.append(this);
 
     return s;
@@ -969,7 +975,7 @@ ExprList *CloneExpr::clone(ExprList *list)
     if (! list)
         return 0;
 
-    ExprList *clonedList = block->function->New<V4IR::ExprList>();
+    ExprList *clonedList = block->function->New<IR::ExprList>();
     clonedList->init(clone(list->expr), clone(list->next));
     return clonedList;
 }
@@ -1041,6 +1047,6 @@ void CloneExpr::visitMember(Member *e)
 }
 
 } // end of namespace IR
-} // end of namespace QQmlJS
+} // end of namespace QV4
 
 QT_END_NAMESPACE

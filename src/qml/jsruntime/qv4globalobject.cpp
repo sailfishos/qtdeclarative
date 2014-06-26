@@ -41,7 +41,7 @@
 
 #include "qv4globalobject_p.h"
 #include "qv4mm_p.h"
-#include "qv4value_p.h"
+#include "qv4value_inl_p.h"
 #include "qv4context_p.h"
 #include "qv4function_p.h"
 #include "qv4debugging_p.h"
@@ -344,12 +344,12 @@ static QString decode(const QString &input, DecodeMode decodeMode, bool *ok)
     return QString();
 }
 
-DEFINE_MANAGED_VTABLE(EvalFunction);
+DEFINE_OBJECT_VTABLE(EvalFunction);
 
 EvalFunction::EvalFunction(ExecutionContext *scope)
     : FunctionObject(scope, scope->engine->id_eval)
 {
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
     defineReadonlyProperty(scope->engine->id_length, Primitive::fromInt32(1));
 }
 
@@ -414,7 +414,7 @@ ReturnedValue EvalFunction::evalCall(CallData *callData, bool directCall)
     needsActivation = function->needsActivation();
 
     if (strictMode) {
-        ScopedFunctionObject e(scope, FunctionObject::creatScriptFunction(ctx, function));
+        ScopedFunctionObject e(scope, FunctionObject::createScriptFunction(ctx, function));
         ScopedCallData callData(scope, 0);
         callData->thisObject = ctx->callData->thisObject;
         return e->call(callData);

@@ -51,8 +51,15 @@ namespace QV4 {
 struct ExecutionEngine;
 struct Identifier;
 
-struct Q_QML_EXPORT String : public Managed {
-    Q_MANAGED
+struct Q_QML_PRIVATE_EXPORT String : public Managed {
+#ifndef V4_BOOTSTRAP
+    // ### FIXME: Should this be a V4_OBJECT
+    V4_OBJECT
+    Q_MANAGED_TYPE(String)
+    enum {
+        IsString = true
+    };
+
     enum StringType {
         StringType_Unknown,
         StringType_Regular,
@@ -60,10 +67,6 @@ struct Q_QML_EXPORT String : public Managed {
         StringType_ArrayIndex
     };
 
-    String()
-        : Managed(0), _text(QStringData::sharedNull()), identifier(0)
-        , stringHash(UINT_MAX), largestSubLength(0), len(0)
-    { type = Type_String; subtype = StringType_Unknown; }
     String(ExecutionEngine *engine, const QString &text);
     String(ExecutionEngine *engine, String *l, String *n);
     ~String() {
@@ -86,6 +89,7 @@ struct Q_QML_EXPORT String : public Managed {
 
         return toQString() == other->toQString();
     }
+
     inline bool compare(const String *other) {
         return toQString() < other->toQString();
     }
@@ -140,8 +144,6 @@ struct Q_QML_EXPORT String : public Managed {
         return len;
     }
 
-    static uint toArrayIndex(const QString &str);
-
     union {
         mutable QStringData *_text;
         mutable String *left;
@@ -167,21 +169,30 @@ protected:
     static bool deleteProperty(Managed *, const StringRef);
     static bool deleteIndexedProperty(Managed *m, uint index);
     static bool isEqualTo(Managed *that, Managed *o);
+    static uint getLength(const Managed *m);
 
 private:
     QChar *recursiveAppend(QChar *ch) const;
+#endif
+
+public:
+    static uint toArrayIndex(const QString &str);
 };
 
+#ifndef V4_BOOTSTRAP
 template<>
 inline String *value_cast(const Value &v) {
     return v.asString();
 }
 
 template<>
-inline ReturnedValue value_convert<String>(ExecutionContext *ctx, const Value &v)
+inline ReturnedValue value_convert<String>(ExecutionEngine *e, const Value &v)
 {
-    return v.toString(ctx)->asReturnedValue();
+    return v.toString(e)->asReturnedValue();
 }
+
+DEFINE_REF(String, Managed);
+#endif
 
 }
 

@@ -54,64 +54,7 @@
 
 QT_BEGIN_NAMESPACE
 
-class QQmlLocaleData : public QV4::Object
-{
-    Q_MANAGED
-public:
-    QQmlLocaleData(QV4::ExecutionEngine *engine)
-        : QV4::Object(engine)
-    {
-        setVTable(&static_vtbl);
-        type = Type_Object;
-    }
-
-    QLocale locale;
-
-    static QLocale *getThisLocale(QV4::CallContext *ctx) {
-        QQmlLocaleData *thisObject = ctx->callData->thisObject.asObject()->as<QQmlLocaleData>();
-        if (!thisObject) {
-            ctx->throwTypeError();
-            return 0;
-        }
-        return &thisObject->locale;
-    }
-
-    static QV4::ReturnedValue method_currencySymbol(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_dateTimeFormat(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_timeFormat(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_dateFormat(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_monthName(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_standaloneMonthName(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_dayName(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_standaloneDayName(QV4::CallContext *ctx);
-
-    static QV4::ReturnedValue method_get_firstDayOfWeek(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_measurementSystem(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_textDirection(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_weekDays(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_uiLanguages(QV4::CallContext *ctx);
-
-    static QV4::ReturnedValue method_get_name(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_nativeLanguageName(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_nativeCountryName(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_decimalPoint(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_groupSeparator(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_percent(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_zeroDigit(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_negativeSign(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_positiveSign(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_exponential(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_amText(QV4::CallContext *ctx);
-    static QV4::ReturnedValue method_get_pmText(QV4::CallContext *ctx);
-
-private:
-    static void destroy(Managed *that)
-    {
-        static_cast<QQmlLocaleData *>(that)->~QQmlLocaleData();
-    }
-};
-
-DEFINE_MANAGED_VTABLE(QQmlLocaleData);
+DEFINE_OBJECT_VTABLE(QQmlLocaleData);
 
 #define GET_LOCALE_DATA_RESOURCE(OBJECT) \
     QV4::Scoped<QQmlLocaleData> r(scope, OBJECT.as<QQmlLocaleData>()); \
@@ -347,8 +290,11 @@ QV4::ReturnedValue QQmlDateExtension::method_fromLocaleTimeString(QV4::CallConte
         tm = r->locale.toTime(dateString, enumFormat);
     }
 
-    QDateTime dt = QDateTime::currentDateTime();
-    dt.setTime(tm);
+    QDateTime dt;
+    if (tm.isValid()) {
+        dt = QDateTime::currentDateTime();
+        dt.setTime(tm);
+    }
 
     return QV4::Encode(engine->newDateObject(dt));
 }
@@ -555,12 +501,11 @@ QV4::ReturnedValue QQmlLocaleData::method_get_weekDays(QV4::CallContext *ctx)
 
     QV4::Scoped<QV4::ArrayObject> result(scope, ctx->engine->newArrayObject());
     result->arrayReserve(days.size());
-    result->arrayDataLen = days.size();
     for (int i = 0; i < days.size(); ++i) {
         int day = days.at(i);
         if (day == 7) // JS Date days in range 0(Sunday) to 6(Saturday)
             day = 0;
-        result->arrayData[i].value = QV4::Primitive::fromInt32(day);
+        result->arrayPut(i, QV4::Primitive::fromInt32(day));
     }
     result->setArrayLengthUnchecked(days.size());
 
@@ -577,10 +522,9 @@ QV4::ReturnedValue QQmlLocaleData::method_get_uiLanguages(QV4::CallContext *ctx)
     QStringList langs = locale->uiLanguages();
     QV4::Scoped<QV4::ArrayObject> result(scope, ctx->engine->newArrayObject());
     result->arrayReserve(langs.size());
-    for (int i = 0; i < langs.size(); ++i) {
-        result->arrayData[i].value = ctx->engine->newString(langs.at(i));
-        result->arrayDataLen = i + 1;
-    }
+    QV4::ScopedValue v(scope);
+    for (int i = 0; i < langs.size(); ++i)
+        result->arrayPut(i, (v = ctx->engine->newString(langs.at(i))));
 
     result->setArrayLengthUnchecked(langs.size());
 
@@ -857,14 +801,21 @@ QQmlLocale::~QQmlLocale()
 {
 }
 
-QV4::ReturnedValue QQmlLocale::locale(QV8Engine *v8engine, const QString &locale)
+QV4::ReturnedValue QQmlLocale::locale(QV8Engine *v8engine, const QString &localeName)
 {
-    QV8LocaleDataDeletable *d = localeV8Data(v8engine);
-    QV4::ExecutionEngine *engine = QV8Engine::getV4(v8engine);
-    QV4::Scope scope(engine);
-    QV4::Scoped<QQmlLocaleData> wrapper(scope, new (engine->memoryManager) QQmlLocaleData(engine));
-    if (!locale.isEmpty())
-        wrapper->locale = QLocale(locale);
+    QLocale qlocale;
+    if (!localeName.isEmpty())
+        qlocale = localeName;
+    return wrap(v8engine, qlocale);
+}
+
+QV4::ReturnedValue QQmlLocale::wrap(QV8Engine *engine, const QLocale &locale)
+{
+    QV8LocaleDataDeletable *d = localeV8Data(engine);
+    QV4::ExecutionEngine *v4 = QV8Engine::getV4(engine);
+    QV4::Scope scope(v4);
+    QV4::Scoped<QQmlLocaleData> wrapper(scope, new (v4->memoryManager) QQmlLocaleData(v4));
+    wrapper->locale = locale;
     QV4::ScopedObject p(scope, d->prototype.value());
     wrapper->setPrototype(p.getPointer());
     return wrapper.asReturnedValue();

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtQml module of the Qt Toolkit.
@@ -38,5 +38,45 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
+#ifndef QV4MEMBERDATA_H
+#define QV4MEMBERDATA_H
 
-//#include <private/v8-profiler.h>
+#include "qv4global_p.h"
+#include "qv4managed_p.h"
+
+QT_BEGIN_NAMESPACE
+
+namespace QV4 {
+
+struct MemberData : Managed
+{
+    V4_MANAGED
+    uint size;
+    Value data[1];
+
+    MemberData(QV4::InternalClass *ic) : Managed(ic) {}
+    Value &operator[] (uint idx) { return data[idx]; }
+
+    static void markObjects(Managed *that, ExecutionEngine *e);
+};
+
+struct Members : Value
+{
+    void ensureIndex(QV4::ExecutionEngine *e, uint idx);
+    Value &operator[] (uint idx) const { return static_cast<MemberData *>(managed())->data[idx]; }
+    inline uint size() const { return d() ? d()->size : 0; }
+    inline MemberData *d() const { return static_cast<MemberData *>(managed()); }
+    Value *data() const { return static_cast<MemberData *>(managed())->data; }
+
+    void mark(ExecutionEngine *e) const {
+        MemberData *m = d();
+        if (m)
+            m->mark(e);
+    }
+};
+
+}
+
+QT_END_NAMESPACE
+
+#endif

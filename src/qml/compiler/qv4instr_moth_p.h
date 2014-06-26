@@ -43,7 +43,7 @@
 #define QV4INSTR_MOTH_P_H
 
 #include <QtCore/qglobal.h>
-#include <private/qv4value_def_p.h>
+#include <private/qv4value_p.h>
 #include <private/qv4function_p.h>
 #include <private/qv4runtime_p.h>
 
@@ -51,16 +51,21 @@ QT_BEGIN_NAMESPACE
 
 #define FOR_EACH_MOTH_INSTR(F) \
     F(Ret, ret) \
+    F(Line, line) \
+    F(Debug, debug) \
     F(LoadRuntimeString, loadRuntimeString) \
     F(LoadRegExp, loadRegExp) \
     F(LoadClosure, loadClosure) \
     F(Move, move) \
+    F(MoveConst, moveConst) \
     F(SwapTemps, swapTemps) \
     F(LoadName, loadName) \
     F(GetGlobalLookup, getGlobalLookup) \
     F(StoreName, storeName) \
     F(LoadElement, loadElement) \
+    F(LoadElementLookup, loadElementLookup) \
     F(StoreElement, storeElement) \
+    F(StoreElementLookup, storeElementLookup) \
     F(LoadProperty, loadProperty) \
     F(GetLookup, getLookup) \
     F(StoreProperty, storeProperty) \
@@ -91,8 +96,6 @@ QT_BEGIN_NAMESPACE
     F(CallBuiltinTypeofName, callBuiltinTypeofName) \
     F(CallBuiltinTypeofValue, callBuiltinTypeofValue) \
     F(CallBuiltinDeclareVar, callBuiltinDeclareVar) \
-    F(CallBuiltinDefineGetterSetter, callBuiltinDefineGetterSetter) \
-    F(CallBuiltinDefineProperty, callBuiltinDefineProperty) \
     F(CallBuiltinDefineArray, callBuiltinDefineArray) \
     F(CallBuiltinDefineObjectLiteral, callBuiltinDefineObjectLiteral) \
     F(CallBuiltinSetupArgumentsObject, callBuiltinSetupArgumentsObject) \
@@ -103,7 +106,8 @@ QT_BEGIN_NAMESPACE
     F(CreateActivationProperty, createActivationProperty) \
     F(ConstructGlobalLookup, constructGlobalLookup) \
     F(Jump, jump) \
-    F(CJump, cjump) \
+    F(JumpEq, jumpEq) \
+    F(JumpNe, jumpNe) \
     F(UNot, unot) \
     F(UNotBool, unotBool) \
     F(UPlus, uplus) \
@@ -117,15 +121,16 @@ QT_BEGIN_NAMESPACE
     F(BitAnd, bitAnd) \
     F(BitOr, bitOr) \
     F(BitXor, bitXor) \
+    F(Shr, shr) \
+    F(Shl, shl) \
     F(BitAndConst, bitAndConst) \
     F(BitOrConst, bitOrConst) \
     F(BitXorConst, bitXorConst) \
+    F(ShrConst, shrConst) \
+    F(ShlConst, shlConst) \
     F(Mul, mul) \
     F(Sub, sub) \
     F(BinopContext, binopContext) \
-    F(AddNumberParams, addNumberParams) \
-    F(MulNumberParams, mulNumberParams) \
-    F(SubNumberParams, subNumberParams) \
     F(LoadThis, loadThis) \
     F(LoadQmlIdArray, loadQmlIdArray) \
     F(LoadQmlImportedScripts, loadQmlImportedScripts) \
@@ -137,21 +142,19 @@ QT_BEGIN_NAMESPACE
 #  define MOTH_THREADED_INTERPRETER
 #endif
 
-#define MOTH_INSTR_ALIGN_MASK (Q_ALIGNOF(QQmlJS::Moth::Instr) - 1)
+#define MOTH_INSTR_ALIGN_MASK (Q_ALIGNOF(QV4::Moth::Instr) - 1)
 
 #ifdef MOTH_THREADED_INTERPRETER
-#  define MOTH_INSTR_HEADER void *code; \
-                            unsigned int breakPoint : 1;
+#  define MOTH_INSTR_HEADER void *code;
 #else
-#  define MOTH_INSTR_HEADER quint8 instructionType; \
-                            unsigned int breakPoint : 1;
+#  define MOTH_INSTR_HEADER quint32 instructionType;
 #endif
 
 #define MOTH_INSTR_ENUM(I, FMT)  I,
-#define MOTH_INSTR_SIZE(I, FMT) ((sizeof(QQmlJS::Moth::Instr::instr_##FMT) + MOTH_INSTR_ALIGN_MASK) & ~MOTH_INSTR_ALIGN_MASK)
+#define MOTH_INSTR_SIZE(I, FMT) ((sizeof(QV4::Moth::Instr::instr_##FMT) + MOTH_INSTR_ALIGN_MASK) & ~MOTH_INSTR_ALIGN_MASK)
 
 
-namespace QQmlJS {
+namespace QV4 {
 namespace Moth {
 
 struct Param {
@@ -231,7 +234,15 @@ union Instr
     struct instr_ret {
         MOTH_INSTR_HEADER
         Param result;
-    }; 
+    };
+    struct instr_line {
+        MOTH_INSTR_HEADER
+        qint32 lineNumber;
+    };
+    struct instr_debug {
+        MOTH_INSTR_HEADER
+        qint32 lineNumber;
+    };
     struct instr_loadRuntimeString {
         MOTH_INSTR_HEADER
         int stringId;
@@ -245,6 +256,11 @@ union Instr
     struct instr_move {
         MOTH_INSTR_HEADER
         Param source;
+        Param result;
+    };
+    struct instr_moveConst {
+        MOTH_INSTR_HEADER
+        QV4::ReturnedValue source;
         Param result;
     };
     struct instr_swapTemps {
@@ -322,8 +338,22 @@ union Instr
         Param index;
         Param result;
     };
+    struct instr_loadElementLookup {
+        MOTH_INSTR_HEADER
+        uint lookup;
+        Param base;
+        Param index;
+        Param result;
+    };
     struct instr_storeElement {
         MOTH_INSTR_HEADER
+        Param base;
+        Param index;
+        Param source;
+    };
+    struct instr_storeElementLookup {
+        MOTH_INSTR_HEADER
+        uint lookup;
         Param base;
         Param index;
         Param source;
@@ -454,19 +484,6 @@ union Instr
         int varName;
         bool isDeletable;
     };
-    struct instr_callBuiltinDefineGetterSetter {
-        MOTH_INSTR_HEADER
-        int name;
-        Param object;
-        Param getter;
-        Param setter;
-    };
-    struct instr_callBuiltinDefineProperty {
-        MOTH_INSTR_HEADER
-        int name;
-        Param object;
-        Param value;
-    };
     struct instr_callBuiltinDefineArray {
         MOTH_INSTR_HEADER
         quint32 argc;
@@ -476,6 +493,8 @@ union Instr
     struct instr_callBuiltinDefineObjectLiteral {
         MOTH_INSTR_HEADER
         int internalClassId;
+        uint arrayValueCount;
+        uint arrayGetterSetterCountAndFlags; // 30 bits for count, 1 bit for needsSparseArray boolean
         quint32 args;
         Param result;
     };
@@ -525,13 +544,17 @@ union Instr
     };
     struct instr_jump {
         MOTH_INSTR_HEADER
-        ptrdiff_t offset; 
+        ptrdiff_t offset;
     };
-    struct instr_cjump {
+    struct instr_jumpEq {
         MOTH_INSTR_HEADER
         ptrdiff_t offset;
         Param condition;
-        bool invert;
+    };
+    struct instr_jumpNe {
+        MOTH_INSTR_HEADER
+        ptrdiff_t offset;
+        Param condition;
     };
     struct instr_unot {
         MOTH_INSTR_HEADER
@@ -575,7 +598,7 @@ union Instr
     };
     struct instr_binop {
         MOTH_INSTR_HEADER
-        QV4::BinOp alu;
+        QV4::Runtime::BinaryOperation alu;
         Param lhs;
         Param rhs;
         Param result;
@@ -604,6 +627,18 @@ union Instr
         Param rhs;
         Param result;
     };
+    struct instr_shr {
+        MOTH_INSTR_HEADER
+        Param lhs;
+        Param rhs;
+        Param result;
+    };
+    struct instr_shl {
+        MOTH_INSTR_HEADER
+        Param lhs;
+        Param rhs;
+        Param result;
+    };
     struct instr_bitAndConst {
         MOTH_INSTR_HEADER
         Param lhs;
@@ -617,6 +652,18 @@ union Instr
         Param result;
     };
     struct instr_bitXorConst {
+        MOTH_INSTR_HEADER
+        Param lhs;
+        int rhs;
+        Param result;
+    };
+    struct instr_shrConst {
+        MOTH_INSTR_HEADER
+        Param lhs;
+        int rhs;
+        Param result;
+    };
+    struct instr_shlConst {
         MOTH_INSTR_HEADER
         Param lhs;
         int rhs;
@@ -636,25 +683,7 @@ union Instr
     };
     struct instr_binopContext {
         MOTH_INSTR_HEADER
-        QV4::BinOpContext alu;
-        Param lhs;
-        Param rhs;
-        Param result;
-    };
-    struct instr_addNumberParams {
-        MOTH_INSTR_HEADER
-        Param lhs;
-        Param rhs;
-        Param result;
-    };
-    struct instr_mulNumberParams {
-        MOTH_INSTR_HEADER
-        Param lhs;
-        Param rhs;
-        Param result;
-    };
-    struct instr_subNumberParams {
-        MOTH_INSTR_HEADER
+        QV4::Runtime::BinaryOperationContext alu;
         Param lhs;
         Param rhs;
         Param result;
@@ -687,16 +716,21 @@ union Instr
 
     instr_common common;
     instr_ret ret;
+    instr_line line;
+    instr_debug debug;
     instr_loadRuntimeString loadRuntimeString;
     instr_loadRegExp loadRegExp;
     instr_move move;
+    instr_moveConst moveConst;
     instr_swapTemps swapTemps;
     instr_loadClosure loadClosure;
     instr_loadName loadName;
     instr_getGlobalLookup getGlobalLookup;
     instr_storeName storeName;
     instr_loadElement loadElement;
+    instr_loadElementLookup loadElementLookup;
     instr_storeElement storeElement;
+    instr_storeElementLookup storeElementLookup;
     instr_loadProperty loadProperty;
     instr_getLookup getLookup;
     instr_loadQObjectProperty loadQObjectProperty;
@@ -727,8 +761,6 @@ union Instr
     instr_callBuiltinTypeofName callBuiltinTypeofName;
     instr_callBuiltinTypeofValue callBuiltinTypeofValue;
     instr_callBuiltinDeclareVar callBuiltinDeclareVar;
-    instr_callBuiltinDefineGetterSetter callBuiltinDefineGetterSetter;
-    instr_callBuiltinDefineProperty callBuiltinDefineProperty;
     instr_callBuiltinDefineArray callBuiltinDefineArray;
     instr_callBuiltinDefineObjectLiteral callBuiltinDefineObjectLiteral;
     instr_callBuiltinSetupArgumentsObject callBuiltinSetupArgumentsObject;
@@ -739,7 +771,8 @@ union Instr
     instr_createActivationProperty createActivationProperty;
     instr_constructGlobalLookup constructGlobalLookup;
     instr_jump jump;
-    instr_cjump cjump;
+    instr_jumpEq jumpEq;
+    instr_jumpNe jumpNe;
     instr_unot unot;
     instr_unotBool unotBool;
     instr_uplus uplus;
@@ -753,15 +786,16 @@ union Instr
     instr_bitAnd bitAnd;
     instr_bitOr bitOr;
     instr_bitXor bitXor;
+    instr_shr shr;
+    instr_shl shl;
     instr_bitAndConst bitAndConst;
     instr_bitOrConst bitOrConst;
     instr_bitXorConst bitXorConst;
+    instr_shrConst shrConst;
+    instr_shlConst shlConst;
     instr_mul mul;
     instr_sub sub;
     instr_binopContext binopContext;
-    instr_addNumberParams addNumberParams;
-    instr_mulNumberParams mulNumberParams;
-    instr_subNumberParams subNumberParams;
     instr_loadThis loadThis;
     instr_loadQmlIdArray loadQmlIdArray;
     instr_loadQmlImportedScripts loadQmlImportedScripts;
@@ -782,7 +816,11 @@ struct InstrMeta {
         typedef Instr::instr_##FMT DataType; \
         static const DataType &data(const Instr &instr) { return instr.FMT; } \
         static void setData(Instr &instr, const DataType &v) { instr.FMT = v; } \
-    }; 
+        static void setDataNoCommon(Instr &instr, const DataType &v) \
+        { memcpy(reinterpret_cast<char *>(&instr.FMT) + sizeof(Instr::instr_common), \
+                 reinterpret_cast<const char *>(&v) + sizeof(Instr::instr_common), \
+                 Size - sizeof(Instr::instr_common)); } \
+    };
 FOR_EACH_MOTH_INSTR(MOTH_INSTR_META_TEMPLATE);
 #undef MOTH_INSTR_META_TEMPLATE
 
@@ -792,7 +830,7 @@ class InstrData : public InstrMeta<InstrType>::DataType
 };
 
 } // namespace Moth
-} // namespace QQmlJS
+} // namespace QV4
 
 QT_END_NAMESPACE
 

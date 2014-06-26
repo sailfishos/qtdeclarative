@@ -46,27 +46,26 @@
 
 using namespace QV4;
 
-ObjectIterator::ObjectIterator(SafeObject *scratch1, SafeObject *scratch2, const ObjectRef o, uint flags)
-    : object(*scratch1)
-    , current(*scratch2)
+ObjectIterator::ObjectIterator(Value *scratch1, Value *scratch2, const ObjectRef o, uint flags)
+    : object(ObjectRef::fromValuePointer(scratch1))
+    , current(ObjectRef::fromValuePointer(scratch2))
     , arrayNode(0)
     , arrayIndex(0)
     , memberIndex(0)
     , flags(flags)
 {
-    object = o;
-    current = o;
-    tmpDynamicProperty.value = Primitive::undefinedValue();
+    object = o.getPointer();
+    current = o.getPointer();
 
-    if (object && object->isNonStrictArgumentsObject) {
+    if (!!object && object->asArgumentsObject()) {
         Scope scope(object->engine());
         Scoped<ArgumentsObject> (scope, object->asReturnedValue())->fullyCreate();
     }
 }
 
 ObjectIterator::ObjectIterator(Scope &scope, const ObjectRef o, uint flags)
-    : object(*static_cast<SafeObject *>(scope.alloc(1)))
-    , current(*static_cast<SafeObject *>(scope.alloc(1)))
+    : object(ObjectRef::fromValuePointer(scope.alloc(1)))
+    , current(ObjectRef::fromValuePointer(scope.alloc(1)))
     , arrayNode(0)
     , arrayIndex(0)
     , memberIndex(0)
@@ -74,40 +73,47 @@ ObjectIterator::ObjectIterator(Scope &scope, const ObjectRef o, uint flags)
 {
     object = o;
     current = o;
-    tmpDynamicProperty.value = Primitive::undefinedValue();
 
-    if (object && object->isNonStrictArgumentsObject) {
+    if (!!object && object->asArgumentsObject()) {
         Scope scope(object->engine());
         Scoped<ArgumentsObject> (scope, object->asReturnedValue())->fullyCreate();
     }
 }
 
-Property *ObjectIterator::next(StringRef name, uint *index, PropertyAttributes *attrs)
+void ObjectIterator::next(StringRef name, uint *index, Property *pd, PropertyAttributes *attrs)
 {
     name = (String *)0;
     *index = UINT_MAX;
-    if (!object)
-        return 0;
 
-    Property *p = 0;
+    if (!object) {
+        *attrs = PropertyAttributes();
+        return;
+    }
+
     while (1) {
         if (!current)
             break;
 
-        while ((p = current->advanceIterator(this, name, index, attrs))) {
+        while (1) {
+            current->advanceIterator(this, name, index, pd, attrs);
+            if (attrs->isEmpty())
+                break;
             // check the property is not already defined earlier in the proto chain
             if (current != object) {
-                Property *pp;
-                if (name) {
-                    pp = object->__getPropertyDescriptor__(name);
-                } else {
-                    assert (*index != UINT_MAX);
-                    pp = object->__getPropertyDescriptor__(*index);
+                Object *o = object;
+                bool shadowed = false;
+                while (o != current) {
+                    if ((!!name && o->hasOwnProperty(name)) ||
+                        (*index != UINT_MAX && o->hasOwnProperty(*index))) {
+                        shadowed = true;
+                        break;
+                    }
+                    o = o->prototype();
                 }
-                if (pp != p)
+                if (shadowed)
                     continue;
             }
-            return p;
+            return;
         }
 
         if (flags & WithProtoChain)
@@ -118,7 +124,7 @@ Property *ObjectIterator::next(StringRef name, uint *index, PropertyAttributes *
         arrayIndex = 0;
         memberIndex = 0;
     }
-    return 0;
+    *attrs = PropertyAttributes();
 }
 
 ReturnedValue ObjectIterator::nextPropertyName(ValueRef value)
@@ -127,14 +133,15 @@ ReturnedValue ObjectIterator::nextPropertyName(ValueRef value)
         return Encode::null();
 
     PropertyAttributes attrs;
+    Property p;
     uint index;
     Scope scope(object->engine());
     ScopedString name(scope);
-    Property *p = next(name, &index, &attrs);
-    if (!p)
+    next(name, &index, &p, &attrs);
+    if (attrs.isEmpty())
         return Encode::null();
 
-    value = object->getValue(p, attrs);
+    value = object->getValue(&p, attrs);
 
     if (!!name)
         return name->asReturnedValue();
@@ -148,14 +155,15 @@ ReturnedValue ObjectIterator::nextPropertyNameAsString(ValueRef value)
         return Encode::null();
 
     PropertyAttributes attrs;
+    Property p;
     uint index;
     Scope scope(object->engine());
     ScopedString name(scope);
-    Property *p = next(name, &index, &attrs);
-    if (!p)
+    next(name, &index, &p, &attrs);
+    if (attrs.isEmpty())
         return Encode::null();
 
-    value = object->getValue(p, attrs);
+    value = object->getValue(&p, attrs);
 
     if (!!name)
         return name->asReturnedValue();
@@ -169,11 +177,12 @@ ReturnedValue ObjectIterator::nextPropertyNameAsString()
         return Encode::null();
 
     PropertyAttributes attrs;
+    Property p;
     uint index;
     Scope scope(object->engine());
     ScopedString name(scope);
-    Property *p = next(name, &index, &attrs);
-    if (!p)
+    next(name, &index, &p, &attrs);
+    if (attrs.isEmpty())
         return Encode::null();
 
     if (!!name)
@@ -183,7 +192,7 @@ ReturnedValue ObjectIterator::nextPropertyNameAsString()
 }
 
 
-DEFINE_MANAGED_VTABLE(ForEachIteratorObject);
+DEFINE_OBJECT_VTABLE(ForEachIteratorObject);
 
 void ForEachIteratorObject::markObjects(Managed *that, ExecutionEngine *e)
 {

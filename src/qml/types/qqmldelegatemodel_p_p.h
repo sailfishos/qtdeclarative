@@ -144,7 +144,7 @@ public:
     QQmlDelegateModelItemMetaType * const metaType;
     QQmlContextData *contextData;
     QObject *object;
-    QQmlDelegateModelAttached *attached;
+    QPointer<QQmlDelegateModelAttached> attached;
     QQDMIncubationTask *incubationTask;
     int objectRef;
     int scriptRef;
@@ -161,11 +161,11 @@ protected:
 
 struct QQmlDelegateModelItemObject : QV4::Object
 {
-    Q_MANAGED;
+    V4_OBJECT;
     QQmlDelegateModelItemObject(QV4::ExecutionEngine *engine, QQmlDelegateModelItem *item)
         : Object(engine)
         , item(item)
-    { setVTable(&static_vtbl); }
+    { setVTable(staticVTable()); }
     ~QQmlDelegateModelItemObject();
 
     static void destroy(Managed *that);
@@ -331,8 +331,6 @@ public:
         };
         QQmlDelegateModelGroup *m_groups[Compositor::MaximumGroupCount];
     };
-
-    QList<QPersistentModelIndex> m_storedPersistentIndexes;
 };
 
 class QQmlPartsModel : public QQmlInstanceModel, public QQmlDelegateModelGroupEmitter

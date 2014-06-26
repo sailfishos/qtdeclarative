@@ -101,14 +101,14 @@ V8_DEFINE_EXTENSION(QQmlSqlDatabaseData, databaseData)
 
 class QQmlSqlDatabaseWrapper : public Object
 {
-    Q_MANAGED
+    V4_OBJECT
 
 public:
     enum Type { Database, Query, Rows };
     QQmlSqlDatabaseWrapper(QV8Engine *e)
         : Object(QV8Engine::getV4(e)), type(Database), inTransaction(false), readonly(false), forwardOnly(false)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
 
     ~QQmlSqlDatabaseWrapper() {
@@ -131,7 +131,8 @@ public:
     bool forwardOnly; // type == Rows
 };
 
-DEFINE_MANAGED_VTABLE(QQmlSqlDatabaseWrapper);
+DEFINE_REF(QQmlSqlDatabaseWrapper, Object);
+DEFINE_OBJECT_VTABLE(QQmlSqlDatabaseWrapper);
 
 static ReturnedValue qmlsqldatabase_version(CallContext *ctx)
 {
@@ -206,7 +207,7 @@ static QString qmlsqldatabase_databaseFile(const QString& connectionName, QV8Eng
     return qmlsqldatabase_databasesPath(engine) + QDir::separator() + connectionName;
 }
 
-static ReturnedValue qmlsqldatabase_rows_index(QV4::Referenced<QQmlSqlDatabaseWrapper> r, ExecutionEngine *v4, quint32 index, bool *hasProperty = 0)
+static ReturnedValue qmlsqldatabase_rows_index(QQmlSqlDatabaseWrapperRef r, ExecutionEngine *v4, quint32 index, bool *hasProperty = 0)
 {
     Scope scope(v4);
     QV8Engine *v8 = v4->v8Engine;
@@ -281,7 +282,7 @@ static ReturnedValue qmlsqldatabase_executeSql(CallContext *ctx)
             ScopedValue values(scope, ctx->callData->args[1]);
             if (values->asArrayObject()) {
                 ScopedArrayObject array(scope, values);
-                quint32 size = array->arrayLength();
+                quint32 size = array->getLength();
                 QV4::ScopedValue v(scope);
                 for (quint32 ii = 0; ii < size; ++ii)
                     query.bindValue(ii, engine->toVariant((v = array->getIndexed(ii)), -1));

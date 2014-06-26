@@ -51,7 +51,7 @@ namespace QV4 {
 
 struct ArrayCtor: FunctionObject
 {
-    Q_MANAGED
+    V4_OBJECT
     ArrayCtor(ExecutionContext *scope);
 
     static ReturnedValue construct(Managed *m, CallData *callData);
@@ -63,8 +63,6 @@ struct ArrayPrototype: ArrayObject
     ArrayPrototype(InternalClass *ic);
 
     void init(ExecutionEngine *engine, ObjectRef ctor);
-
-    static uint getLength(ExecutionContext *ctx, ObjectRef o);
 
     static ReturnedValue method_isArray(CallContext *ctx);
     static ReturnedValue method_toString(CallContext *ctx);

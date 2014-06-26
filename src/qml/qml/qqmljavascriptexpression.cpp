@@ -43,7 +43,7 @@
 
 #include <private/qqmlexpression_p.h>
 #include <private/qqmlcontextwrapper_p.h>
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4functionobject_p.h>
 #include <private/qv4script_p.h>
 #include <private/qv4errorobject_p.h>
@@ -218,7 +218,6 @@ void QQmlJavaScriptExpression::GuardCapture::captureProperty(QQmlNotifier *n)
 }
 
 /*! \internal
-    \reimp
 
     \a n is in the signal index range (see QObjectPrivate::signalIndex()).
 */

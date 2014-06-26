@@ -51,7 +51,6 @@
 #include "qqmlengine.h"
 #include "qqmlbinding_p.h"
 #include "qqmlglobal_p.h"
-#include "qqmlscript_p.h"
 #include <private/qqmlenginedebugservice_p.h>
 #include "qqmlincubator.h"
 #include "qqmlincubator_p.h"
@@ -138,6 +137,26 @@ V8_DEFINE_EXTENSION(QQmlComponentExtension, componentExtension);
     int width = item->width();  // width = 200
     \endcode
 
+    To create instances of a component in code where a QQmlEngine instance is
+    not available, you can use \l qmlContext() or \l qmlEngine(). For example,
+    in the scenario below, child items are being created within a QQuickItem
+    subclass:
+
+    \code
+    void MyCppItem::init()
+    {
+        QQmlEngine *engine = qmlEngine(this);
+        // Or:
+        // QQmlEngine *engine = qmlContext(this)->engine();
+        QQmlComponent component(engine, QUrl::fromLocalFile("MyItem.qml"));
+        QQuickItem *childItem = qobject_cast<QQuickItem*>(component.create());
+        childItem->setParent(this);
+    }
+    \endcode
+
+    Note that these functions will return \c null when called inside the
+    constructor of a QObject subclass, as the instance will not yet have
+    a context nor engine.
 
     \section2 Network Components
 
@@ -244,14 +263,14 @@ V8_DEFINE_EXTENSION(QQmlComponentExtension, componentExtension);
 */
 
 /*!
-    \qmlattachedsignal Component::onCompleted()
+    \qmlattachedsignal Component::completed()
 
     Emitted after component "startup" has completed. This can be used to
     execute script code at startup, once the full QML environment has been
     established.
 
-    The \c {Component::onCompleted} attached property can be declared on
-    any object. The order of running the \c onCompleted scripts is
+    The corresponding handler is \c onCompleted. It can be declared on
+    any object. The order of running the \c onCompleted handlers is
     undefined.
 
     \qml
@@ -265,16 +284,16 @@ V8_DEFINE_EXTENSION(QQmlComponentExtension, componentExtension);
 */
 
 /*!
-    \qmlattachedsignal Component::onDestruction()
+    \qmlattachedsignal Component::destruction()
 
     Emitted as the component begins destruction. This can be used to undo
-    work done in the onCompleted signal, or other imperative code in your
-    application.
+    work done in response to the \l {completed}{completed()} signal, or other
+    imperative code in your application.
 
-    The \c {Component::onDestruction} attached property can be declared on
+    The corresponding handler is \c onDestruction. It can be declared on
     any object. However, it applies to the destruction of the component as
     a whole, and not the destruction of the specific object. The order of
-    running the \c onDestruction scripts is undefined.
+    running the \c onDestruction handlers is undefined.
 
     \qml
     Rectangle {
@@ -861,15 +880,10 @@ QQmlComponentPrivate::beginCreate(QQmlContextData *context)
 
     enginePriv->referenceScarceResources();
     QObject *rv = 0;
-    if (enginePriv->useNewCompiler) {
-        state.creator = new QmlObjectCreator(context, cc);
-        rv = state.creator->create(start);
-        if (!rv)
-            state.errors = state.creator->errors;
-    } else {
-        state.vme.init(context, cc, start, creationContext);
-        rv = state.vme.execute(&state.errors);
-    }
+    state.creator = new QQmlObjectCreator(context, cc, creationContext);
+    rv = state.creator->create(start);
+    if (!rv)
+        state.errors = state.creator->errors;
     enginePriv->dereferenceScarceResources();
 
     if (rv) {
@@ -902,22 +916,20 @@ void QQmlComponentPrivate::beginDeferred(QQmlEnginePrivate *enginePriv,
     state->errors.clear();
     state->completePending = true;
 
-    if (enginePriv->useNewCompiler) {
-        // ###
-    } else {
-        state->vme.initDeferred(object);
-        state->vme.execute(&state->errors);
-    }
+    QQmlData *ddata = QQmlData::get(object);
+    Q_ASSERT(ddata->deferredData);
+    QQmlData::DeferredData *deferredData = ddata->deferredData;
+    QQmlContextData *creationContext = 0;
+    state->creator = new QQmlObjectCreator(deferredData->context->parent, deferredData->compiledData, creationContext);
+    if (!state->creator->populateDeferredProperties(object))
+        state->errors << state->creator->errors;
 }
 
 void QQmlComponentPrivate::complete(QQmlEnginePrivate *enginePriv, ConstructionState *state)
 {
     if (state->completePending) {
-        if (enginePriv->useNewCompiler) {
-            state->creator->finalize();
-        } else {
-            state->vme.complete();
-        }
+        QQmlInstantiationInterrupt interrupt;
+        state->creator->finalize(interrupt);
 
         state->completePending = false;
 
@@ -988,10 +1000,8 @@ QQmlComponentAttached *QQmlComponent::qmlAttachedProperties(QObject *obj)
         return a;
 
     QQmlEnginePrivate *p = QQmlEnginePrivate::get(engine);
-    if (p->activeVME) { // XXX should only be allowed during begin
-        a->add(&p->activeVME->componentAttached);
-    } else if (p->activeObjectCreator) {
-        a->add(&p->activeObjectCreator->componentAttached);
+    if (p->activeObjectCreator) { // XXX should only be allowed during begin
+        a->add(p->activeObjectCreator->componentAttachment());
     } else {
         QQmlData *d = QQmlData::get(obj);
         Q_ASSERT(d);
@@ -1056,7 +1066,8 @@ void QQmlComponent::create(QQmlIncubator &incubator, QQmlContext *context,
 
     p->compiledData = d->cc;
     p->compiledData->addref();
-    p->vme.init(contextData, d->cc, d->start, d->creationContext);
+    p->creator.reset(new QQmlObjectCreator(contextData, d->cc, d->creationContext, p.data()));
+    p->subComponentToCreate = d->start;
 
     enginePriv->incubate(incubator, forContextData);
 }
@@ -1065,7 +1076,7 @@ class QQmlComponentIncubator;
 
 class QmlIncubatorObject : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
 public:
     QmlIncubatorObject(QV8Engine *engine, QQmlIncubator::IncubationMode = QQmlIncubator::Asynchronous);
 
@@ -1081,15 +1092,15 @@ public:
     QScopedPointer<QQmlComponentIncubator> incubator;
     QV8Engine *v8;
     QPointer<QObject> parent;
-    QV4::SafeValue valuemap;
-    QV4::SafeValue qmlGlobal;
-    QV4::SafeValue m_statusChanged;
+    QV4::Value valuemap;
+    QV4::Value qmlGlobal;
+    QV4::Value m_statusChanged;
 
     void statusChanged(QQmlIncubator::Status);
     void setInitialState(QObject *);
 };
 
-DEFINE_MANAGED_VTABLE(QmlIncubatorObject);
+DEFINE_OBJECT_VTABLE(QmlIncubatorObject);
 
 class QQmlComponentIncubator : public QQmlIncubator
 {
@@ -1463,7 +1474,7 @@ QmlIncubatorObject::QmlIncubatorObject(QV8Engine *engine, QQmlIncubator::Incubat
 {
     incubator.reset(new QQmlComponentIncubator(this, m));
     v8 = engine;
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
 
     valuemap = QV4::Primitive::undefinedValue();
     qmlGlobal = QV4::Primitive::undefinedValue();

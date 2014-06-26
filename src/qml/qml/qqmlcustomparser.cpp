@@ -40,15 +40,12 @@
 ****************************************************************************/
 
 #include "qqmlcustomparser_p.h"
-#include "qqmlcustomparser_p_p.h"
 
 #include "qqmlcompiler_p.h"
 
 #include <QtCore/qdebug.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace QQmlScript;
 
 /*!
     \class QQmlCustomParser
@@ -93,138 +90,6 @@ using namespace QQmlScript;
     The \a object will be an instance of the TypeClass specified by QML_REGISTER_CUSTOM_TYPE.
 */
 
-QQmlCustomParserNode 
-QQmlCustomParserNodePrivate::fromObject(QQmlScript::Object *root)
-{
-    QQmlCustomParserNode rootNode;
-    if (root->typeReference)
-        rootNode.d->name = root->typeReference->name;
-    rootNode.d->location = root->location.start;
-
-    for (Property *p = root->properties.first(); p; p = root->properties.next(p)) {
-        rootNode.d->properties << fromProperty(p);
-    }
-
-    if (root->defaultProperty)
-        rootNode.d->properties << fromProperty(root->defaultProperty);
-
-    return rootNode;
-}
-
-QQmlCustomParserProperty 
-QQmlCustomParserNodePrivate::fromProperty(QQmlScript::Property *p)
-{
-    QQmlCustomParserProperty prop;
-    prop.d->name = p->name().toString();
-    prop.d->isList = p->values.isMany();
-    prop.d->location = p->location.start;
-
-    if (p->value) {
-        QQmlCustomParserNode node = fromObject(p->value);
-        QList<QQmlCustomParserProperty> props = node.properties();
-        for (int ii = 0; ii < props.count(); ++ii)
-            prop.d->values << QVariant::fromValue(props.at(ii));
-    } else {
-        for (QQmlScript::Value *v = p->values.first(); v; v = p->values.next(v)) {
-            v->type = QQmlScript::Value::Literal;
-
-            if(v->object) {
-                QQmlCustomParserNode node = fromObject(v->object);
-                prop.d->values << QVariant::fromValue(node);
-            } else {
-                prop.d->values << QVariant::fromValue(v->value);
-            }
-
-        }
-    }
-
-    return prop;
-}
-
-QQmlCustomParserNode::QQmlCustomParserNode()
-: d(new QQmlCustomParserNodePrivate)
-{
-}
-
-QQmlCustomParserNode::QQmlCustomParserNode(const QQmlCustomParserNode &other)
-: d(new QQmlCustomParserNodePrivate)
-{
-    *this = other;
-}
-
-QQmlCustomParserNode &QQmlCustomParserNode::operator=(const QQmlCustomParserNode &other)
-{
-    d->name = other.d->name;
-    d->properties = other.d->properties;
-    d->location = other.d->location;
-    return *this;
-}
-
-QQmlCustomParserNode::~QQmlCustomParserNode()
-{
-    delete d; d = 0;
-}
-
-QString QQmlCustomParserNode::name() const
-{
-    return d->name;
-}
-
-QList<QQmlCustomParserProperty> QQmlCustomParserNode::properties() const
-{
-    return d->properties;
-}
-
-QQmlScript::Location QQmlCustomParserNode::location() const
-{
-    return d->location;
-}
-
-QQmlCustomParserProperty::QQmlCustomParserProperty()
-: d(new QQmlCustomParserPropertyPrivate)
-{
-}
-
-QQmlCustomParserProperty::QQmlCustomParserProperty(const QQmlCustomParserProperty &other)
-: d(new QQmlCustomParserPropertyPrivate)
-{
-    *this = other;
-}
-
-QQmlCustomParserProperty &QQmlCustomParserProperty::operator=(const QQmlCustomParserProperty &other)
-{
-    d->name = other.d->name;
-    d->isList = other.d->isList;
-    d->values = other.d->values;
-    d->location = other.d->location;
-    return *this;
-}
-
-QQmlCustomParserProperty::~QQmlCustomParserProperty()
-{
-    delete d; d = 0;
-}
-
-QString QQmlCustomParserProperty::name() const
-{
-    return d->name;
-}
-
-bool QQmlCustomParserProperty::isList() const
-{
-    return d->isList;
-}
-
-QQmlScript::Location QQmlCustomParserProperty::location() const
-{
-    return d->location;
-}
-
-QList<QVariant> QQmlCustomParserProperty::assignedValues() const
-{
-    return d->values;
-}
-
 void QQmlCustomParser::clearErrors()
 {
     exceptions.clear();
@@ -233,47 +98,13 @@ void QQmlCustomParser::clearErrors()
 /*!
     Reports an error with the given \a description.
 
-    This can only be used during the compile() step. For errors during setCustomData(), use qmlInfo().
-
-    An error is generated referring to the position of the element in the source file.
+    An error is generated referring to the \a location in the source file.
 */
-void QQmlCustomParser::error(const QString& description)
-{
-    Q_ASSERT(object);
-    QQmlError error;
-    QString exceptionDescription;
-    error.setLine(object->location.start.line);
-    error.setColumn(object->location.start.column);
-    error.setDescription(description);
-    exceptions << error;
-}
-
-/*!
-    Reports an error in parsing \a prop, with the given \a description.
-
-    An error is generated referring to the position of \a node in the source file.
-*/
-void QQmlCustomParser::error(const QQmlCustomParserProperty& prop, const QString& description)
+void QQmlCustomParser::error(const QV4::CompiledData::Location &location, const QString &description)
 {
     QQmlError error;
-    QString exceptionDescription;
-    error.setLine(prop.location().line);
-    error.setColumn(prop.location().column);
-    error.setDescription(description);
-    exceptions << error;
-}
-
-/*!
-    Reports an error in parsing \a node, with the given \a description.
-
-    An error is generated referring to the position of \a node in the source file.
-*/
-void QQmlCustomParser::error(const QQmlCustomParserNode& node, const QString& description)
-{
-    QQmlError error;
-    QString exceptionDescription;
-    error.setLine(node.location().line);
-    error.setColumn(node.location().column);
+    error.setLine(location.line);
+    error.setColumn(location.column);
     error.setDescription(description);
     exceptions << error;
 }
@@ -306,14 +137,46 @@ const QMetaObject *QQmlCustomParser::resolveType(const QString& name) const
     return compiler->resolveType(name);
 }
 
-/*!
-    Rewrites \a value and returns an identifier that can be
-    used to construct the binding later. \a name
-    is used as the name of the rewritten function.
-*/
-QQmlBinding::Identifier QQmlCustomParser::bindingIdentifier(const QQmlScript::Variant &value, const QString& name)
+QQmlBinding::Identifier QQmlCustomParser::bindingIdentifier(const QV4::CompiledData::Binding *binding)
 {
-    return compiler->bindingIdentifier(name, value, QQmlCompilerTypes::BindingContext(object));
+    return compiler->bindingIdentifier(binding, this);
+}
+
+struct StaticQtMetaObject : public QObject
+{
+    static const QMetaObject *get()
+        { return &staticQtMetaObject; }
+};
+
+int QQmlCustomParserCompilerBackend::evaluateEnum(const QString &scope, const QByteArray &enumValue, bool *ok) const
+{
+    Q_ASSERT_X(ok, "QQmlCompiler::evaluateEnum", "ok must not be a null pointer");
+    *ok = false;
+
+    if (scope != QLatin1String("Qt")) {
+        QQmlType *type = 0;
+        imports().resolveType(scope, &type, 0, 0, 0);
+        return type ? type->enumValue(QHashedCStringRef(enumValue.constData(), enumValue.length()), ok) : -1;
+    }
+
+    const QMetaObject *mo = StaticQtMetaObject::get();
+    int i = mo->enumeratorCount();
+    while (i--) {
+        int v = mo->enumerator(i).keyToValue(enumValue.constData(), ok);
+        if (*ok)
+            return v;
+    }
+    return -1;
+}
+
+const QMetaObject *QQmlCustomParserCompilerBackend::resolveType(const QString &name) const
+{
+    QQmlType *qmltype = 0;
+    if (!imports().resolveType(name, &qmltype, 0, 0, 0))
+        return 0;
+    if (!qmltype)
+        return 0;
+    return qmltype->metaObject();
 }
 
 QT_END_NAMESPACE

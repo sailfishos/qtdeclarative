@@ -56,7 +56,7 @@
 #include <QtCore/qglobal.h>
 #include <private/qtqmlglobal_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4object_p.h>
 #include <private/qqmlcontext_p.h>
 #include <private/qv4functionobject_p.h>
@@ -73,7 +73,7 @@ struct QQmlIdObjectsArray;
 
 struct Q_QML_EXPORT QmlContextWrapper : Object
 {
-    Q_MANAGED
+    V4_OBJECT
     QmlContextWrapper(QV8Engine *engine, QQmlContextData *context, QObject *scopeObject, bool ownsContext = false);
     ~QmlContextWrapper();
 
@@ -97,9 +97,8 @@ struct Q_QML_EXPORT QmlContextWrapper : Object
     static void registerQmlDependencies(ExecutionEngine *context, const CompiledData::Function *compiledFunction);
 
     ReturnedValue idObjectsArray();
-    ReturnedValue qmlSingletonWrapper(const StringRef &name);
+    ReturnedValue qmlSingletonWrapper(QV8Engine *e, const StringRef &name);
 
-    QV8Engine *v8; // ### temporary, remove
     bool readOnly;
     bool ownsContext;
     bool isNullWrapper;
@@ -112,7 +111,7 @@ private:
 
 struct QQmlIdObjectsArray : public Object
 {
-    Q_MANAGED
+    V4_OBJECT
     QQmlIdObjectsArray(ExecutionEngine *engine, QmlContextWrapper *contextWrapper);
 
     static ReturnedValue getIndexed(Managed *m, uint index, bool *hasProperty);

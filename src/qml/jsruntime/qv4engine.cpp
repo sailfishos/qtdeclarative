@@ -40,7 +40,7 @@
 ****************************************************************************/
 #include <qv4engine_p.h>
 #include <qv4context_p.h>
-#include <qv4value_p.h>
+#include <qv4value_inl_p.h>
 #include <qv4object_p.h>
 #include <qv4objectproto_p.h>
 #include <qv4objectiterator_p.h>
@@ -63,10 +63,14 @@
 #include <qv4stringobject_p.h>
 #include <qv4identifiertable_p.h>
 #include "qv4debugging_p.h"
+#include "qv4profiling_p.h"
 #include "qv4executableallocator_p.h"
 #include "qv4sequenceobject_p.h"
 #include "qv4qobjectwrapper_p.h"
 #include "qv4qmlextensions_p.h"
+#include "qv4memberdata_p.h"
+
+#include <QtCore/QTextStream>
 
 #include <QtCore/QTextStream>
 
@@ -158,17 +162,20 @@ quintptr getStackLimit()
 }
 
 
-ExecutionEngine::ExecutionEngine(QQmlJS::EvalISelFactory *factory)
-    : memoryManager(new QV4::MemoryManager)
+ExecutionEngine::ExecutionEngine(EvalISelFactory *factory)
+    : current(0)
+    , memoryManager(new QV4::MemoryManager)
     , executableAllocator(new QV4::ExecutableAllocator)
     , regExpAllocator(new QV4::ExecutableAllocator)
-    , current(0)
     , bumperPointerAllocator(new WTF::BumpPointerAllocator)
     , jsStack(new WTF::PageAllocation)
     , debugger(0)
+    , profiler(0)
     , globalObject(0)
     , globalCode(0)
     , v8Engine(0)
+    , argumentsAccessors(0)
+    , nArgumentsAccessors(0)
     , m_engineId(engineSerial.fetchAndAddOrdered(1))
     , regExpCache(0)
     , m_multiplyWrappedQObjects(0)
@@ -184,11 +191,11 @@ ExecutionEngine::ExecutionEngine(QQmlJS::EvalISelFactory *factory)
 #ifdef V4_ENABLE_JIT
         static const bool forceMoth = !qgetenv("QV4_FORCE_INTERPRETER").isEmpty();
         if (forceMoth)
-            factory = new QQmlJS::Moth::ISelFactory;
+            factory = new Moth::ISelFactory;
         else
-            factory = new QQmlJS::MASM::ISelFactory;
+            factory = new JIT::ISelFactory;
 #else // !V4_ENABLE_JIT
-        factory = new QQmlJS::Moth::ISelFactory;
+        factory = new Moth::ISelFactory;
 #endif // V4_ENABLE_JIT
     }
     iselFactory.reset(factory);
@@ -199,11 +206,11 @@ ExecutionEngine::ExecutionEngine(QQmlJS::EvalISelFactory *factory)
     // we allow it to grow to 2 times JSStackLimit, as we can overshoot due to garbage collection
     // and ScopedValues allocated outside of JIT'ed methods.
     *jsStack = WTF::PageAllocation::allocate(2*JSStackLimit, WTF::OSAllocator::JSVMStackPages, true);
-    jsStackBase = (SafeValue *)jsStack->base();
+    jsStackBase = (Value *)jsStack->base();
     jsStackTop = jsStackBase;
 
     // set up stack limits
-    jsStackLimit = jsStackBase + JSStackLimit/sizeof(SafeValue);
+    jsStackLimit = jsStackBase + JSStackLimit/sizeof(Value);
     cStackLimit = getStackLimit();
 
     Scope scope(this);
@@ -213,10 +220,12 @@ ExecutionEngine::ExecutionEngine(QQmlJS::EvalISelFactory *factory)
     classPool = new InternalClassPool;
 
     emptyClass =  new (classPool) InternalClass(this);
-    executionContextClass = emptyClass->changeVTable(&ExecutionContext::static_vtbl);
-    stringClass = emptyClass->changeVTable(&String::static_vtbl);
-    regExpValueClass = emptyClass->changeVTable(&RegExp::static_vtbl);
+    executionContextClass = InternalClass::create(this, ExecutionContext::staticVTable(), 0);
+    constructClass = InternalClass::create(this, Object::staticVTable(), 0);
+    stringClass = InternalClass::create(this, String::staticVTable(), 0);
+    regExpValueClass = InternalClass::create(this, RegExp::staticVTable(), 0);
 
+    id_empty = newIdentifier(QString());
     id_undefined = newIdentifier(QStringLiteral("undefined"));
     id_null = newIdentifier(QStringLiteral("null"));
     id_true = newIdentifier(QStringLiteral("true"));
@@ -246,71 +255,79 @@ ExecutionEngine::ExecutionEngine(QQmlJS::EvalISelFactory *factory)
     id_index = newIdentifier(QStringLiteral("index"));
     id_input = newIdentifier(QStringLiteral("input"));
     id_toString = newIdentifier(QStringLiteral("toString"));
+    id_destroy = newIdentifier(QStringLiteral("destroy"));
     id_valueOf = newIdentifier(QStringLiteral("valueOf"));
 
-    ObjectPrototype *objectPrototype = new (memoryManager) ObjectPrototype(emptyClass->changeVTable(&ObjectPrototype::static_vtbl));
-    objectClass = InternalClass::create(this, &Object::static_vtbl, objectPrototype);
-    Q_ASSERT(objectClass->vtable == &Object::static_vtbl);
+    memberDataClass = InternalClass::create(this, MemberData::staticVTable(), 0);
 
-    arrayClass = InternalClass::create(this, &ArrayObject::static_vtbl, objectPrototype);
+    ObjectPrototype *objectPrototype = new (memoryManager) ObjectPrototype(InternalClass::create(this, ObjectPrototype::staticVTable(), 0));
+    objectClass = InternalClass::create(this, Object::staticVTable(), objectPrototype);
+    Q_ASSERT(objectClass->vtable == Object::staticVTable());
+
+    arrayClass = InternalClass::create(this, ArrayObject::staticVTable(), objectPrototype);
     arrayClass = arrayClass->addMember(id_length, Attr_NotConfigurable|Attr_NotEnumerable);
     ArrayPrototype *arrayPrototype = new (memoryManager) ArrayPrototype(arrayClass);
     arrayClass = arrayClass->changePrototype(arrayPrototype);
 
-    InternalClass *argsClass = InternalClass::create(this, &ArgumentsObject::static_vtbl, objectPrototype);
+    simpleArrayDataClass = InternalClass::create(this, SimpleArrayData::staticVTable(), 0);
+
+    InternalClass *argsClass = InternalClass::create(this, ArgumentsObject::staticVTable(), objectPrototype);
     argsClass = argsClass->addMember(id_length, Attr_NotEnumerable);
     argumentsObjectClass = argsClass->addMember(id_callee, Attr_Data|Attr_NotEnumerable);
     strictArgumentsObjectClass = argsClass->addMember(id_callee, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable);
     strictArgumentsObjectClass = strictArgumentsObjectClass->addMember(id_caller, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable);
-    Q_ASSERT(argumentsObjectClass->vtable == &ArgumentsObject::static_vtbl);
-    Q_ASSERT(strictArgumentsObjectClass->vtable == &ArgumentsObject::static_vtbl);
+    Q_ASSERT(argumentsObjectClass->vtable == ArgumentsObject::staticVTable());
+    Q_ASSERT(strictArgumentsObjectClass->vtable == ArgumentsObject::staticVTable());
 
     initRootContext();
 
-    StringPrototype *stringPrototype = new (memoryManager) StringPrototype(objectClass);
-    stringObjectClass = InternalClass::create(this, &String::static_vtbl, stringPrototype);
+    StringPrototype *stringPrototype = new (memoryManager) StringPrototype(InternalClass::create(this, StringPrototype::staticVTable(), objectPrototype));
+    stringObjectClass = InternalClass::create(this, String::staticVTable(), stringPrototype);
 
-    NumberPrototype *numberPrototype = new (memoryManager) NumberPrototype(objectClass);
-    numberClass = InternalClass::create(this, &NumberObject::static_vtbl, numberPrototype);
+    NumberPrototype *numberPrototype = new (memoryManager) NumberPrototype(InternalClass::create(this, NumberPrototype::staticVTable(), objectPrototype));
+    numberClass = InternalClass::create(this, NumberObject::staticVTable(), numberPrototype);
 
-    BooleanPrototype *booleanPrototype = new (memoryManager) BooleanPrototype(objectClass);
-    booleanClass = InternalClass::create(this, &BooleanObject::static_vtbl, booleanPrototype);
+    BooleanPrototype *booleanPrototype = new (memoryManager) BooleanPrototype(InternalClass::create(this, BooleanPrototype::staticVTable(), objectPrototype));
+    booleanClass = InternalClass::create(this, BooleanObject::staticVTable(), booleanPrototype);
 
-    DatePrototype *datePrototype = new (memoryManager) DatePrototype(objectClass);
-    dateClass = InternalClass::create(this, &DateObject::static_vtbl, datePrototype);
+    DatePrototype *datePrototype = new (memoryManager) DatePrototype(InternalClass::create(this, DatePrototype::staticVTable(), objectPrototype));
+    dateClass = InternalClass::create(this, DateObject::staticVTable(), datePrototype);
 
-    FunctionPrototype *functionPrototype = new (memoryManager) FunctionPrototype(InternalClass::create(this, &FunctionPrototype::static_vtbl, objectPrototype));
-    functionClass = InternalClass::create(this, &FunctionObject::static_vtbl, functionPrototype);
+    InternalClass *functionProtoClass = InternalClass::create(this, FunctionObject::staticVTable(), objectPrototype);
     uint index;
-    functionWithProtoClass = functionClass->addMember(id_prototype, Attr_NotEnumerable|Attr_NotConfigurable, &index);
+    functionProtoClass = functionProtoClass->addMember(id_prototype, Attr_NotEnumerable, &index);
+    Q_ASSERT(index == FunctionObject::Index_Prototype);
+    FunctionPrototype *functionPrototype = new (memoryManager) FunctionPrototype(functionProtoClass);
+    functionClass = InternalClass::create(this, FunctionObject::staticVTable(), functionPrototype);
+    functionClass = functionClass->addMember(id_prototype, Attr_NotEnumerable|Attr_NotConfigurable, &index);
     Q_ASSERT(index == FunctionObject::Index_Prototype);
     protoClass = objectClass->addMember(id_constructor, Attr_NotEnumerable, &index);
     Q_ASSERT(index == FunctionObject::Index_ProtoConstructor);
 
-    RegExpPrototype *regExpPrototype = new (memoryManager) RegExpPrototype(objectClass);
-    regExpClass = InternalClass::create(this, &RegExpObject::static_vtbl, regExpPrototype);
+    RegExpPrototype *regExpPrototype = new (memoryManager) RegExpPrototype(InternalClass::create(this, RegExpPrototype::staticVTable(), objectPrototype));
+    regExpClass = InternalClass::create(this, RegExpObject::staticVTable(), regExpPrototype);
     regExpExecArrayClass = arrayClass->addMember(id_index, Attr_Data, &index);
     Q_ASSERT(index == RegExpObject::Index_ArrayIndex);
     regExpExecArrayClass = regExpExecArrayClass->addMember(id_input, Attr_Data, &index);
     Q_ASSERT(index == RegExpObject::Index_ArrayInput);
 
-    ErrorPrototype *errorPrototype = new (memoryManager) ErrorPrototype(objectClass);
-    errorClass = InternalClass::create(this, &ErrorObject::static_vtbl, errorPrototype);
+    ErrorPrototype *errorPrototype = new (memoryManager) ErrorPrototype(InternalClass::create(this, ErrorObject::staticVTable(), objectPrototype));
+    errorClass = InternalClass::create(this, ErrorObject::staticVTable(), errorPrototype);
     EvalErrorPrototype *evalErrorPrototype = new (memoryManager) EvalErrorPrototype(errorClass);
-    evalErrorClass = InternalClass::create(this, &EvalErrorObject::static_vtbl, evalErrorPrototype);
+    evalErrorClass = InternalClass::create(this, EvalErrorObject::staticVTable(), evalErrorPrototype);
     RangeErrorPrototype *rangeErrorPrototype = new (memoryManager) RangeErrorPrototype(errorClass);
-    rangeErrorClass = InternalClass::create(this, &RangeErrorObject::static_vtbl, rangeErrorPrototype);
+    rangeErrorClass = InternalClass::create(this, RangeErrorObject::staticVTable(), rangeErrorPrototype);
     ReferenceErrorPrototype *referenceErrorPrototype = new (memoryManager) ReferenceErrorPrototype(errorClass);
-    referenceErrorClass = InternalClass::create(this, &ReferenceErrorObject::static_vtbl, referenceErrorPrototype);
+    referenceErrorClass = InternalClass::create(this, ReferenceErrorObject::staticVTable(), referenceErrorPrototype);
     SyntaxErrorPrototype *syntaxErrorPrototype = new (memoryManager) SyntaxErrorPrototype(errorClass);
-    syntaxErrorClass = InternalClass::create(this, &SyntaxErrorObject::static_vtbl, syntaxErrorPrototype);
+    syntaxErrorClass = InternalClass::create(this, SyntaxErrorObject::staticVTable(), syntaxErrorPrototype);
     TypeErrorPrototype *typeErrorPrototype = new (memoryManager) TypeErrorPrototype(errorClass);
-    typeErrorClass = InternalClass::create(this, &TypeErrorObject::static_vtbl, typeErrorPrototype);
+    typeErrorClass = InternalClass::create(this, TypeErrorObject::staticVTable(), typeErrorPrototype);
     URIErrorPrototype *uRIErrorPrototype = new (memoryManager) URIErrorPrototype(errorClass);
-    uriErrorClass = InternalClass::create(this, &URIErrorObject::static_vtbl, uRIErrorPrototype);
+    uriErrorClass = InternalClass::create(this, URIErrorObject::staticVTable(), uRIErrorPrototype);
 
-    VariantPrototype *variantPrototype = new (memoryManager) VariantPrototype(InternalClass::create(this, &VariantPrototype::static_vtbl, objectPrototype));
-    variantClass = InternalClass::create(this, &VariantObject::static_vtbl, variantPrototype);
+    VariantPrototype *variantPrototype = new (memoryManager) VariantPrototype(InternalClass::create(this, VariantPrototype::staticVTable(), objectPrototype));
+    variantClass = InternalClass::create(this, VariantObject::staticVTable(), variantPrototype);
     Q_ASSERT(variantClass->prototype == variantPrototype);
     Q_ASSERT(variantPrototype->internalClass->prototype == objectPrototype);
 
@@ -375,8 +392,8 @@ ExecutionEngine::ExecutionEngine(QQmlJS::EvalISelFactory *factory)
     globalObject->defineDefaultProperty(QStringLiteral("TypeError"), typeErrorCtor);
     globalObject->defineDefaultProperty(QStringLiteral("URIError"), uRIErrorCtor);
     ScopedObject o(scope);
-    globalObject->defineDefaultProperty(QStringLiteral("Math"), (o = new (memoryManager) MathObject(this)));
-    globalObject->defineDefaultProperty(QStringLiteral("JSON"), (o = new (memoryManager) JsonObject(this)));
+    globalObject->defineDefaultProperty(QStringLiteral("Math"), (o = new (memoryManager) MathObject(QV4::InternalClass::create(this, MathObject::staticVTable(), objectPrototype))));
+    globalObject->defineDefaultProperty(QStringLiteral("JSON"), (o = new (memoryManager) JsonObject(QV4::InternalClass::create(this, JsonObject::staticVTable(), objectPrototype))));
 
     globalObject->defineReadonlyProperty(QStringLiteral("undefined"), Primitive::undefinedValue());
     globalObject->defineReadonlyProperty(QStringLiteral("NaN"), Primitive::fromDouble(std::numeric_limits<double>::quiet_NaN()));
@@ -403,6 +420,7 @@ ExecutionEngine::ExecutionEngine(QQmlJS::EvalISelFactory *factory)
 ExecutionEngine::~ExecutionEngine()
 {
     delete debugger;
+    delete profiler;
     delete m_multiplyWrappedQObjects;
     m_multiplyWrappedQObjects = 0;
     delete identifierTable;
@@ -422,13 +440,20 @@ ExecutionEngine::~ExecutionEngine()
     delete executableAllocator;
     jsStack->deallocate();
     delete jsStack;
+    delete [] argumentsAccessors;
 }
 
 void ExecutionEngine::enableDebugger()
 {
     Q_ASSERT(!debugger);
     debugger = new Debugging::Debugger(this);
-    iselFactory.reset(new QQmlJS::Moth::ISelFactory);
+    iselFactory.reset(new Moth::ISelFactory);
+}
+
+void ExecutionEngine::enableProfiler()
+{
+    Q_ASSERT(!profiler);
+    profiler = new QV4::Profiling::Profiler();
 }
 
 void ExecutionEngine::initRootContext()
@@ -462,7 +487,7 @@ Returned<FunctionObject> *ExecutionEngine::newBuiltinFunction(ExecutionContext *
     return f->asReturned<FunctionObject>();
 }
 
-Returned<BoundFunction> *ExecutionEngine::newBoundFunction(ExecutionContext *scope, FunctionObjectRef target, const ValueRef boundThis, const QVector<SafeValue> &boundArgs)
+Returned<BoundFunction> *ExecutionEngine::newBoundFunction(ExecutionContext *scope, FunctionObjectRef target, const ValueRef boundThis, const QVector<Value> &boundArgs)
 {
     Q_ASSERT(target);
 
@@ -516,6 +541,8 @@ Returned<ArrayObject> *ExecutionEngine::newArrayObject(int count)
     ArrayObject *object = new (memoryManager) ArrayObject(this);
 
     if (count) {
+        Scope scope(this);
+        ScopedValue protectArray(scope, object);
         if (count < 0x1000)
             object->arrayReserve(count);
         object->setArrayLengthUnchecked(count);
@@ -550,12 +577,12 @@ Returned<DateObject> *ExecutionEngine::newDateObject(const QDateTime &dt)
 
 Returned<RegExpObject> *ExecutionEngine::newRegExpObject(const QString &pattern, int flags)
 {
-    bool global = (flags & QQmlJS::V4IR::RegExp::RegExp_Global);
+    bool global = (flags & IR::RegExp::RegExp_Global);
     bool ignoreCase = false;
     bool multiline = false;
-    if (flags & QQmlJS::V4IR::RegExp::RegExp_IgnoreCase)
+    if (flags & IR::RegExp::RegExp_IgnoreCase)
         ignoreCase = true;
-    if (flags & QQmlJS::V4IR::RegExp::RegExp_Multiline)
+    if (flags & IR::RegExp::RegExp_Multiline)
         multiline = true;
 
     Scope scope(this);
@@ -563,7 +590,7 @@ Returned<RegExpObject> *ExecutionEngine::newRegExpObject(const QString &pattern,
     return newRegExpObject(re, global);
 }
 
-Returned<RegExpObject> *ExecutionEngine::newRegExpObject(Referenced<RegExp> re, bool global)
+Returned<RegExpObject> *ExecutionEngine::newRegExpObject(RegExpRef re, bool global)
 {
     RegExpObject *object = new (memoryManager) RegExpObject(this, re, global);
     return object->asReturned<RegExpObject>();
@@ -659,32 +686,10 @@ Returned<Object> *ExecutionEngine::qmlContextObject() const
     return static_cast<CallContext *>(ctx)->activation->asReturned<Object>();
 }
 
-namespace {
-    struct LineNumberResolver {
-        const ExecutionEngine* engine;
-
-        LineNumberResolver(const ExecutionEngine *engine)
-            : engine(engine)
-        {
-        }
-
-        void resolve(StackFrame *frame, ExecutionContext *context, Function *function)
-        {
-            qptrdiff offset;
-            if (context->interpreterInstructionPointer) {
-                offset = *context->interpreterInstructionPointer - 1 - function->codeData;
-                frame->line = function->lineNumberForProgramCounter(offset);
-            } else {
-                frame->line = context->lineNumber;
-            }
-        }
-    };
-}
-
 QVector<StackFrame> ExecutionEngine::stackTrace(int frameLimit) const
 {
-    LineNumberResolver lineNumbers(this);
-
+    Scope scope(this->currentContext());
+    ScopedString name(scope);
     QVector<StackFrame> stack;
 
     QV4::ExecutionContext *c = currentContext();
@@ -694,12 +699,14 @@ QVector<StackFrame> ExecutionEngine::stackTrace(int frameLimit) const
             StackFrame frame;
             if (callCtx->function->function)
                 frame.source = callCtx->function->function->sourceFile();
-            frame.function = callCtx->function->name->toQString();
+            name = callCtx->function->name();
+            frame.function = name->toQString();
             frame.line = -1;
             frame.column = -1;
 
             if (callCtx->function->function)
-                lineNumbers.resolve(&frame, callCtx, callCtx->function->function);
+                // line numbers can be negative for places where you can't set a real breakpoint
+                frame.line = qAbs(callCtx->lineNumber);
 
             stack.append(frame);
             --frameLimit;
@@ -710,11 +717,10 @@ QVector<StackFrame> ExecutionEngine::stackTrace(int frameLimit) const
     if (frameLimit && globalCode) {
         StackFrame frame;
         frame.source = globalCode->sourceFile();
-        frame.function = globalCode->name->toQString();
-        frame.line = -1;
+        frame.function = globalCode->name()->toQString();
+        frame.line = rootContext->lineNumber;
         frame.column = -1;
 
-        lineNumbers.resolve(&frame, rootContext, globalCode);
 
         stack.append(frame);
     }
@@ -796,20 +802,26 @@ QUrl ExecutionEngine::resolvedUrl(const QString &file)
 
 void ExecutionEngine::requireArgumentsAccessors(int n)
 {
-    if (n <= argumentsAccessors.size())
+    if (n <= nArgumentsAccessors)
         return;
 
     Scope scope(this);
     ScopedFunctionObject get(scope);
     ScopedFunctionObject set(scope);
 
-    uint oldSize = argumentsAccessors.size();
-    argumentsAccessors.resize(n);
-    for (int i = oldSize; i < n; ++i) {
-        get = new (memoryManager) ArgumentsGetterFunction(rootContext, i);
-        set = new (memoryManager) ArgumentsSetterFunction(rootContext, i);
-        Property pd = Property::fromAccessor(get.getPointer(), set.getPointer());
-        argumentsAccessors[i] = pd;
+    if (n >= nArgumentsAccessors) {
+        Property *oldAccessors = argumentsAccessors;
+        int oldSize = nArgumentsAccessors;
+        nArgumentsAccessors = qMax(8, n);
+        argumentsAccessors = new Property[nArgumentsAccessors];
+        if (oldAccessors) {
+            memcpy(argumentsAccessors, oldAccessors, oldSize*sizeof(Property));
+            delete [] oldAccessors;
+        }
+        for (int i = oldSize; i < nArgumentsAccessors; ++i) {
+            argumentsAccessors[i].value = Value::fromManaged(new (memoryManager) ArgumentsGetterFunction(rootContext, i));
+            argumentsAccessors[i].set = Value::fromManaged(new (memoryManager) ArgumentsSetterFunction(rootContext, i));
+        }
     }
 }
 
@@ -819,11 +831,8 @@ void ExecutionEngine::markObjects()
 
     globalObject->mark(this);
 
-    if (globalCode)
-        globalCode->mark(this);
-
-    for (int i = 0; i < argumentsAccessors.size(); ++i) {
-        const Property &pd = argumentsAccessors.at(i);
+    for (int i = 0; i < nArgumentsAccessors; ++i) {
+        const Property &pd = argumentsAccessors[i];
         if (FunctionObject *getter = pd.getter())
             getter->mark(this);
         if (FunctionObject *setter = pd.setter())
@@ -836,11 +845,22 @@ void ExecutionEngine::markObjects()
         c = c->parent;
     }
 
+    id_empty->mark(this);
+    id_undefined->mark(this);
+    id_null->mark(this);
+    id_true->mark(this);
+    id_false->mark(this);
+    id_boolean->mark(this);
+    id_number->mark(this);
+    id_string->mark(this);
+    id_object->mark(this);
+    id_function->mark(this);
     id_length->mark(this);
     id_prototype->mark(this);
     id_constructor->mark(this);
     id_arguments->mark(this);
     id_caller->mark(this);
+    id_callee->mark(this);
     id_this->mark(this);
     id___proto__->mark(this);
     id_enumerable->mark(this);
@@ -855,6 +875,7 @@ void ExecutionEngine::markObjects()
     id_index->mark(this);
     id_input->mark(this);
     id_toString->mark(this);
+    id_destroy->mark(this);
     id_valueOf->mark(this);
 
     objectCtor.mark(this);
@@ -886,50 +907,6 @@ void ExecutionEngine::markObjects()
     for (QSet<CompiledData::CompilationUnit*>::ConstIterator it = compilationUnits.constBegin(), end = compilationUnits.constEnd();
          it != end; ++it)
         (*it)->markObjects(this);
-}
-
-namespace {
-    struct FindHelper
-    {
-        bool operator()(Function *function, quintptr pc)
-        {
-            return reinterpret_cast<quintptr>(function->code) < pc
-                   && (reinterpret_cast<quintptr>(function->code) + function->codeSize) < pc;
-        }
-
-        bool operator()(quintptr pc, Function *function)
-        {
-            return pc < reinterpret_cast<quintptr>(function->code);
-        }
-    };
-}
-
-Function *ExecutionEngine::functionForProgramCounter(quintptr pc) const
-{
-    // ### Use this code path instead of the "else" when the number of compilation units went down to
-    // one per (qml) file.
-#if 0
-    for (QSet<QV4::CompiledData::CompilationUnit*>::ConstIterator unitIt = compilationUnits.constBegin(), unitEnd = compilationUnits.constEnd();
-         unitIt != unitEnd; ++unitIt) {
-        const QVector<Function*> &functions = (*unitIt)->runtimeFunctionsSortedByAddress;
-        QVector<Function*>::ConstIterator it = qBinaryFind(functions.constBegin(),
-                                                           functions.constEnd(),
-                                                           pc, FindHelper());
-        if (it != functions.constEnd())
-            return *it;
-    }
-    return 0;
-#else
-    QMap<quintptr, Function*>::ConstIterator it = allFunctions.lowerBound(pc);
-    if (it != allFunctions.begin() && allFunctions.count() > 0)
-        --it;
-    if (it == allFunctions.end())
-        return 0;
-
-    if (pc < it.key() || pc >= it.key() + (*it)->codeSize)
-        return 0;
-    return *it;
-#endif
 }
 
 QmlExtensions *ExecutionEngine::qmlExtensions()

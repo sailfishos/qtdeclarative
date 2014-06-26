@@ -45,18 +45,19 @@
 #include <QVector>
 #include <QStringList>
 #include <QHash>
-#include <private/qv4value_def_p.h>
+#include <private/qv4value_p.h>
 #include <private/qv4executableallocator_p.h>
 
 QT_BEGIN_NAMESPACE
 
-namespace QQmlJS {
-namespace V4IR {
-struct Function;
-}
+namespace QmlIR {
+struct Document;
 }
 
 namespace QV4 {
+namespace IR {
+struct Function;
+}
 
 struct Function;
 struct ExecutionContext;
@@ -70,17 +71,37 @@ struct RegExp;
 
 struct Location
 {
-    int line;
-    int column;
+    qint32 line;
+    qint32 column;
+
+    Location(): line(-1), column(-1) {}
+
+    inline bool operator<(const Location &other) const {
+        return line < other.line ||
+               (line == other.line && column < other.column);
+    }
+};
+
+struct TypeReference
+{
+    TypeReference(const Location &loc)
+        : location(loc)
+        , needsCreation(false)
+        , errorWhenNotFound(false)
+    {}
+    Location location; // first use
+    bool needsCreation : 1; // whether the type needs to be creatable or not
+    bool errorWhenNotFound: 1;
 };
 
 // map from name index to location of first use
-struct TypeReferenceMap : QHash<int, Location>
+struct TypeReferenceMap : QHash<int, TypeReference>
 {
-    void add(int nameIndex, const Location &loc) {
-        if (contains(nameIndex))
-            return;
-        insert(nameIndex, loc);
+    TypeReference &add(int nameIndex, const Location &loc) {
+        Iterator it = find(nameIndex);
+        if (it != end())
+            return *it;
+        return *insert(nameIndex, loc);
     }
 };
 
@@ -102,7 +123,9 @@ struct Lookup
     enum Type {
         Type_Getter = 0x0,
         Type_Setter = 0x1,
-        Type_GlobalGetter = 2
+        Type_GlobalGetter = 2,
+        Type_IndexedGetter = 3,
+        Type_IndexedSetter = 4
     };
 
     quint32 type_and_flags;
@@ -127,9 +150,8 @@ struct JSClass
 
 struct String
 {
-    quint32 hash;
     quint32 flags; // isArrayIndex
-    QArrayData str;
+    qint32 size;
     // uint16 strdata[]
 
     static int calculateSize(const QString &str) {
@@ -144,12 +166,14 @@ struct Unit
     char magic[8];
     qint16 architecture;
     qint16 version;
+    quint32 unitSize; // Size of the Unit and any depending data. Does _not_ include size of data needed by QmlUnit.
 
     enum {
         IsJavascript = 0x1,
         IsQml = 0x2,
         StaticData = 0x4, // Unit data persistent in memory?
-        IsSingleton = 0x8
+        IsSingleton = 0x8,
+        IsSharedLibrary = 0x10 // .pragma shared?
     };
     quint32 flags;
     uint stringTableSize;
@@ -171,15 +195,18 @@ struct Unit
         const uint *offsetTable = reinterpret_cast<const uint*>((reinterpret_cast<const char *>(this)) + offsetToStringTable);
         const uint offset = offsetTable[idx];
         const String *str = reinterpret_cast<const String*>(reinterpret_cast<const char *>(this) + offset);
-        QStringDataPtr holder = { const_cast<QStringData *>(static_cast<const QStringData*>(&str->str)) };
-        QString qstr(holder);
+        if (str->size == 0)
+            return QString();
+        const QChar *characters = reinterpret_cast<const QChar *>(str + 1);
         if (flags & StaticData)
-            return qstr;
-        return QString(qstr.constData(), qstr.length());
+            return QString::fromRawData(characters, str->size);
+        return QString(characters, str->size);
     }
 
+    const uint *functionOffsetTable() const { return reinterpret_cast<const uint*>((reinterpret_cast<const char *>(this)) + offsetToFunctionTable); }
+
     const Function *functionAt(int idx) const {
-        const uint *offsetTable = reinterpret_cast<const uint*>((reinterpret_cast<const char *>(this)) + offsetToFunctionTable);
+        const uint *offsetTable = functionOffsetTable();
         const uint offset = offsetTable[idx];
         return reinterpret_cast<const Function*>(reinterpret_cast<const char *>(this) + offset);
     }
@@ -188,8 +215,8 @@ struct Unit
     const RegExp *regexpAt(int index) const {
         return reinterpret_cast<const RegExp*>(reinterpret_cast<const char *>(this) + offsetToRegexpTable + index * sizeof(RegExp));
     }
-    const QV4::SafeValue *constants() const {
-        return reinterpret_cast<const QV4::SafeValue*>(reinterpret_cast<const char *>(this) + offsetToConstantTable);
+    const QV4::Value *constants() const {
+        return reinterpret_cast<const QV4::Value*>(reinterpret_cast<const char *>(this) + offsetToConstantTable);
     }
 
     const JSClassMember *jsClassAt(int idx, int *nMembers) const {
@@ -201,10 +228,10 @@ struct Unit
         return reinterpret_cast<const JSClassMember*>(ptr + sizeof(JSClass));
     }
 
-    static int calculateSize(uint headerSize, uint nStrings, uint nFunctions, uint nRegExps, uint nConstants,
+    static int calculateSize(uint headerSize, uint nFunctions, uint nRegExps, uint nConstants,
                              uint nLookups, uint nClasses) {
         return (headerSize
-                + (nStrings + nFunctions + nClasses) * sizeof(uint)
+                + (nFunctions + nClasses) * sizeof(uint)
                 + nRegExps * RegExp::calculateSize()
                 + nConstants * sizeof(QV4::ReturnedValue)
                 + nLookups * Lookup::calculateSize()
@@ -228,8 +255,6 @@ struct Function
     quint32 formalsOffset;
     quint32 nLocals;
     quint32 localsOffset;
-    quint32 nLineNumberMappingEntries;
-    quint32 lineNumberMappingOffset; // Array of uint pairs (offset and line number)
     quint32 nInnerFunctions;
     quint32 innerFunctionsOffset;
     Location location;
@@ -250,21 +275,25 @@ struct Function
 
     const quint32 *formalsTable() const { return reinterpret_cast<const quint32 *>(reinterpret_cast<const char *>(this) + formalsOffset); }
     const quint32 *localsTable() const { return reinterpret_cast<const quint32 *>(reinterpret_cast<const char *>(this) + localsOffset); }
-    const quint32 *lineNumberMapping() const { return reinterpret_cast<const quint32 *>(reinterpret_cast<const char *>(this) + lineNumberMappingOffset); }
     const quint32 *qmlIdObjectDependencyTable() const { return reinterpret_cast<const quint32 *>(reinterpret_cast<const char *>(this) + dependingIdObjectsOffset); }
     const quint32 *qmlContextPropertiesDependencyTable() const { return reinterpret_cast<const quint32 *>(reinterpret_cast<const char *>(this) + dependingContextPropertiesOffset); }
     const quint32 *qmlScopePropertiesDependencyTable() const { return reinterpret_cast<const quint32 *>(reinterpret_cast<const char *>(this) + dependingScopePropertiesOffset); }
 
     inline bool hasQmlDependencies() const { return nDependingIdObjects > 0 || nDependingContextProperties > 0 || nDependingScopeProperties > 0; }
 
-    static int calculateSize(int nFormals, int nLocals, int nInnerfunctions, int lineNumberMappings, int nIdObjectDependencies, int nPropertyDependencies) {
-        return (sizeof(Function) + (nFormals + nLocals + nInnerfunctions + 2 * lineNumberMappings + nIdObjectDependencies + 2 * nPropertyDependencies) * sizeof(quint32) + 7) & ~0x7;
+    static int calculateSize(int nFormals, int nLocals, int nInnerfunctions, int nIdObjectDependencies, int nPropertyDependencies) {
+        return (sizeof(Function) + (nFormals + nLocals + nInnerfunctions + nIdObjectDependencies + 2 * nPropertyDependencies) * sizeof(quint32) + 7) & ~0x7;
     }
 };
 
 // Qml data structures
 
-struct Binding
+struct Q_QML_EXPORT TranslationData {
+    quint32 commentIndex;
+    int number;
+};
+
+struct Q_QML_PRIVATE_EXPORT Binding
 {
     quint32 propertyNameIndex;
 
@@ -273,6 +302,8 @@ struct Binding
         Type_Boolean,
         Type_Number,
         Type_String,
+        Type_Translation,
+        Type_TranslationById,
         Type_Script,
         Type_Object,
         Type_AttachedProperty,
@@ -280,7 +311,13 @@ struct Binding
     };
 
     enum Flags {
-        IsSignalHandlerExpression = 0x1
+        IsSignalHandlerExpression = 0x1,
+        IsSignalHandlerObject = 0x2,
+        IsOnAssignment = 0x4,
+        InitializerForReadOnlyDeclaration = 0x8,
+        IsResolvedEnum = 0x10,
+        IsListItem = 0x20,
+        IsBindingToAlias = 0x40
     };
 
     quint32 flags : 16;
@@ -290,12 +327,64 @@ struct Binding
         double d;
         quint32 compiledScriptIndex; // used when Type_Script
         quint32 objectIndex;
+        TranslationData translationData; // used when Type_Translation
     } value;
-    quint32 stringIndex; // Set for Type_String and Type_Script (the latter because of script strings)
+    quint32 stringIndex; // Set for Type_String, Type_Translation and Type_Script (the latter because of script strings)
 
     Location location;
+    Location valueLocation;
+
+    bool isValueBinding() const
+    {
+        if (type == Type_AttachedProperty
+            || type == Type_GroupProperty)
+            return false;
+        if (flags & IsSignalHandlerExpression
+            || flags & IsSignalHandlerObject)
+            return false;
+        return true;
+    }
+
+    bool isValueBindingNoAlias() const { return isValueBinding() && !(flags & IsBindingToAlias); }
+    bool isValueBindingToAlias() const { return isValueBinding() && (flags & IsBindingToAlias); }
+
+    bool isSignalHandler() const
+    {
+        if (flags & IsSignalHandlerExpression || flags & IsSignalHandlerObject) {
+            Q_ASSERT(!isValueBinding());
+            Q_ASSERT(!isAttachedProperty());
+            Q_ASSERT(!isGroupProperty());
+            return true;
+        }
+        return false;
+    }
+
+    bool isAttachedProperty() const
+    {
+        if (type == Type_AttachedProperty) {
+            Q_ASSERT(!isValueBinding());
+            Q_ASSERT(!isSignalHandler());
+            Q_ASSERT(!isGroupProperty());
+            return true;
+        }
+        return false;
+    }
+
+    bool isGroupProperty() const
+    {
+        if (type == Type_GroupProperty) {
+            Q_ASSERT(!isValueBinding());
+            Q_ASSERT(!isSignalHandler());
+            Q_ASSERT(!isAttachedProperty());
+            return true;
+        }
+        return false;
+    }
+
+    bool evaluatesToString() const { return type == Type_String || type == Type_Translation || type == Type_TranslationById; }
 
     QString valueAsString(const Unit *unit) const;
+    QString valueAsScriptString(const Unit *unit) const;
     double valueAsNumber() const
     {
         if (type == Type_Number)
@@ -369,7 +458,7 @@ struct Object
     // it will be the name of the attached type.
     quint32 inheritedTypeNameIndex;
     quint32 idIndex;
-    quint32 indexOfDefaultProperty;
+    qint32 indexOfDefaultProperty; // -1 means no default property declared in this object
     quint32 nFunctions;
     quint32 offsetToFunctions;
     quint32 nProperties;
@@ -435,11 +524,14 @@ struct Import
     qint32 minorVersion;
 
     Location location;
+
+    Import(): type(0), uriIndex(0), qualifierIndex(0), majorVersion(0), minorVersion(0) {}
 };
 
 struct QmlUnit
 {
     Unit header;
+    quint32 qmlUnitSize; // size including header and all surrounding data.
     quint32 nImports;
     quint32 offsetToImports;
     quint32 nObjects;
@@ -467,54 +559,63 @@ struct QmlUnit
 //    CompilationUnit * (for functions that need to clean up)
 //    CompiledData::Function *compiledFunction
 
-struct Q_QML_EXPORT CompilationUnit
+struct Q_QML_PRIVATE_EXPORT CompilationUnit
 {
+#ifdef V4_BOOTSTRAP
     CompilationUnit()
         : refCount(0)
-        , engine(0)
         , data(0)
-        , ownsData(false)
+    {}
+    virtual ~CompilationUnit() {}
+#else
+    CompilationUnit()
+        : refCount(0)
+        , data(0)
+        , engine(0)
         , runtimeStrings(0)
         , runtimeLookups(0)
         , runtimeRegularExpressions(0)
         , runtimeClasses(0)
     {}
     virtual ~CompilationUnit();
+#endif
 
     void ref() { ++refCount; }
     void deref() { if (!--refCount) delete this; }
 
     int refCount;
-    ExecutionEngine *engine;
     Unit *data;
-    bool ownsData;
 
+    // Called only when building QML, when we build the header for JS first and append QML data
+    virtual QV4::CompiledData::Unit *createUnitData(QmlIR::Document *irDocument);
+
+#ifndef V4_BOOTSTRAP
+    ExecutionEngine *engine;
     QString fileName() const { return data->stringAt(data->sourceFileIndex); }
 
-    QV4::SafeString *runtimeStrings; // Array
+    QV4::StringValue *runtimeStrings; // Array
     QV4::Lookup *runtimeLookups;
-    QV4::SafeValue *runtimeRegularExpressions;
+    QV4::Value *runtimeRegularExpressions;
     QV4::InternalClass **runtimeClasses;
     QVector<QV4::Function *> runtimeFunctions;
-//    QVector<QV4::Function *> runtimeFunctionsSortedByAddress;
 
     QV4::Function *linkToEngine(QV4::ExecutionEngine *engine);
     void unlink();
 
     virtual QV4::ExecutableAllocator::ChunkOfPages *chunkForFunction(int /*functionIndex*/) { return 0; }
 
-    // ### runtime data
-    // pointer to qml data for QML unit
-
     void markObjects(QV4::ExecutionEngine *e);
 
 protected:
     virtual void linkBackendToEngine(QV4::ExecutionEngine *engine) = 0;
+#endif // V4_BOOTSTRAP
 };
 
 }
 
 }
+
+Q_DECLARE_TYPEINFO(QV4::CompiledData::JSClassMember, Q_PRIMITIVE_TYPE);
 
 QT_END_NAMESPACE
 

@@ -47,24 +47,18 @@ using namespace QV4;
 
 const ManagedVTable Managed::static_vtbl =
 {
-    call,
-    construct,
-    0 /*markObjects*/,
-    destroy,
-    0 /*collectDeletables*/,
+    Managed::IsExecutionContext,
+    Managed::IsString,
+    Managed::IsObject,
+    Managed::IsFunctionObject,
+    Managed::IsErrorObject,
+    Managed::IsArrayData,
     0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    isEqualTo,
-    0,
+    Managed::MyType,
     "Managed",
+    destroy,
+    0 /*markObjects*/,
+    isEqualTo
 };
 
 
@@ -101,7 +95,7 @@ ExecutionEngine *Managed::engine() const
 QString Managed::className() const
 {
     const char *s = 0;
-    switch (Type(type)) {
+    switch (Type(internalClass->vtable->type)) {
     case Type_Invalid:
     case Type_String:
         return QString();
@@ -157,18 +151,23 @@ QString Managed::className() const
     case Type_ArgumentsObject:
         s = "Arguments";
         break;
-    case Type_JSONObject:
+    case Type_JsonObject:
         s = "JSON";
         break;
     case Type_MathObject:
         s = "Math";
         break;
+
+    case Type_ExecutionContext:
+        s = "__ExecutionContext";
+        break;
     case Type_ForeachIteratorObject:
         s = "__ForeachIterator";
         break;
     case Type_RegExp:
-        s = "RegExp";
+        s = "__RegExp";
         break;
+
     case Type_QmlSequence:
         s = "QmlSequence";
         break;
@@ -182,67 +181,7 @@ void Managed::setVTable(const ManagedVTable *vt)
     internalClass = internalClass->changeVTable(vt);
 }
 
-ReturnedValue Managed::construct(Managed *m, CallData *)
-{
-    return m->engine()->currentContext()->throwTypeError();
-}
-
-ReturnedValue Managed::call(Managed *m, CallData *)
-{
-    return m->engine()->currentContext()->throwTypeError();
-}
-
-ReturnedValue Managed::getLookup(Managed *m, Lookup *)
-{
-    return m->engine()->currentContext()->throwTypeError();
-}
-
-void Managed::setLookup(Managed *m, Lookup *, const ValueRef)
-{
-    m->engine()->currentContext()->throwTypeError();
-}
-
 bool Managed::isEqualTo(Managed *, Managed *)
 {
     return false;
-}
-
-ReturnedValue Managed::get(const StringRef name, bool *hasProperty)
-{
-    return internalClass->vtable->get(this, name, hasProperty);
-}
-
-ReturnedValue Managed::getIndexed(uint index, bool *hasProperty)
-{
-    return internalClass->vtable->getIndexed(this, index, hasProperty);
-}
-
-void Managed::put(const StringRef name, const ValueRef value)
-{
-    internalClass->vtable->put(this, name, value);
-}
-
-void Managed::setLookup(Lookup *l, const ValueRef v)
-{
-    internalClass->vtable->setLookup(this, l, v);
-}
-
-void Managed::putIndexed(uint index, const ValueRef value)
-{
-    internalClass->vtable->putIndexed(this, index, value);
-}
-
-PropertyAttributes Managed::query(StringRef name) const
-{
-    return internalClass->vtable->query(this, name);
-}
-
-bool Managed::deleteProperty(const StringRef name)
-{
-    return internalClass->vtable->deleteProperty(this, name);
-}
-
-Property *Managed::advanceIterator(ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attributes)
-{
-    return internalClass->vtable->advanceIterator(this, it, name, index, attributes);
 }

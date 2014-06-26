@@ -52,7 +52,7 @@
 #include <private/qqmlincubator_p.h>
 #include <private/qqmlcompiler_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4functionobject_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -61,7 +61,7 @@ class QQmlDelegateModelItem;
 
 struct DelegateModelGroupFunction: QV4::FunctionObject
 {
-    Q_MANAGED
+    V4_OBJECT
 
     QV4::ReturnedValue (*code)(QQmlDelegateModelItem *item, uint flag, const QV4::ValueRef arg);
     uint flag;
@@ -71,7 +71,7 @@ struct DelegateModelGroupFunction: QV4::FunctionObject
         , code(code)
         , flag(flag)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
 
     static QV4::ReturnedValue construct(QV4::Managed *m, QV4::CallData *)
@@ -93,7 +93,7 @@ struct DelegateModelGroupFunction: QV4::FunctionObject
     }
 };
 
-DEFINE_MANAGED_VTABLE(DelegateModelGroupFunction);
+DEFINE_OBJECT_VTABLE(DelegateModelGroupFunction);
 
 
 
@@ -1136,7 +1136,7 @@ static void incrementIndexes(QQmlDelegateModelItem *cacheItem, int count, const 
             incubationTask->index[i] += deltas[i];
     }
     if (QQmlDelegateModelAttached *attached = cacheItem->attached) {
-        for (int i = 1; i < count; ++i)
+        for (int i = 1; i < qMin<int>(count, Compositor::MaximumGroupCount); ++i)
             attached->m_currentIndex[i] += deltas[i];
     }
 }
@@ -1521,64 +1521,9 @@ void QQmlDelegateModel::_q_dataChanged(const QModelIndex &begin, const QModelInd
         _q_itemsChanged(begin.row(), end.row() - begin.row() + 1, roles);
 }
 
-void QQmlDelegateModel::_q_layoutAboutToBeChanged(const QList<QPersistentModelIndex> &parents, QAbstractItemModel::LayoutChangeHint hint)
+void QQmlDelegateModel::_q_layoutChanged()
 {
-    Q_D(QQmlDelegateModel);
-    if (!d->m_complete)
-        return;
-
-    if (hint == QAbstractItemModel::VerticalSortHint) {
-        d->m_storedPersistentIndexes.clear();
-        if (!parents.contains(d->m_adaptorModel.rootIndex))
-            return;
-
-        for (int i = 0; i < d->m_count; ++i) {
-            const QModelIndex index = d->m_adaptorModel.aim()->index(i, 0, d->m_adaptorModel.rootIndex);
-            d->m_storedPersistentIndexes.append(index);
-        }
-    } else if (hint == QAbstractItemModel::HorizontalSortHint) {
-        // Ignored
-    } else {
-        // Triggers model reset, no preparations for that are needed
-    }
-}
-
-void QQmlDelegateModel::_q_layoutChanged(const QList<QPersistentModelIndex> &parents, QAbstractItemModel::LayoutChangeHint hint)
-{
-    Q_D(QQmlDelegateModel);
-    if (!d->m_complete)
-        return;
-
-    if (hint == QAbstractItemModel::VerticalSortHint) {
-        if (!parents.contains(d->m_adaptorModel.rootIndex))
-            return;
-
-        for (int i = 0, c = d->m_storedPersistentIndexes.count(); i < c; ++i) {
-            const QPersistentModelIndex &index = d->m_storedPersistentIndexes.at(i);
-            if (i == index.row())
-                continue;
-
-            QVector<Compositor::Insert> inserts;
-            QVector<Compositor::Remove> removes;
-            d->m_compositor.listItemsMoved(&d->m_adaptorModel, i, index.row(), 1, &removes, &inserts);
-            if (!removes.isEmpty() || !inserts.isEmpty()) {
-                d->itemsMoved(removes, inserts);
-            }
-        }
-
-        d->m_storedPersistentIndexes.clear();
-
-        // layoutUpdate does not necessarily have any move changes, but it can
-        // also mean data changes. We can't detect what exactly has changed, so
-        // just emit it for all items
-        _q_itemsChanged(0, d->m_count, QVector<int>());
-
-    } else if (hint == QAbstractItemModel::HorizontalSortHint) {
-        // Ignored
-    } else {
-        // We don't know what's going on, so reset the model
-        _q_modelReset();
-    }
+    _q_modelReset();
 }
 
 QQmlDelegateModelAttached *QQmlDelegateModel::qmlAttachedProperties(QObject *obj)
@@ -1684,37 +1629,46 @@ void QQmlDelegateModelItemMetaType::initializePrototype()
     proto->defineAccessorProperty(QStringLiteral("model"), QQmlDelegateModelItem::get_model, 0);
     proto->defineAccessorProperty(QStringLiteral("groups"), QQmlDelegateModelItem::get_groups, QQmlDelegateModelItem::set_groups);
     QV4::ScopedString s(scope);
+    QV4::ScopedProperty p(scope);
+
     s = v4->newString(QStringLiteral("isUnresolved"));
-    QV4::Property *p = proto->insertMember(s, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
     p->setGetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, 30, QQmlDelegateModelItem::get_member));
+    p->setSetter(0);
+    proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
+
     s = v4->newString(QStringLiteral("inItems"));
-    p = proto->insertMember(s, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
     p->setGetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, QQmlListCompositor::Default, QQmlDelegateModelItem::get_member));
     p->setSetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, QQmlListCompositor::Default, QQmlDelegateModelItem::set_member));
+    proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
+
     s = v4->newString(QStringLiteral("inPersistedItems"));
-    p = proto->insertMember(s, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
     p->setGetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, QQmlListCompositor::Persisted, QQmlDelegateModelItem::get_member));
     p->setSetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, QQmlListCompositor::Persisted, QQmlDelegateModelItem::set_member));
+    proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
+
     s = v4->newString(QStringLiteral("itemsIndex"));
-    p = proto->insertMember(s, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
     p->setGetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, QQmlListCompositor::Default, QQmlDelegateModelItem::get_index));
+    proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
+
     s = v4->newString(QStringLiteral("persistedItemsIndex"));
-    p = proto->insertMember(s, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
     p->setGetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, QQmlListCompositor::Persisted, QQmlDelegateModelItem::get_index));
+    p->setSetter(0);
+    proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
 
     for (int i = 2; i < groupNames.count(); ++i) {
         QString propertyName = QStringLiteral("in") + groupNames.at(i);
         propertyName.replace(2, 1, propertyName.at(2).toUpper());
         s = v4->newString(propertyName);
-        p = proto->insertMember(s, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
         p->setGetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, i + 1, QQmlDelegateModelItem::get_member));
         p->setSetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, i + 1, QQmlDelegateModelItem::set_member));
+        proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
     }
     for (int i = 2; i < groupNames.count(); ++i) {
         const QString propertyName = groupNames.at(i) + QStringLiteral("Index");
         s = v4->newString(propertyName);
-        p = proto->insertMember(s, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
         p->setGetter(new (v4->memoryManager) DelegateModelGroupFunction(v4->rootContext, i + 1, QQmlDelegateModelItem::get_index));
+        p->setSetter(0);
+        proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
     }
     modelItemProto = proto;
 }
@@ -1747,7 +1701,7 @@ int QQmlDelegateModelItemMetaType::parseGroups(const QV4::ValueRef groups) const
     QV4::ScopedArrayObject array(scope, groups);
     if (array) {
         QV4::ScopedValue v(scope);
-        uint arrayLength = array->arrayLength();
+        uint arrayLength = array->getLength();
         for (uint i = 0; i < arrayLength; ++i) {
             v = array->getIndexed(i);
             const QString groupName = v->toQString();
@@ -1841,7 +1795,7 @@ QV4::ReturnedValue QQmlDelegateModelItem::get_index(QQmlDelegateModelItem *thisI
 
 //---------------------------------------------------------------------------
 
-DEFINE_MANAGED_VTABLE(QQmlDelegateModelItemObject);
+DEFINE_OBJECT_VTABLE(QQmlDelegateModelItemObject);
 
 QQmlDelegateModelItemObject::~QQmlDelegateModelItemObject()
 {
@@ -1918,11 +1872,8 @@ void QQmlDelegateModelItem::incubateObject(
 
     incubatorPriv->compiledData = componentPriv->cc;
     incubatorPriv->compiledData->addref();
-    incubatorPriv->vme.init(
-            context,
-            componentPriv->cc,
-            componentPriv->start,
-            componentPriv->creationContext);
+    incubatorPriv->creator.reset(new QQmlObjectCreator(context, componentPriv->cc, componentPriv->creationContext));
+    incubatorPriv->subComponentToCreate = componentPriv->start;
 
     enginePriv->incubate(*incubationTask, forContext);
 }
@@ -2054,7 +2005,7 @@ QQmlDelegateModelAttached::QQmlDelegateModelAttached(
 {
     QQml_setParent_noEvent(this, parent);
     if (QQDMIncubationTask *incubationTask = m_cacheItem->incubationTask) {
-        for (int i = 1; i < m_cacheItem->metaType->groupCount; ++i)
+        for (int i = 1; i < qMin<int>(m_cacheItem->metaType->groupCount, Compositor::MaximumGroupCount); ++i)
             m_currentIndex[i] = m_previousIndex[i] = incubationTask->index[i];
     } else {
         QQmlDelegateModelPrivate * const model = QQmlDelegateModelPrivate::get(m_cacheItem->metaType->model);
@@ -2964,15 +2915,17 @@ void QQmlDelegateModelGroup::move(QQmlV4Function *args)
 }
 
 /*!
-    \qmlsignal QtQml.Models::DelegateModelGroup::onChanged(array removed, array inserted)
+    \qmlsignal QtQml.Models::DelegateModelGroup::changed(array removed, array inserted)
 
-    This handler is called when items have been removed from or inserted into the group.
+    This signal is emitted when items have been removed from or inserted into the group.
 
     Each object in the \a removed and \a inserted arrays has two values; the \e index of the first
     item inserted or removed and a \e count of the number of consecutive items inserted or removed.
 
     Each index is adjusted for previous changes with all removed items preceding any inserted
     items.
+
+    The corresponding handler is \c onChanged.
 */
 
 //============================================================================
@@ -3195,11 +3148,11 @@ void QQmlPartsModel::emitModelUpdated(const QQmlChangeSet &changeSet, bool reset
 
 struct QQmlDelegateModelGroupChange : QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
     QQmlDelegateModelGroupChange(QV4::ExecutionEngine *engine)
         : Object(engine)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
 
     static QV4::ReturnedValue method_get_index(QV4::CallContext *ctx) {
@@ -3229,17 +3182,20 @@ struct QQmlDelegateModelGroupChange : QV4::Object
     QQmlChangeSet::Change change;
 };
 
-DEFINE_MANAGED_VTABLE(QQmlDelegateModelGroupChange);
+DEFINE_OBJECT_VTABLE(QQmlDelegateModelGroupChange);
 
 class QQmlDelegateModelGroupChangeArray : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
 public:
     QQmlDelegateModelGroupChangeArray(QV4::ExecutionEngine *engine)
         : Object(engine)
     {
-        setVTable(&static_vtbl);
-        flags &= ~SimpleArray;
+        setVTable(staticVTable());
+        QV4::Scope scope(engine);
+        QV4::ScopedObject protectThis(scope, this);
+        Q_UNUSED(protectThis);
+        setArrayType(QV4::ArrayData::Custom);
     }
     virtual ~QQmlDelegateModelGroupChangeArray() {}
 
@@ -3294,7 +3250,7 @@ public:
 
 };
 
-DEFINE_MANAGED_VTABLE(QQmlDelegateModelGroupChangeArray);
+DEFINE_OBJECT_VTABLE(QQmlDelegateModelGroupChangeArray);
 
 class QQmlDelegateModelGroupRemoveArray : public QQmlDelegateModelGroupChangeArray
 {

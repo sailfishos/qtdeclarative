@@ -44,7 +44,7 @@
 #include <qqmlcontext.h>
 #include <private/qqmlengine_p.h>
 #include <private/qv8engine_p.h>
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4engine_p.h>
 #include <private/qv4object_p.h>
 
@@ -132,12 +132,16 @@ typedef QPair<int, int> QQuickXmlListRange;
 
     For example, if there is an XML document like this:
 
-    \quotefile qml/xmlrole.qml
+    \quotefile qml/xmlrole.xml
     Here are some valid XPath expressions for XmlRole queries on this document:
 
     \snippet qml/xmlrole.qml 0
     \dots 4
     \snippet qml/xmlrole.qml 1
+
+    Accessing the model data for the above roles from a delegate:
+
+    \snippet qml/xmlrole.qml 2
 
     See the \l{http://www.w3.org/TR/xpath20/}{W3C XPath 2.0 specification} for more information.
 */
@@ -539,7 +543,7 @@ class QQuickXmlListModelPrivate : public QAbstractItemModelPrivate
     Q_DECLARE_PUBLIC(QQuickXmlListModel)
 public:
     QQuickXmlListModelPrivate()
-        : isComponentComplete(true), size(-1), highestRole(Qt::UserRole)
+        : isComponentComplete(true), size(0), highestRole(Qt::UserRole)
         , reply(0), status(QQuickXmlListModel::Null), progress(0.0)
         , queryId(-1), roleObjects(), redirectCount(0) {}
 
@@ -925,10 +929,12 @@ QQmlV4Handle QQuickXmlListModel::get(int index) const
     ExecutionEngine *v4engine = QV8Engine::getV4(v8engine);
     Scope scope(v4engine);
     Scoped<Object> o(scope, v4engine->newObject());
+    ScopedString name(scope);
+    ScopedValue value(scope);
     for (int ii = 0; ii < d->roleObjects.count(); ++ii) {
-        ScopedString name(scope, v4engine->newIdentifier(d->roleObjects[ii]->name()));
-        Property *p = o->insertMember(name, PropertyAttributes());
-        p->value = v8engine->fromVariant(d->data.value(ii).value(index));
+        name = v4engine->newIdentifier(d->roleObjects[ii]->name());
+        value = v8engine->fromVariant(d->data.value(ii).value(index));
+        o->insertMember(name, value);
     }
 
     return QQmlV4Handle(o);

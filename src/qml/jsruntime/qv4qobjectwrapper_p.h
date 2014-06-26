@@ -62,7 +62,7 @@
 #include <private/qqmlpropertycache_p.h>
 #include <private/qintrusivelist_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4functionobject_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -77,7 +77,7 @@ struct QObjectSlotDispatcher;
 
 struct Q_QML_EXPORT QObjectWrapper : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
 
     enum RevisionMode { IgnoreRevision, CheckRevision };
 
@@ -111,18 +111,13 @@ private:
     QQmlPropertyData *findProperty(ExecutionEngine *engine, QQmlContextData *qmlContext, String *name, RevisionMode revisionMode, QQmlPropertyData *local) const;
 
     QPointer<QObject> m_object;
-    SafeString m_destroy;
 
     static ReturnedValue get(Managed *m, const StringRef name, bool *hasProperty);
     static void put(Managed *m, const StringRef name, const ValueRef value);
     static PropertyAttributes query(const Managed *, StringRef name);
-    static Property *advanceIterator(Managed *m, ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attributes);
+    static void advanceIterator(Managed *m, ObjectIterator *it, StringRef name, uint *index, Property *p, PropertyAttributes *attributes);
     static void markObjects(Managed *that, QV4::ExecutionEngine *e);
-    static void collectDeletables(Managed *m, GCDeletable **deletable);
-    static void destroy(Managed *that)
-    {
-        static_cast<QObjectWrapper *>(that)->~QObjectWrapper();
-    }
+    static void destroy(Managed *that);
 
     static ReturnedValue method_connect(CallContext *ctx);
     static ReturnedValue method_disconnect(CallContext *ctx);
@@ -130,7 +125,7 @@ private:
 
 struct QObjectMethod : public QV4::FunctionObject
 {
-    Q_MANAGED
+    V4_OBJECT
 
     enum { DestroyMethod = -1, ToStringMethod = -2 };
 
@@ -161,7 +156,7 @@ private:
 
 struct QmlSignalHandler : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
 
     QmlSignalHandler(ExecutionEngine *engine, QObject *object, int signalIndex);
 
@@ -199,6 +194,8 @@ public:
 private Q_SLOTS:
     void removeDestroyedObject(QObject*);
 };
+
+DEFINE_REF(QObjectWrapper, Object);
 
 }
 

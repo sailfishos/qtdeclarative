@@ -75,13 +75,12 @@
 
 using namespace QV4;
 
-DEFINE_MANAGED_VTABLE(StringObject);
+DEFINE_OBJECT_VTABLE(StringObject);
 
 StringObject::StringObject(InternalClass *ic)
     : Object(ic)
 {
-    setVTable(&static_vtbl);
-    type = Type_StringObject;
+    Q_ASSERT(internalClass->vtable == staticVTable());
 
     Scope scope(engine());
     ScopedObject protectThis(scope, this);
@@ -96,8 +95,7 @@ StringObject::StringObject(InternalClass *ic)
 StringObject::StringObject(ExecutionEngine *engine, const ValueRef val)
     : Object(engine->stringObjectClass)
 {
-    setVTable(&static_vtbl);
-    type = Type_StringObject;
+    setVTable(staticVTable());
 
     Scope scope(engine);
     ScopedObject protectThis(scope, this);
@@ -137,26 +135,32 @@ bool StringObject::deleteIndexedProperty(Managed *m, uint index)
     return true;
 }
 
-Property *StringObject::advanceIterator(Managed *m, ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attrs)
+void StringObject::advanceIterator(Managed *m, ObjectIterator *it, StringRef name, uint *index, Property *p, PropertyAttributes *attrs)
 {
     name = (String *)0;
     StringObject *s = static_cast<StringObject *>(m);
     uint slen = s->value.stringValue()->toQString().length();
-    if (it->arrayIndex < slen) {
+    if (it->arrayIndex <= slen) {
         while (it->arrayIndex < slen) {
             *index = it->arrayIndex;
             ++it->arrayIndex;
-            if (attrs)
-                *attrs = s->arrayAttributes ? s->arrayAttributes[it->arrayIndex] : PropertyAttributes(Attr_NotWritable|Attr_NotConfigurable);
-            return s->__getOwnProperty__(*index);
+            PropertyAttributes a;
+            Property *pd = s->__getOwnProperty__(*index, &a);
+            if (!(it->flags & ObjectIterator::EnumerableOnly) || a.isEnumerable()) {
+                *attrs = a;
+                p->copy(*pd, a);
+                return;
+            }
         }
-        it->arrayNode = s->sparseArrayBegin();
-        // iterate until we're past the end of the string
-        while (it->arrayNode && it->arrayNode->key() < slen)
-            it->arrayNode = it->arrayNode->nextNode();
+        if (s->arrayData) {
+            it->arrayNode = s->sparseBegin();
+            // iterate until we're past the end of the string
+            while (it->arrayNode && it->arrayNode->key() < slen)
+                it->arrayNode = it->arrayNode->nextNode();
+        }
     }
 
-    return Object::advanceIterator(m, it, name, index, attrs);
+    return Object::advanceIterator(m, it, name, index, p, attrs);
 }
 
 void StringObject::markObjects(Managed *that, ExecutionEngine *e)
@@ -167,12 +171,12 @@ void StringObject::markObjects(Managed *that, ExecutionEngine *e)
     Object::markObjects(that, e);
 }
 
-DEFINE_MANAGED_VTABLE(StringCtor);
+DEFINE_OBJECT_VTABLE(StringCtor);
 
 StringCtor::StringCtor(ExecutionContext *scope)
     : FunctionObject(scope, QStringLiteral("String"))
 {
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
 }
 
 ReturnedValue StringCtor::construct(Managed *m, CallData *callData)
@@ -301,7 +305,7 @@ ReturnedValue StringPrototype::method_concat(CallContext *context)
 
     ScopedValue v(scope);
     for (int i = 0; i < context->callData->argc; ++i) {
-        v = __qmljs_to_string(context, ValueRef(&context->callData->args[i]));
+        v = RuntimeHelpers::toString(context, ValueRef(&context->callData->args[i]));
         if (scope.hasException())
             return Encode::undefined();
         Q_ASSERT(v->isString());
@@ -345,7 +349,7 @@ ReturnedValue StringPrototype::method_lastIndexOf(CallContext *context)
         searchString = context->callData->args[0].toQString();
 
     ScopedValue posArg(scope, context->argument(1));
-    double position = __qmljs_to_number(posArg);
+    double position = RuntimeHelpers::toNumber(posArg);
     if (std::isnan(position))
         position = +qInf();
     else
@@ -446,7 +450,7 @@ static void appendReplacementString(QString *result, const QString &input, const
             uint substStart = JSC::Yarr::offsetNoMatch;
             uint substEnd = JSC::Yarr::offsetNoMatch;
             if (ch == '$') {
-                *result += QLatin1Char(ch);
+                *result += QChar(ch);
                 continue;
             } else if (ch == '&') {
                 substStart = matchOffsets[0];
@@ -459,7 +463,8 @@ static void appendReplacementString(QString *result, const QString &input, const
                 substEnd = input.length();
             } else if (ch >= '1' && ch <= '9') {
                 uint capture = ch - '0';
-                if (capture > 0 && capture < static_cast<uint>(captureCount)) {
+                Q_ASSERT(capture > 0);
+                if (capture < static_cast<uint>(captureCount)) {
                     substStart = matchOffsets[capture * 2];
                     substEnd = matchOffsets[capture * 2 + 1];
                 }
@@ -494,8 +499,8 @@ ReturnedValue StringPrototype::method_replace(CallContext *ctx)
     int numCaptures = 0;
     int numStringMatches = 0;
 
-    uint allocatedMatchOffsets = 32;
-    uint _matchOffsets[32];
+    uint allocatedMatchOffsets = 64;
+    uint _matchOffsets[64];
     uint *matchOffsets = _matchOffsets;
     uint nMatchOffsets = 0;
 
@@ -503,21 +508,24 @@ ReturnedValue StringPrototype::method_replace(CallContext *ctx)
     Scoped<RegExpObject> regExp(scope, searchValue);
     if (regExp) {
         uint offset = 0;
+
+        // We extract the pointer here to work around a compiler bug on Android.
+        Scoped<RegExp> re(scope, regExp->value);
         while (true) {
             int oldSize = nMatchOffsets;
-            if (allocatedMatchOffsets < nMatchOffsets + regExp->value->captureCount() * 2) {
-                allocatedMatchOffsets = qMax(allocatedMatchOffsets * 2, nMatchOffsets + regExp->value->captureCount() * 2);
+            if (allocatedMatchOffsets < nMatchOffsets + re->captureCount() * 2) {
+                allocatedMatchOffsets = qMax(allocatedMatchOffsets * 2, nMatchOffsets + re->captureCount() * 2);
                 uint *newOffsets = (uint *)malloc(allocatedMatchOffsets*sizeof(uint));
                 memcpy(newOffsets, matchOffsets, nMatchOffsets*sizeof(uint));
                 if (matchOffsets != _matchOffsets)
                     free(matchOffsets);
                 matchOffsets = newOffsets;
             }
-            if (regExp->value->match(string, offset, matchOffsets + oldSize) == JSC::Yarr::offsetNoMatch) {
+            if (re->match(string, offset, matchOffsets + oldSize) == JSC::Yarr::offsetNoMatch) {
                 nMatchOffsets = oldSize;
                 break;
             }
-            nMatchOffsets += regExp->value->captureCount() * 2;
+            nMatchOffsets += re->captureCount() * 2;
             if (!regExp->global)
                 break;
             offset = qMax(offset + 1, matchOffsets[oldSize + 1]);
@@ -694,18 +702,18 @@ ReturnedValue StringPrototype::method_split(CallContext *ctx)
             array->push_back((s = ctx->engine->newString(text.mid(offset, matchOffsets[0] - offset))));
             offset = qMax(offset + 1, matchOffsets[1]);
 
-            if (array->arrayLength() >= limit)
+            if (array->getLength() >= limit)
                 break;
 
             for (int i = 1; i < re->value->captureCount(); ++i) {
                 uint start = matchOffsets[i * 2];
                 uint end = matchOffsets[i * 2 + 1];
                 array->push_back((s = ctx->engine->newString(text.mid(start, end - start))));
-                if (array->arrayLength() >= limit)
+                if (array->getLength() >= limit)
                     break;
             }
         }
-        if (array->arrayLength() < limit)
+        if (array->getLength() < limit)
             array->push_back((s = ctx->engine->newString(text.mid(offset))));
     } else {
         QString separator = separatorValue->toString(ctx)->toQString();
@@ -720,10 +728,10 @@ ReturnedValue StringPrototype::method_split(CallContext *ctx)
         while ((end = text.indexOf(separator, start)) != -1) {
             array->push_back((s = ctx->engine->newString(text.mid(start, end - start))));
             start = end + separator.size();
-            if (array->arrayLength() >= limit)
+            if (array->getLength() >= limit)
                 break;
         }
-        if (array->arrayLength() < limit && start != -1)
+        if (array->getLength() < limit && start != -1)
             array->push_back((s = ctx->engine->newString(text.mid(start))));
     }
     return array.asReturnedValue();

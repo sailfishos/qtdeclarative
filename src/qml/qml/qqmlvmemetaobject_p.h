@@ -71,7 +71,7 @@
 #include <private/qv8engine_p.h>
 #include <private/qflagpointer_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -113,7 +113,7 @@ struct QQmlVMEMetaData
             return (propertyIdx & 0xFFFF0000) ? propType : 0;
         }
     };
-    
+
     struct PropertyData {
         int propertyType;
     };
@@ -173,6 +173,9 @@ public:
     void connectAliasSignal(int index, bool indexInSignalRange);
 
     virtual QAbstractDynamicMetaObject *toDynamicMetaObject(QObject *o);
+
+    // Used by auto-tests for inspection
+    QQmlPropertyCache *propertyCache() const { return cache; }
 
     static inline QQmlVMEMetaObject *get(QObject *o);
     static QQmlVMEMetaObject *getForProperty(QObject *o, int coreIndex);

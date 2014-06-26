@@ -57,7 +57,8 @@
 #  include "private/qv4isel_masm_p.h"
 #endif // V4_ENABLE_JIT
 
-#include <QtCore>
+#include <QtCore/QCoreApplication>
+#include <QtCore/QFile>
 #include <private/qqmljsengine_p.h>
 #include <private/qqmljslexer_p.h>
 #include <private/qqmljsparser_p.h>
@@ -71,8 +72,9 @@ using namespace QV4;
 
 struct Print: FunctionObject
 {
+    V4_OBJECT
     Print(ExecutionContext *scope): FunctionObject(scope, QStringLiteral("print")) {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
 
     static ReturnedValue call(Managed *, CallData *callData)
@@ -86,29 +88,26 @@ struct Print: FunctionObject
         std::cout << std::endl;
         return Encode::undefined();
     }
-
-    static const ManagedVTable static_vtbl;
 };
 
-DEFINE_MANAGED_VTABLE(Print);
+DEFINE_OBJECT_VTABLE(Print);
 
 struct GC: public FunctionObject
 {
+    V4_OBJECT
     GC(ExecutionContext* scope)
         : FunctionObject(scope, QStringLiteral("gc"))
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
     static ReturnedValue call(Managed *m, CallData *)
     {
         m->engine()->memoryManager->runGC();
         return Encode::undefined();
     }
-
-    static const ManagedVTable static_vtbl;
 };
 
-DEFINE_MANAGED_VTABLE(GC);
+DEFINE_OBJECT_VTABLE(GC);
 
 } // builtins
 
@@ -176,12 +175,12 @@ int main(int argc, char *argv[])
     switch (mode) {
     case use_masm:
     case use_moth: {
-        QQmlJS::EvalISelFactory* iSelFactory = 0;
+        QV4::EvalISelFactory* iSelFactory = 0;
         if (mode == use_moth) {
-            iSelFactory = new QQmlJS::Moth::ISelFactory;
+            iSelFactory = new QV4::Moth::ISelFactory;
 #ifdef V4_ENABLE_JIT
         } else {
-            iSelFactory = new QQmlJS::MASM::ISelFactory;
+            iSelFactory = new QV4::JIT::ISelFactory;
 #endif // V4_ENABLE_JIT
         }
 

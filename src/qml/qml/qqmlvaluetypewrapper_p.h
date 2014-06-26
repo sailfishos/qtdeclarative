@@ -56,7 +56,7 @@
 #include <QtCore/qglobal.h>
 #include <private/qtqmlglobal_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4object_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -68,7 +68,7 @@ namespace QV4 {
 
 struct Q_QML_EXPORT QmlValueTypeWrapper : Object
 {
-    Q_MANAGED
+    V4_OBJECT
 protected:
     enum ObjectType { Reference, Copy };
     QmlValueTypeWrapper(QV8Engine *engine, ObjectType type);

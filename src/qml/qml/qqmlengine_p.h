@@ -69,6 +69,7 @@
 #include "qqmldirparser_p.h"
 #include <private/qintrusivelist_p.h>
 #include <private/qrecyclepool_p.h>
+#include <private/qfieldlist_p.h>
 
 #include <QtCore/qlist.h>
 #include <QtCore/qpair.h>
@@ -98,10 +99,10 @@ class QQmlComponentAttached;
 class QQmlCleanup;
 class QQmlDelayedError;
 class QQuickWorkerScriptEngine;
-class QQmlVME;
-class QmlObjectCreator;
+class QQmlObjectCreator;
 class QDir;
 class QQmlIncubator;
+class QQmlProfiler;
 
 // This needs to be declared here so that the pool for it can live in QQmlEnginePrivate.
 // The inline method definitions are in qqmljavascriptexpression_p.h
@@ -146,6 +147,8 @@ public:
     QQmlContext *rootContext;
     bool isDebugging;
     bool useNewCompiler;
+    QQmlProfiler *profiler;
+    void enableProfiler();
 
     bool outputWarningsToStdErr;
 
@@ -167,11 +170,7 @@ public:
     typedef QPair<QPointer<QObject>,int> FinalizeCallback;
     void registerFinalizeCallback(QObject *obj, int index);
 
-    // --- old compiler:
-    QQmlVME *activeVME;
-    // --- new compiler:
-    QmlObjectCreator *activeObjectCreator;
-    // ---
+    QQmlObjectCreator *activeObjectCreator;
 
     QNetworkAccessManager *createNetworkAccessManager(QObject *parent) const;
     QNetworkAccessManager *getNetworkAccessManager() const;
@@ -271,16 +270,16 @@ public:
     mutable QMutex mutex;
 
 private:
-    // Locker locks the QQmlEnginePrivate data structures for read and write, if necessary.  
-    // Currently, locking is only necessary if the threaded loader is running concurrently.  If it is 
+    // Locker locks the QQmlEnginePrivate data structures for read and write, if necessary.
+    // Currently, locking is only necessary if the threaded loader is running concurrently.  If it is
     // either idle, or is running with the main thread blocked, no locking is necessary.  This way
     // we only pay for locking when we have to.
-    // Consequently, this class should only be used to protect simple accesses or modifications of the 
+    // Consequently, this class should only be used to protect simple accesses or modifications of the
     // QQmlEnginePrivate structures or operations that can be guaranteed not to start activity
     // on the loader thread.
-    // The Locker API is identical to QMutexLocker.  Locker reuses the QQmlEnginePrivate::mutex 
+    // The Locker API is identical to QMutexLocker.  Locker reuses the QQmlEnginePrivate::mutex
     // QMutex instance and multiple Lockers are recursive in the same thread.
-    class Locker 
+    class Locker
     {
     public:
         inline Locker(const QQmlEngine *);
@@ -333,7 +332,7 @@ QQmlEnginePrivate::Locker::~Locker()
 
 void QQmlEnginePrivate::Locker::unlock()
 {
-    if (m_locked) { 
+    if (m_locked) {
         m_ep->mutex.unlock();
         m_locked = false;
     }
@@ -373,7 +372,7 @@ thread, \a value will be deleted immediately.
 This method should be used for *any* type that has resources that need to
 be freed in the engine thread.  This is generally types that use V8 handles.
 As there is some small overhead in checking the current thread, it is best
-practice to check if any V8 handles actually need to be freed and delete 
+practice to check if any V8 handles actually need to be freed and delete
 the instance directly if not.
 */
 template<typename T>
@@ -384,7 +383,7 @@ void QQmlEnginePrivate::deleteInEngineThread(T *value)
     Q_ASSERT(value);
     if (isEngineThread()) {
         delete value;
-    } else { 
+    } else {
         struct I : public Deletable {
             I(T *value) : value(value) {}
             ~I() { delete value; }
@@ -420,10 +419,10 @@ is returned.
 The returned cache is not referenced, so if it is to be stored, call addref().
 
 XXX thread There is a potential future race condition in this and all the cache()
-functions.  As the QQmlPropertyCache is returned unreferenced, when called 
-from the loader thread, it is possible that the cache will have been dereferenced 
+functions.  As the QQmlPropertyCache is returned unreferenced, when called
+from the loader thread, it is possible that the cache will have been dereferenced
 and deleted before the loader thread has a chance to use or reference it.  This
-can't currently happen as the cache holds a reference to the 
+can't currently happen as the cache holds a reference to the
 QQmlPropertyCache until the QQmlEngine is destroyed.
 */
 QQmlPropertyCache *QQmlEnginePrivate::cache(QObject *obj)
@@ -475,8 +474,8 @@ QQmlPropertyCache *QQmlEnginePrivate::cache(QQmlType *type, int minorVersion, QQ
     return rv;
 }
 
-QV8Engine *QQmlEnginePrivate::getV8Engine(QQmlEngine *e) 
-{ 
+QV8Engine *QQmlEnginePrivate::getV8Engine(QQmlEngine *e)
+{
     Q_ASSERT(e);
 
     return e->d_func()->v8engine();
@@ -489,32 +488,32 @@ QV4::ExecutionEngine *QQmlEnginePrivate::getV4Engine(QQmlEngine *e)
     return e->d_func()->v4engine();
 }
 
-QQmlEnginePrivate *QQmlEnginePrivate::get(QQmlEngine *e) 
-{ 
+QQmlEnginePrivate *QQmlEnginePrivate::get(QQmlEngine *e)
+{
     Q_ASSERT(e);
 
     return e->d_func();
 }
 
-const QQmlEnginePrivate *QQmlEnginePrivate::get(const QQmlEngine *e) 
-{ 
+const QQmlEnginePrivate *QQmlEnginePrivate::get(const QQmlEngine *e)
+{
     Q_ASSERT(e);
 
     return e->d_func();
 }
 
-QQmlEnginePrivate *QQmlEnginePrivate::get(QQmlContext *c) 
-{ 
-    return (c && c->engine()) ? QQmlEnginePrivate::get(c->engine()) : 0; 
+QQmlEnginePrivate *QQmlEnginePrivate::get(QQmlContext *c)
+{
+    return (c && c->engine()) ? QQmlEnginePrivate::get(c->engine()) : 0;
 }
 
-QQmlEnginePrivate *QQmlEnginePrivate::get(QQmlContextData *c) 
-{ 
-    return (c && c->engine) ? QQmlEnginePrivate::get(c->engine) : 0; 
+QQmlEnginePrivate *QQmlEnginePrivate::get(QQmlContextData *c)
+{
+    return (c && c->engine) ? QQmlEnginePrivate::get(c->engine) : 0;
 }
 
-QQmlEngine *QQmlEnginePrivate::get(QQmlEnginePrivate *p) 
-{ 
+QQmlEngine *QQmlEnginePrivate::get(QQmlEnginePrivate *p)
+{
     Q_ASSERT(p);
 
     return p->q_func();

@@ -74,23 +74,22 @@ struct Q_QML_EXPORT ObjectIterator
     uint memberIndex;
     uint flags;
 
-    Property tmpDynamicProperty;
-
-    ObjectIterator(SafeObject *scratch1, SafeObject *scratch2, const ObjectRef o, uint flags);
+    ObjectIterator(Value *scratch1, Value *scratch2, const ObjectRef o, uint flags);
     ObjectIterator(Scope &scope, const ObjectRef o, uint flags);
-    Property *next(StringRef name, uint *index, PropertyAttributes *attributes = 0);
+    void next(StringRef name, uint *index, Property *pd, PropertyAttributes *attributes = 0);
     ReturnedValue nextPropertyName(ValueRef value);
     ReturnedValue nextPropertyNameAsString(ValueRef value);
     ReturnedValue nextPropertyNameAsString();
 };
 
 struct ForEachIteratorObject: Object {
-    Q_MANAGED
+    V4_OBJECT
+    Q_MANAGED_TYPE(ForeachIteratorObject)
     ObjectIterator it;
     ForEachIteratorObject(ExecutionContext *ctx, const ObjectRef o)
-        : Object(ctx->engine), it(workArea, workArea + 1, o, ObjectIterator::EnumerableOnly|ObjectIterator::WithProtoChain) {
-        setVTable(&static_vtbl);
-        type = Type_ForeachIteratorObject;
+        : Object(ctx->engine), it(workArea, workArea + 1,
+                                  o, ObjectIterator::EnumerableOnly|ObjectIterator::WithProtoChain) {
+        setVTable(staticVTable());
     }
 
     ReturnedValue nextPropertyName() { return it.nextPropertyNameAsString(); }
@@ -98,7 +97,7 @@ struct ForEachIteratorObject: Object {
 protected:
     static void markObjects(Managed *that, ExecutionEngine *e);
 
-    SafeObject workArea[2];
+    Value workArea[2];
 };
 
 

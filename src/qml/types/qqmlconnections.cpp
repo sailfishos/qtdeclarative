@@ -46,6 +46,7 @@
 #include <private/qqmlboundsignal_p.h>
 #include <qqmlcontext.h>
 #include <private/qqmlcontext_p.h>
+#include <private/qqmlcompiler_p.h>
 #include <qqmlinfo.h>
 
 #include <QtCore/qdebug.h>
@@ -68,6 +69,7 @@ public:
     bool componentcomplete;
 
     QByteArray data;
+    QQmlRefPointer<QQmlCompiledData> cdata;
 };
 
 /*!
@@ -203,60 +205,46 @@ void QQmlConnections::setIgnoreUnknownSignals(bool ignore)
     d->ignoreUnknownSignals = ignore;
 }
 
-
-
-QByteArray
-QQmlConnectionsParser::compile(const QList<QQmlCustomParserProperty> &props)
+QByteArray QQmlConnectionsParser::compile(const QV4::CompiledData::QmlUnit *qmlUnit, const QList<const QV4::CompiledData::Binding *> &props)
 {
     QByteArray rv;
     QDataStream ds(&rv, QIODevice::WriteOnly);
 
-    for(int ii = 0; ii < props.count(); ++ii)
-    {
-        QString propName = props.at(ii).name();
-        int propLine = props.at(ii).location().line;
-        int propColumn = props.at(ii).location().column;
+    for (int ii = 0; ii < props.count(); ++ii) {
+        const QV4::CompiledData::Binding *binding = props.at(ii);
+        QString propName = qmlUnit->header.stringAt(binding->propertyNameIndex);
 
         if (!propName.startsWith(QLatin1String("on")) || !propName.at(2).isUpper()) {
             error(props.at(ii), QQmlConnections::tr("Cannot assign to non-existent property \"%1\"").arg(propName));
             return QByteArray();
         }
 
-        QList<QVariant> values = props.at(ii).assignedValues();
 
-        for (int i = 0; i < values.count(); ++i) {
-            const QVariant &value = values.at(i);
-
-            if (value.userType() == qMetaTypeId<QQmlCustomParserNode>()) {
-                error(props.at(ii), QQmlConnections::tr("Connections: nested objects not allowed"));
-                return QByteArray();
-            } else if (value.userType() == qMetaTypeId<QQmlCustomParserProperty>()) {
-                error(props.at(ii), QQmlConnections::tr("Connections: syntax error"));
-                return QByteArray();
-            } else {
-                QQmlScript::Variant v = qvariant_cast<QQmlScript::Variant>(value);
-                if (v.isScript()) {
-                    ds << propName;
-                    ds << v.asScript();
-                    ds << propLine;
-                    ds << propColumn;
-                } else {
-                    error(props.at(ii), QQmlConnections::tr("Connections: script expected"));
-                    return QByteArray();
-                }
-            }
+        if (binding->type >= QV4::CompiledData::Binding::Type_Object) {
+            const QV4::CompiledData::Object *target = qmlUnit->objectAt(binding->value.objectIndex);
+            if (!qmlUnit->header.stringAt(target->inheritedTypeNameIndex).isEmpty())
+                error(binding, QQmlConnections::tr("Connections: nested objects not allowed"));
+            else
+                error(binding, QQmlConnections::tr("Connections: syntax error"));
+            return QByteArray();
+        } if (binding->type != QV4::CompiledData::Binding::Type_Script) {
+            error(binding, QQmlConnections::tr("Connections: script expected"));
+            return QByteArray();
+        } else {
+            ds << propName;
+            ds << bindingIdentifier(binding);
         }
     }
 
     return rv;
 }
 
-void QQmlConnectionsParser::setCustomData(QObject *object,
-                                            const QByteArray &data)
+void QQmlConnectionsParser::setCustomData(QObject *object, const QByteArray &data, QQmlCompiledData *cdata)
 {
     QQmlConnectionsPrivate *p =
         static_cast<QQmlConnectionsPrivate *>(QObjectPrivate::get(object));
     p->data = data;
+    p->cdata = cdata;
 }
 
 
@@ -270,12 +258,8 @@ void QQmlConnections::connectSignals()
     while (!ds.atEnd()) {
         QString propName;
         ds >> propName;
-        QString script;
-        ds >> script;
-        int line;
-        ds >> line;
-        int column;
-        ds >> column;
+        int bindingId;
+        ds >> bindingId;
 
         QQmlProperty prop(target(), propName);
         if (prop.isValid() && (prop.type() & QQmlProperty::SignalProperty)) {
@@ -283,19 +267,15 @@ void QQmlConnections::connectSignals()
             QQmlBoundSignal *signal =
                 new QQmlBoundSignal(target(), signalIndex, this, qmlEngine(this));
 
-            QString location;
             QQmlContextData *ctxtdata = 0;
             QQmlData *ddata = QQmlData::get(this);
             if (ddata) {
                 ctxtdata = ddata->outerContext;
-                if (ctxtdata && !ctxtdata->url.isEmpty())
-                    location = ddata->outerContext->urlString;
             }
 
             QQmlBoundSignalExpression *expression = ctxtdata ?
                 new QQmlBoundSignalExpression(target(), signalIndex,
-                                              ctxtdata, this, script,
-                                              location, line, column) : 0;
+                                              ctxtdata, this, d->cdata->functionForBindingId(bindingId)) : 0;
             signal->takeExpression(expression);
             d->boundsignals += signal;
         } else {

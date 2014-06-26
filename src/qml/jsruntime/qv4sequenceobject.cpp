@@ -123,7 +123,7 @@ static QString convertElementToString(const QUrl &element)
 static QString convertElementToString(qreal element)
 {
     QString qstr;
-    __qmljs_numberToString(&qstr, element, 10);
+    RuntimeHelpers::numberToString(&qstr, element, 10);
     return qstr;
 }
 
@@ -165,34 +165,33 @@ template <> bool convertValueToElement(const ValueRef value)
 template <typename Container>
 class QQmlSequence : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
+    Q_MANAGED_TYPE(QmlSequence)
 public:
     QQmlSequence(QV4::ExecutionEngine *engine, const Container &container)
-        : QV4::Object(InternalClass::create(engine, &static_vtbl, engine->sequencePrototype.asObject()))
+        : QV4::Object(InternalClass::create(engine, staticVTable(), engine->sequencePrototype.asObject()))
         , m_container(container)
         , m_object(0)
         , m_propertyIndex(-1)
         , m_isReference(false)
     {
-        type = Type_QmlSequence;
-        flags &= ~SimpleArray;
         QV4::Scope scope(engine);
         QV4::ScopedObject protectThis(scope, this);
         Q_UNUSED(protectThis);
+        setArrayType(ArrayData::Custom);
         init();
     }
 
     QQmlSequence(QV4::ExecutionEngine *engine, QObject *object, int propertyIndex)
-        : QV4::Object(InternalClass::create(engine, &static_vtbl, engine->sequencePrototype.asObject()))
+        : QV4::Object(InternalClass::create(engine, staticVTable(), engine->sequencePrototype.asObject()))
         , m_object(object)
         , m_propertyIndex(propertyIndex)
         , m_isReference(true)
     {
-        type = Type_QmlSequence;
-        flags &= ~SimpleArray;
         QV4::Scope scope(engine);
         QV4::ScopedObject protectThis(scope, this);
         Q_UNUSED(protectThis);
+        setArrayType(ArrayData::Custom);
         loadReference();
         init();
     }
@@ -287,26 +286,27 @@ public:
         return (signedIdx < m_container.count()) ? QV4::Attr_Data : QV4::Attr_Invalid;
     }
 
-    Property *containerAdvanceIterator(ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attrs)
+    void containerAdvanceIterator(ObjectIterator *it, StringRef name, uint *index, Property *p, PropertyAttributes *attrs)
     {
         name = (String *)0;
         *index = UINT_MAX;
 
         if (m_isReference) {
-            if (!m_object)
-                return QV4::Object::advanceIterator(this, it, name, index, attrs);
+            if (!m_object) {
+                QV4::Object::advanceIterator(this, it, name, index, p, attrs);
+                return;
+            }
             loadReference();
         }
 
         if (it->arrayIndex < static_cast<uint>(m_container.count())) {
-            if (attrs)
-                *attrs = QV4::Attr_Data;
             *index = it->arrayIndex;
             ++it->arrayIndex;
-            it->tmpDynamicProperty.value = convertElementToValue(engine(), m_container.at(*index));
-            return &it->tmpDynamicProperty;
+            *attrs = QV4::Attr_Data;
+            p->value = convertElementToValue(engine(), m_container.at(*index));
+            return;
         }
-        return QV4::Object::advanceIterator(this, it, name, index, attrs);
+        QV4::Object::advanceIterator(this, it, name, index, p, attrs);
     }
 
     bool containerDeleteIndexedProperty(uint index)
@@ -469,7 +469,7 @@ public:
     {
         QV4::Scope scope(array->engine());
         Container result;
-        quint32 length = array->arrayLength();
+        quint32 length = array->getLength();
         QV4::ScopedValue v(scope);
         for (quint32 i = 0; i < length; ++i)
             result << convertValueToElement<typename Container::value_type>((v = array->getIndexed(i)));
@@ -510,8 +510,8 @@ private:
     { return static_cast<QQmlSequence<Container> *>(that)->containerDeleteIndexedProperty(index); }
     static bool isEqualTo(Managed *that, Managed *other)
     { return static_cast<QQmlSequence<Container> *>(that)->containerIsEqualTo(other); }
-    static Property *advanceIterator(Managed *that, ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attrs)
-    { return static_cast<QQmlSequence<Container> *>(that)->containerAdvanceIterator(it, name, index, attrs); }
+    static void advanceIterator(Managed *that, ObjectIterator *it, StringRef name, uint *index, Property *p, PropertyAttributes *attrs)
+    { return static_cast<QQmlSequence<Container> *>(that)->containerAdvanceIterator(it, name, index, p, attrs); }
 
     static void destroy(Managed *that)
     {
@@ -521,22 +521,22 @@ private:
 
 typedef QQmlSequence<QStringList> QQmlQStringList;
 template<>
-DEFINE_MANAGED_VTABLE(QQmlQStringList);
+DEFINE_OBJECT_VTABLE(QQmlQStringList);
 typedef QQmlSequence<QList<QString> > QQmlStringList;
 template<>
-DEFINE_MANAGED_VTABLE(QQmlStringList);
+DEFINE_OBJECT_VTABLE(QQmlStringList);
 typedef QQmlSequence<QList<int> > QQmlIntList;
 template<>
-DEFINE_MANAGED_VTABLE(QQmlIntList);
+DEFINE_OBJECT_VTABLE(QQmlIntList);
 typedef QQmlSequence<QList<QUrl> > QQmlUrlList;
 template<>
-DEFINE_MANAGED_VTABLE(QQmlUrlList);
+DEFINE_OBJECT_VTABLE(QQmlUrlList);
 typedef QQmlSequence<QList<bool> > QQmlBoolList;
 template<>
-DEFINE_MANAGED_VTABLE(QQmlBoolList);
+DEFINE_OBJECT_VTABLE(QQmlBoolList);
 typedef QQmlSequence<QList<qreal> > QQmlRealList;
 template<>
-DEFINE_MANAGED_VTABLE(QQmlRealList);
+DEFINE_OBJECT_VTABLE(QQmlRealList);
 
 #define REGISTER_QML_SEQUENCE_METATYPE(unused, unused2, SequenceType, unused3) qRegisterMetaType<SequenceType>(#SequenceType);
 SequencePrototype::SequencePrototype(InternalClass *ic)

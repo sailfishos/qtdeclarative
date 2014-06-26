@@ -51,7 +51,6 @@
 #include <QOpenGLFramebufferObjectFormat>
 #include <QtCore/QThread>
 #include <QtGui/QGuiApplication>
-#include <private/qsystrace_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -240,7 +239,6 @@ bool QQuickContext2DTexture::canvasDestroyed()
 
 void QQuickContext2DTexture::paint(QQuickContext2DCommandBuffer *ccb)
 {
-    QSystraceEvent systrace("graphics", "QQuickContext2DTexture::paint");
     if (canvasDestroyed()) {
         delete ccb;
         return;
@@ -429,7 +427,6 @@ QSGTexture *QQuickContext2DFBOTexture::textureForNextFrame(QSGTexture *lastTextu
     if (m_fbo) {
         if (!texture) {
             texture = new QSGPlainTexture();
-            texture->setHasMipmaps(false);
             texture->setHasAlphaChannel(true);
             texture->setOwnsTexture(false);
             m_dirtyTexture = true;
@@ -482,9 +479,9 @@ bool QQuickContext2DFBOTexture::doMultisampling() const
     static bool multisamplingSupported = false;
 
     if (!extensionsChecked) {
-        QList<QByteArray> extensions = QByteArray((const char *)glGetString(GL_EXTENSIONS)).split(' ');
-        multisamplingSupported = extensions.contains("GL_EXT_framebuffer_multisample")
-                && extensions.contains("GL_EXT_framebuffer_blit");
+        const QSet<QByteArray> extensions = m_context->glContext()->extensions();
+        multisamplingSupported = extensions.contains(QByteArrayLiteral("GL_EXT_framebuffer_multisample"))
+            && extensions.contains(QByteArrayLiteral("GL_EXT_framebuffer_blit"));
         extensionsChecked = true;
     }
 
@@ -657,7 +654,6 @@ QSGTexture *QQuickContext2DImageTexture::textureForNextFrame(QSGTexture *last)
 
     if (!texture) {
         texture = new QSGPlainTexture();
-        texture->setHasMipmaps(false);
         texture->setHasAlphaChannel(true);
         m_dirtyTexture = true;
     }

@@ -46,9 +46,9 @@
 
 #include <qqmlinfo.h>
 #include <private/qqmlcustomparser_p.h>
-#include <private/qqmlscript_p.h>
 #include <qqmlexpression.h>
 #include <private/qqmlbinding_p.h>
+#include <private/qqmlcompiler_p.h>
 #include <qqmlcontext.h>
 #include <private/qqmlproperty_p.h>
 #include <private/qqmlcontext_p.h>
@@ -205,6 +205,7 @@ public:
 
     QPointer<QObject> object;
     QByteArray data;
+    QQmlRefPointer<QQmlCompiledData> cdata;
 
     bool decoded : 1;
     bool restore : 1;
@@ -236,73 +237,65 @@ public:
     QQmlProperty property(const QString &);
 };
 
-void
-QQuickPropertyChangesParser::compileList(QList<QPair<QString, QVariant> > &list,
-                                     const QString &pre,
-                                     const QQmlCustomParserProperty &prop)
+void QQuickPropertyChangesParser::compileList(QList<QPair<QString, const QV4::CompiledData::Binding*> > &list, const QString &pre, const QV4::CompiledData::QmlUnit *qmlUnit, const QV4::CompiledData::Binding *binding)
 {
-    QString propName = pre + prop.name();
+    QString propName = pre + qmlUnit->header.stringAt(binding->propertyNameIndex);
 
-    QList<QVariant> values = prop.assignedValues();
-    for (int ii = 0; ii < values.count(); ++ii) {
-        const QVariant &value = values.at(ii);
-
-        if (value.userType() == qMetaTypeId<QQmlCustomParserNode>()) {
-            error(qvariant_cast<QQmlCustomParserNode>(value),
-                  QQuickPropertyChanges::tr("PropertyChanges does not support creating state-specific objects."));
-            continue;
-        } else if(value.userType() == qMetaTypeId<QQmlCustomParserProperty>()) {
-
-            QQmlCustomParserProperty prop =
-                qvariant_cast<QQmlCustomParserProperty>(value);
-            QString pre = propName + QLatin1Char('.');
-            compileList(list, pre, prop);
-
-        } else {
-            list << qMakePair(propName, value);
-        }
+    if (binding->type == QV4::CompiledData::Binding::Type_Object) {
+        error(qmlUnit->objectAt(binding->value.objectIndex), QQuickPropertyChanges::tr("PropertyChanges does not support creating state-specific objects."));
+        return;
     }
+
+    if (binding->type == QV4::CompiledData::Binding::Type_GroupProperty
+        || binding->type == QV4::CompiledData::Binding::Type_AttachedProperty) {
+        QString pre = propName + QLatin1Char('.');
+        const QV4::CompiledData::Object *subObj = qmlUnit->objectAt(binding->value.objectIndex);
+        const QV4::CompiledData::Binding *subBinding = subObj->bindingTable();
+        for (quint32 i = 0; i < subObj->nBindings; ++i, ++subBinding) {
+            compileList(list, pre, qmlUnit, subBinding);
+        }
+        return;
+    }
+
+    list << qMakePair(propName, binding);
 }
 
-QByteArray
-QQuickPropertyChangesParser::compile(const QList<QQmlCustomParserProperty> &props)
+QByteArray QQuickPropertyChangesParser::compile(const QV4::CompiledData::QmlUnit *qmlUnit, const QList<const QV4::CompiledData::Binding *> &props)
 {
-    QList<QPair<QString, QVariant> > data;
-    for(int ii = 0; ii < props.count(); ++ii)
-        compileList(data, QString(), props.at(ii));
+    QList<QPair<QString, const QV4::CompiledData::Binding *> > data;
+    for (int ii = 0; ii < props.count(); ++ii)
+        compileList(data, QString(), qmlUnit, props.at(ii));
 
     QByteArray rv;
     QDataStream ds(&rv, QIODevice::WriteOnly);
 
     ds << data.count();
-    for(int ii = 0; ii < data.count(); ++ii) {
-        QQmlScript::Variant v = qvariant_cast<QQmlScript::Variant>(data.at(ii).second);
+    for (int ii = 0; ii < data.count(); ++ii) {
+        const QV4::CompiledData::Binding *binding = data.at(ii).second;
+        ds << data.at(ii).first << int(binding->type);
         QVariant var;
-        bool isScript = v.isScript();
-        QQmlBinding::Identifier id = 0;
-        switch(v.type()) {
-        case QQmlScript::Variant::Boolean:
-            var = QVariant(v.asBoolean());
+        switch (binding->type) {
+        case QV4::CompiledData::Binding::Type_Script:
+            ds << bindingIdentifier(binding);
+            // Fall through as we also need the expression string.
+            // Signal handlers still need to be constructed by string ;(
+        case QV4::CompiledData::Binding::Type_String:
+            var = binding->valueAsString(&qmlUnit->header);
             break;
-        case QQmlScript::Variant::Number:
-            var = QVariant(v.asNumber());
+        case QV4::CompiledData::Binding::Type_Number:
+            var = binding->valueAsNumber();
             break;
-        case QQmlScript::Variant::String:
-            var = QVariant(v.asString());
+        case QV4::CompiledData::Binding::Type_Boolean:
+            var = binding->valueAsBoolean();
             break;
-        case QQmlScript::Variant::Invalid:
-        case QQmlScript::Variant::Script:
-            var = QVariant(v.asScript());
-            {
-                // Pre-rewrite the expression
-                id = bindingIdentifier(v, data.at(ii).first);
-            }
+        case QV4::CompiledData::Binding::Type_Translation:
+        case QV4::CompiledData::Binding::Type_TranslationById:
+            ds << binding->value.translationData.commentIndex << binding->value.translationData.number;
+            var = binding->stringIndex;
+        default:
             break;
         }
-
-        ds << data.at(ii).first << isScript << var;
-        if (isScript)
-            ds << id;
+        ds << var;
     }
 
     return rv;
@@ -320,36 +313,30 @@ void QQuickPropertyChangesPrivate::decode()
     ds >> count;
     for (int ii = 0; ii < count; ++ii) {
         QString name;
-        bool isScript;
+        int type;
         QVariant data;
         QQmlBinding::Identifier id = QQmlBinding::Invalid;
+        QV4::CompiledData::TranslationData tsd;
         ds >> name;
-        ds >> isScript;
-        ds >> data;
-        if (isScript)
+        ds >> type;
+
+        if (type == QV4::CompiledData::Binding::Type_Script) {
             ds >> id;
+        } else if (type == QV4::CompiledData::Binding::Type_Translation
+                   || type == QV4::CompiledData::Binding::Type_TranslationById) {
+            ds >> tsd.commentIndex >> tsd.number;
+        }
+
+        ds >> data;
 
         QQmlProperty prop = property(name);      //### better way to check for signal property?
         if (prop.type() & QQmlProperty::SignalProperty) {
-            QString expression = data.toString();
-            QUrl url = QUrl();
-            int line = -1;
-            int column = -1;
-
-            QQmlData *ddata = QQmlData::get(q);
-            if (ddata && ddata->outerContext && !ddata->outerContext->url.isEmpty()) {
-                url = ddata->outerContext->url;
-                line = ddata->lineNumber;
-                column = ddata->columnNumber;
-            }
-
             QQuickReplaceSignalHandler *handler = new QQuickReplaceSignalHandler;
             handler->property = prop;
             handler->expression.take(new QQmlBoundSignalExpression(object, QQmlPropertyPrivate::get(prop)->signalIndex(),
-                                                                   QQmlContextData::get(qmlContext(q)), object, expression,
-                                                                   url.toString(), line, column));
+                                                                   QQmlContextData::get(qmlContext(q)), object, cdata->functionForBindingId(id)));
             signalReplacements << handler;
-        } else if (isScript) { // binding
+        } else if (type == QV4::CompiledData::Binding::Type_Script) { // binding
             QString expression = data.toString();
             QUrl url = QUrl();
             int line = -1;
@@ -364,6 +351,14 @@ void QQuickPropertyChangesPrivate::decode()
 
             expressions << ExpressionChange(name, id, expression, url, line, column);
         } else {
+            if (type == QV4::CompiledData::Binding::Type_Translation
+                || type == QV4::CompiledData::Binding::Type_TranslationById) {
+                QV4::CompiledData::Binding tmpBinding;
+                tmpBinding.type = type;
+                tmpBinding.stringIndex = data.toInt();
+                tmpBinding.value.translationData = tsd;
+                data = tmpBinding.valueAsString(&cdata->qmlUnit->header);
+            }
             properties << qMakePair(name, data);
         }
     }
@@ -371,12 +366,12 @@ void QQuickPropertyChangesPrivate::decode()
     data.clear();
 }
 
-void QQuickPropertyChangesParser::setCustomData(QObject *object,
-                                            const QByteArray &data)
+void QQuickPropertyChangesParser::setCustomData(QObject *object, const QByteArray &data, QQmlCompiledData *cdata)
 {
     QQuickPropertyChangesPrivate *p =
         static_cast<QQuickPropertyChangesPrivate *>(QObjectPrivate::get(object));
     p->data = data;
+    p->cdata = cdata;
     p->decoded = false;
 }
 
@@ -484,7 +479,7 @@ QQuickPropertyChanges::ActionList QQuickPropertyChanges::actions()
             a.specifiedObject = d->object;
             a.specifiedProperty = property;
 
-            QQmlBinding *newBinding = e.id != QQmlBinding::Invalid ? QQmlBinding::createBinding(e.id, object(), qmlContext(this), e.url.toString(), e.column) : 0;
+            QQmlBinding *newBinding = e.id != QQmlBinding::Invalid ? QQmlBinding::createBinding(e.id, object(), qmlContext(this)) : 0;
             if (!newBinding)
                 newBinding = new QQmlBinding(e.expression, object(), QQmlContextData::get(qmlContext(this)), e.url.toString(), e.line, e.column);
 

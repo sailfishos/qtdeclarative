@@ -65,7 +65,7 @@
 #include <QtCore/qnumeric.h>
 #include <private/qquickwindow_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4functionobject_p.h>
 #include <private/qv4objectproto_p.h>
 #include <private/qv4scopedvalue_p.h>
@@ -479,12 +479,12 @@ V8_DEFINE_EXTENSION(QQuickContext2DEngineData, engineData)
 
 class QQuickJSContext2D : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
 public:
     QQuickJSContext2D(QV4::ExecutionEngine *engine)
         : QV4::Object(engine)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
     QQuickContext2D* context;
 
@@ -535,12 +535,12 @@ protected:
     }
 };
 
-DEFINE_MANAGED_VTABLE(QQuickJSContext2D);
+DEFINE_OBJECT_VTABLE(QQuickJSContext2D);
 
 
 struct QQuickJSContext2DPrototype : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
 public:
     QQuickJSContext2DPrototype(QV4::ExecutionEngine *engine)
         : QV4::Object(engine)
@@ -641,19 +641,19 @@ public:
 
 };
 
-DEFINE_MANAGED_VTABLE(QQuickJSContext2DPrototype);
+DEFINE_OBJECT_VTABLE(QQuickJSContext2DPrototype);
 
 
 class QQuickContext2DStyle : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
 public:
     QQuickContext2DStyle(QV4::ExecutionEngine *e)
       : QV4::Object(e)
       , patternRepeatX(false)
       , patternRepeatY(false)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
     QBrush brush;
     bool patternRepeatX:1;
@@ -667,7 +667,7 @@ protected:
     }
 };
 
-DEFINE_MANAGED_VTABLE(QQuickContext2DStyle);
+DEFINE_OBJECT_VTABLE(QQuickContext2DStyle);
 
 QImage qt_image_convolute_filter(const QImage& src, const QVector<qreal>& weights, int radius = 0)
 {
@@ -866,12 +866,15 @@ static QString qt_composite_mode_to_string(QPainter::CompositionMode op)
 
 struct QQuickJSContext2DPixelData : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
     QQuickJSContext2DPixelData(QV4::ExecutionEngine *engine)
         : QV4::Object(engine)
     {
-        setVTable(&static_vtbl);
-        flags &= ~SimpleArray;
+        setVTable(staticVTable());
+        QV4::Scope scope(engine);
+        QV4::ScopedObject protectThis(scope, this);
+        Q_UNUSED(protectThis);
+        setArrayType(QV4::ArrayData::Custom);
     }
 
     static void destroy(QV4::Managed *that) {
@@ -885,15 +888,15 @@ struct QQuickJSContext2DPixelData : public QV4::Object
     QImage image;
 };
 
-DEFINE_MANAGED_VTABLE(QQuickJSContext2DPixelData);
+DEFINE_OBJECT_VTABLE(QQuickJSContext2DPixelData);
 
 struct QQuickJSContext2DImageData : public QV4::Object
 {
-    Q_MANAGED
+    V4_OBJECT
     QQuickJSContext2DImageData(QV4::ExecutionEngine *engine)
         : QV4::Object(engine)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
         pixelData = QV4::Primitive::undefinedValue();
 
         QV4::Scope scope(engine);
@@ -915,10 +918,12 @@ struct QQuickJSContext2DImageData : public QV4::Object
 
 
 
-    QV4::SafeValue pixelData;
+    QV4::Value pixelData;
 };
 
-DEFINE_MANAGED_VTABLE(QQuickJSContext2DImageData);
+DEFINE_REF(QQuickJSContext2DImageData, QV4::Object);
+
+DEFINE_OBJECT_VTABLE(QQuickJSContext2DImageData);
 
 static QV4::ReturnedValue qt_create_image_data(qreal w, qreal h, QV8Engine* engine, const QImage& image)
 {
@@ -2109,7 +2114,8 @@ QV4::ReturnedValue QQuickJSContext2D::method_set_path(QV4::CallContext *ctx)
 
     QV4::ScopedValue value(scope, ctx->argument(0));
     r->context->beginPath();
-    if (QV4::Referenced<QV4::QObjectWrapper> qobjectWrapper = value->asRef<QV4::QObjectWrapper>()) {
+    QV4::QObjectWrapperRef qobjectWrapper = value;
+    if (!!qobjectWrapper) {
         if (QQuickPath *path = qobject_cast<QQuickPath*>(qobjectWrapper->object()))
             r->context->m_path = path->path();
     } else {
@@ -2910,7 +2916,7 @@ QV4::ReturnedValue QQuickJSContext2DPrototype::method_measureText(QV4::CallConte
   \sa Image
   \sa Canvas::loadImage
   \sa Canvas::isImageLoaded
-  \sa Canvas::onImageLoaded
+  \sa Canvas::imageLoaded
 
   \sa {http://www.w3.org/TR/2dcontext/#dom-context-2d-drawimage}{W3C 2d context standard for drawImage}
   */
@@ -2930,7 +2936,7 @@ QV4::ReturnedValue QQuickJSContext2DPrototype::method_measureText(QV4::CallConte
   \sa Image
   \sa Canvas::loadImage()
   \sa Canvas::isImageLoaded
-  \sa Canvas::onImageLoaded
+  \sa Canvas::imageLoaded
 
   \sa {http://www.w3.org/TR/2dcontext/#dom-context-2d-drawimage}{W3C 2d context standard for drawImage}
   */
@@ -2951,7 +2957,7 @@ QV4::ReturnedValue QQuickJSContext2DPrototype::method_measureText(QV4::CallConte
   \sa Image
   \sa Canvas::loadImage()
   \sa Canvas::isImageLoaded
-  \sa Canvas::onImageLoaded
+  \sa Canvas::imageLoaded
 
   \sa {http://www.w3.org/TR/2dcontext/#dom-context-2d-drawimage}{W3C 2d context standard for drawImage}
 */
@@ -2980,7 +2986,8 @@ QV4::ReturnedValue QQuickJSContext2DPrototype::method_drawImage(QV4::CallContext
 
         pixmap = r->context->createPixmap(url);
     } else if (arg->isObject()) {
-        if (QV4::Referenced<QV4::QObjectWrapper> qobjectWrapper = arg->asRef<QV4::QObjectWrapper>()) {
+        QV4::QObjectWrapperRef qobjectWrapper = arg;
+        if (!!qobjectWrapper) {
             if (QQuickImage *imageItem = qobject_cast<QQuickImage*>(qobjectWrapper->object())) {
                 pixmap = r->context->createPixmap(imageItem->source());
             } else if (QQuickCanvasItem *canvas = qobject_cast<QQuickCanvasItem*>(qobjectWrapper->object())) {
@@ -2990,19 +2997,22 @@ QV4::ReturnedValue QQuickJSContext2DPrototype::method_drawImage(QV4::CallContext
             } else {
                 V4THROW_DOM(DOMEXCEPTION_TYPE_MISMATCH_ERR, "drawImage(), type mismatch");
             }
-        } else if (QV4::Referenced<QQuickJSContext2DImageData> imageData = arg->asRef<QQuickJSContext2DImageData>()) {
-            QV4::Scoped<QQuickJSContext2DPixelData> pix(scope, imageData->pixelData.as<QQuickJSContext2DPixelData>());
-            if (pix && !pix->image.isNull()) {
-                pixmap.take(new QQuickCanvasPixmap(pix->image));
-            } else {
-                V4THROW_DOM(DOMEXCEPTION_TYPE_MISMATCH_ERR, "drawImage(), type mismatch");
-            }
         } else {
-            QUrl url(arg->toQStringNoThrow());
-            if (url.isValid())
-                pixmap = r->context->createPixmap(url);
-            else
-                V4THROW_DOM(DOMEXCEPTION_TYPE_MISMATCH_ERR, "drawImage(), type mismatch");
+            QQuickJSContext2DImageDataRef imageData = arg;
+            if (!!imageData) {
+                QV4::Scoped<QQuickJSContext2DPixelData> pix(scope, imageData->pixelData.as<QQuickJSContext2DPixelData>());
+                if (pix && !pix->image.isNull()) {
+                    pixmap.take(new QQuickCanvasPixmap(pix->image));
+                } else {
+                    V4THROW_DOM(DOMEXCEPTION_TYPE_MISMATCH_ERR, "drawImage(), type mismatch");
+                }
+            } else {
+                QUrl url(arg->toQStringNoThrow());
+                if (url.isValid())
+                    pixmap = r->context->createPixmap(url);
+                else
+                    V4THROW_DOM(DOMEXCEPTION_TYPE_MISMATCH_ERR, "drawImage(), type mismatch");
+            }
         }
     } else {
         V4THROW_DOM(DOMEXCEPTION_TYPE_MISMATCH_ERR, "drawImage(), type mismatch");
@@ -3165,8 +3175,11 @@ QV4::ReturnedValue QQuickJSContext2DPixelData::getIndexed(QV4::Managed *m, uint 
     QV4::ExecutionEngine *v4 = m->engine();
     QV4::Scope scope(v4);
     QV4::Scoped<QQuickJSContext2DPixelData> r(scope, m->as<QQuickJSContext2DPixelData>());
-    if (!m)
+    if (!m) {
+        if (hasProperty)
+            *hasProperty = false;
         return m->engine()->currentContext()->throwTypeError();
+    }
 
     if (r && index < static_cast<quint32>(r->image.width() * r->image.height() * 4)) {
         if (hasProperty)
@@ -3260,7 +3273,8 @@ QV4::ReturnedValue QQuickJSContext2DPrototype::method_createImageData(QV4::CallC
 
     if (ctx->callData->argc == 1) {
         QV4::ScopedValue arg0(scope, ctx->callData->args[0]);
-        if (QV4::Referenced<QQuickJSContext2DImageData> imgData = arg0->asRef<QQuickJSContext2DImageData>()) {
+        QQuickJSContext2DImageDataRef imgData = arg0;
+        if (!!imgData) {
             QV4::Scoped<QQuickJSContext2DPixelData> pa(scope, imgData->pixelData.as<QQuickJSContext2DPixelData>());
             if (pa) {
                 qreal w = pa->image.width();
@@ -3337,7 +3351,7 @@ QV4::ReturnedValue QQuickJSContext2DPrototype::method_putImageData(QV4::CallCont
     if (!qIsFinite(dx) || !qIsFinite(dy))
         V4THROW_DOM(DOMEXCEPTION_NOT_SUPPORTED_ERR, "putImageData() : Invalid arguments");
 
-    QV4::Referenced<QQuickJSContext2DImageData> imageData = arg0->asRef<QQuickJSContext2DImageData>();
+    QQuickJSContext2DImageDataRef imageData = arg0;
     if (!imageData)
         return ctx->callData->thisObject.asReturnedValue();
 
@@ -4125,7 +4139,9 @@ void QQuickContext2D::init(QQuickCanvasItem *canvasItem, const QVariantMap &args
 
     if (m_renderTarget == QQuickCanvasItem::FramebufferObject && renderThread != sceneGraphThread) {
          QOpenGLContext *cc = QQuickWindowPrivate::get(window)->context->openglContext();
-         m_surface = window;
+         m_surface.reset(new QOffscreenSurface);
+         m_surface->setFormat(window->format());
+         m_surface->create();
          m_glContext = new QOpenGLContext;
          m_glContext->setFormat(cc->format());
          m_glContext->setShareContext(cc);

@@ -69,17 +69,18 @@ Q_CORE_EXPORT QString qt_regexp_toCanonical(const QString &, QRegExp::PatternSyn
 
 using namespace QV4;
 
-DEFINE_MANAGED_VTABLE(RegExpObject);
+DEFINE_OBJECT_VTABLE(RegExpObject);
 
 RegExpObject::RegExpObject(InternalClass *ic)
     : Object(ic)
     , value(RegExp::create(ic->engine, QString(), false, false))
     , global(false)
 {
+    Q_ASSERT(internalClass->vtable == staticVTable());
     init(ic->engine);
 }
 
-RegExpObject::RegExpObject(ExecutionEngine *engine, Referenced<RegExp> value, bool global)
+RegExpObject::RegExpObject(ExecutionEngine *engine, RegExpRef value, bool global)
     : Object(engine->regExpClass)
     , value(value)
     , global(global)
@@ -142,15 +143,14 @@ RegExpObject::RegExpObject(ExecutionEngine *engine, const QRegExp &re)
 
 void RegExpObject::init(ExecutionEngine *engine)
 {
-    setVTable(&static_vtbl);
-    type = Type_RegExpObject;
+    setVTable(staticVTable());
 
     Scope scope(engine);
     ScopedObject protectThis(scope, this);
 
     ScopedString lastIndex(scope, engine->newIdentifier(QStringLiteral("lastIndex")));
-    Property *lastIndexProperty = insertMember(lastIndex, Attr_NotEnumerable|Attr_NotConfigurable);
-    lastIndexProperty->value = Primitive::fromInt32(0);
+    ScopedValue v(scope, Primitive::fromInt32(0));
+    insertMember(lastIndex, v, Attr_NotEnumerable|Attr_NotConfigurable);
     if (!this->value)
         return;
 
@@ -162,7 +162,6 @@ void RegExpObject::init(ExecutionEngine *engine)
         p.replace('/', QLatin1String("\\/"));
     }
 
-    ScopedValue v(scope);
     defineReadonlyProperty(QStringLiteral("source"), (v = engine->newString(p)));
     defineReadonlyProperty(QStringLiteral("global"), Primitive::fromBoolean(global));
     defineReadonlyProperty(QStringLiteral("ignoreCase"), Primitive::fromBoolean(this->value->ignoreCase()));
@@ -187,7 +186,7 @@ Property *RegExpObject::lastIndexProperty(ExecutionContext *ctx)
 {
     Q_UNUSED(ctx);
     Q_ASSERT(0 == internalClass->find(ctx->engine->newIdentifier(QStringLiteral("lastIndex"))));
-    return &memberData[0];
+    return propertyAt(0);
 }
 
 // Converts a JS RegExp to a QRegExp.
@@ -232,19 +231,19 @@ uint RegExpObject::flags() const
     return f;
 }
 
-DEFINE_MANAGED_VTABLE(RegExpCtor);
+DEFINE_OBJECT_VTABLE(RegExpCtor);
 
 RegExpCtor::RegExpCtor(ExecutionContext *scope)
     : FunctionObject(scope, QStringLiteral("RegExp"))
 {
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
     clearLastMatch();
 }
 
 void RegExpCtor::clearLastMatch()
 {
     lastMatch = Primitive::nullValue();
-    lastInput = engine()->newIdentifier(QString());
+    lastInput = engine()->id_empty;
     lastMatchStart = 0;
     lastMatchEnd = 0;
 }
@@ -275,7 +274,7 @@ ReturnedValue RegExpCtor::construct(Managed *m, CallData *callData)
     bool ignoreCase = false;
     bool multiLine = false;
     if (!f->isUndefined()) {
-        f = __qmljs_to_string(ctx, f);
+        f = RuntimeHelpers::toString(ctx, f);
         if (scope.hasException())
             return Encode::undefined();
         QString str = f->stringValue()->toQString();
@@ -361,7 +360,7 @@ ReturnedValue RegExpPrototype::method_exec(CallContext *ctx)
         return ctx->throwTypeError();
 
     ScopedValue arg(scope, ctx->argument(0));
-    arg = __qmljs_to_string(ctx, arg);
+    arg = RuntimeHelpers::toString(ctx, arg);
     if (scope.hasException())
         return Encode::undefined();
     QString s = arg->stringValue()->toQString();
@@ -387,15 +386,16 @@ ReturnedValue RegExpPrototype::method_exec(CallContext *ctx)
     Scoped<ArrayObject> array(scope, ctx->engine->newArrayObject(ctx->engine->regExpExecArrayClass));
     int len = r->value->captureCount();
     array->arrayReserve(len);
+    ScopedValue v(scope);
     for (int i = 0; i < len; ++i) {
         int start = matchOffsets[i * 2];
         int end = matchOffsets[i * 2 + 1];
-        array->arrayData[i].value = (start != -1 && end != -1) ? ctx->engine->newString(s.mid(start, end - start))->asReturnedValue() : Encode::undefined();
-        array->arrayDataLen = i + 1;
+        v = (start != -1 && end != -1) ? ctx->engine->newString(s.mid(start, end - start))->asReturnedValue() : Encode::undefined();
+        array->arrayPut(i, v);
     }
     array->setArrayLengthUnchecked(len);
-    array->memberData[Index_ArrayIndex].value = Primitive::fromInt32(result);
-    array->memberData[Index_ArrayInput].value = arg.asReturnedValue();
+    array->memberData[Index_ArrayIndex] = Primitive::fromInt32(result);
+    array->memberData[Index_ArrayInput] = arg.asReturnedValue();
 
     regExpCtor->lastMatch = array;
     regExpCtor->lastInput = arg->stringValue();
@@ -433,7 +433,7 @@ ReturnedValue RegExpPrototype::method_compile(CallContext *ctx)
         return ctx->throwTypeError();
 
     ScopedCallData callData(scope, ctx->callData->argc);
-    memcpy(callData->args, ctx->callData->args, ctx->callData->argc*sizeof(SafeValue));
+    memcpy(callData->args, ctx->callData->args, ctx->callData->argc*sizeof(Value));
 
     Scoped<RegExpObject> re(scope, ctx->engine->regExpCtor.asFunctionObject()->construct(callData));
 
@@ -457,7 +457,7 @@ ReturnedValue RegExpPrototype::method_get_lastParen(CallContext *ctx)
 {
     Scope scope(ctx);
     ScopedArrayObject lastMatch(scope, static_cast<RegExpCtor*>(ctx->engine->regExpCtor.objectValue())->lastMatch);
-    ScopedValue result(scope, lastMatch ? lastMatch->getIndexed(lastMatch->arrayLength() - 1) : Encode::undefined());
+    ScopedValue result(scope, lastMatch ? lastMatch->getIndexed(lastMatch->getLength() - 1) : Encode::undefined());
     if (result->isUndefined())
         return ctx->engine->newString(QString())->asReturnedValue();
     return result.asReturnedValue();

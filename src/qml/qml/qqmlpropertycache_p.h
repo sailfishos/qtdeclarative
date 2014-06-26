@@ -62,7 +62,7 @@
 #include <QtCore/qvarlengtharray.h>
 #include <QtCore/qvector.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -228,8 +228,8 @@ public:
     static Flags flagsForProperty(const QMetaProperty &, QQmlEngine *engine = 0);
     void load(const QMetaProperty &, QQmlEngine *engine = 0);
     void load(const QMetaMethod &);
-    QString name(QObject *);
-    QString name(const QMetaObject *);
+    QString name(QObject *) const;
+    QString name(const QMetaObject *) const;
 
     void markAsOverrideOf(QQmlPropertyData *predecessor);
 
@@ -351,7 +351,7 @@ private:
                 QQmlPropertyData::Flag signalFlags = QQmlPropertyData::NoFlags);
 
     QQmlPropertyCacheMethodArguments *createArgumentsObject(int count,
-                                                            const QList<QByteArray> &names = QList<QByteArray>());
+                                                            const QList<QByteArray> &names);
     QQmlPropertyData *signal(int, QQmlPropertyCache **) const;
 
     typedef QVector<QQmlPropertyData> IndexCache;

@@ -57,7 +57,7 @@
 #include <QtQml/qqmllist.h>
 #include <QtCore/qvariant.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4object_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -66,7 +66,7 @@ namespace QV4 {
 
 struct VariantObject : Object, public ExecutionEngine::ScarceResourceData
 {
-    Q_MANAGED
+    V4_OBJECT
 public:
     VariantObject(InternalClass *ic);
     VariantObject(ExecutionEngine *engine, const QVariant &value);
@@ -81,6 +81,8 @@ public:
     static void destroy(Managed *that);
     static bool isEqualTo(Managed *m, Managed *other);
 };
+
+DEFINE_REF(VariantObject, Object);
 
 struct VariantPrototype : VariantObject
 {

@@ -48,8 +48,7 @@
 #include <QtGui/qguiapplication.h>
 #include <qdir.h>
 
-#include <private/qsystrace_p.h>
-#include <private/qqmlprofilerservice_p.h>
+#include <private/qquickprofiler_p.h>
 #include <QElapsedTimer>
 
 QT_BEGIN_NAMESPACE
@@ -165,12 +164,10 @@ void QSGDistanceFieldGlyphCache::update()
         return;
 
 #ifndef QSG_NO_RENDER_TIMING
-    bool profileFrames = qsg_render_timing || QQmlProfilerService::enabled;
+    bool profileFrames = qsg_render_timing || QQuickProfiler::enabled;
     if (profileFrames)
         qsg_render_timer.start();
 #endif
-
-    QSystrace::begin("graphics", "QSGDFGC::update::render", "");
 
     QList<QDistanceField> distanceFields;
     for (int i = 0; i < m_pendingGlyphs.size(); ++i) {
@@ -179,8 +176,6 @@ void QSGDistanceFieldGlyphCache::update()
                                              m_doubleGlyphResolution));
     }
 
-    QSystrace::end("graphics", "QSGDFGC::update::render", "");
-
 #ifndef QSG_NO_RENDER_TIMING
     qint64 renderTime = 0;
     int count = m_pendingGlyphs.size();
@@ -188,11 +183,9 @@ void QSGDistanceFieldGlyphCache::update()
         renderTime = qsg_render_timer.nsecsElapsed();
 #endif
 
-    QSystrace::begin("graphics", "QSGDFGC::update::store", "");
     m_pendingGlyphs.reset();
 
     storeGlyphs(distanceFields);
-    QSystrace::end("graphics", "QSGDFGC::update::store", "");
 
 #ifndef QSG_NO_RENDER_TIMING
     if (qsg_render_timing) {
@@ -203,13 +196,10 @@ void QSGDistanceFieldGlyphCache::update()
                (int) qsg_render_timer.elapsed());
 
     }
-    if (QQmlProfilerService::enabled) {
-        QQmlProfilerService::sceneGraphFrame(
-                    QQmlProfilerService::SceneGraphAdaptationLayerFrame,
-                    count,
-                    renderTime,
-                    qsg_render_timer.nsecsElapsed() - renderTime);
-    }
+    Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphAdaptationLayerFrame, (
+            count,
+            renderTime,
+            qsg_render_timer.nsecsElapsed() - renderTime));
 #endif
 }
 

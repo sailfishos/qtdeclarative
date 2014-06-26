@@ -46,7 +46,7 @@
 #include "qquickitem_p.h"
 #include "qquickitemchangelistener_p.h"
 
-#include <private/qqmlprofilerservice_p.h>
+#include <private/qquickprofiler_p.h>
 #include <private/qqmlinspectorservice_p.h>
 #include <private/qqmlmemoryprofiler_p.h>
 
@@ -576,7 +576,7 @@ void QQuickView::resizeEvent(QResizeEvent *e)
 /*! \reimp */
 void QQuickView::keyPressEvent(QKeyEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Key);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Key>());
 
     QQuickWindow::keyPressEvent(e);
 }
@@ -584,7 +584,7 @@ void QQuickView::keyPressEvent(QKeyEvent *e)
 /*! \reimp */
 void QQuickView::keyReleaseEvent(QKeyEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Key);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Key>());
 
     QQuickWindow::keyReleaseEvent(e);
 }
@@ -592,7 +592,7 @@ void QQuickView::keyReleaseEvent(QKeyEvent *e)
 /*! \reimp */
 void QQuickView::mouseMoveEvent(QMouseEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Mouse);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Mouse>());
 
     QQuickWindow::mouseMoveEvent(e);
 }
@@ -600,7 +600,7 @@ void QQuickView::mouseMoveEvent(QMouseEvent *e)
 /*! \reimp */
 void QQuickView::mousePressEvent(QMouseEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Mouse);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Mouse>());
 
     QQuickWindow::mousePressEvent(e);
 }
@@ -608,7 +608,7 @@ void QQuickView::mousePressEvent(QMouseEvent *e)
 /*! \reimp */
 void QQuickView::mouseReleaseEvent(QMouseEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Mouse);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Mouse>());
 
     QQuickWindow::mouseReleaseEvent(e);
 }

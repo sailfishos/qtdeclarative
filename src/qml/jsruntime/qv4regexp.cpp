@@ -99,8 +99,6 @@ RegExp::RegExp(ExecutionEngine* engine, const QString &pattern, bool ignoreCase,
     , m_ignoreCase(ignoreCase)
     , m_multiLine(multiline)
 {
-    type = Type_RegExpObject;
-
     if (!engine)
         return;
     const char* error = 0;
@@ -135,72 +133,4 @@ void RegExp::markObjects(Managed *that, ExecutionEngine *e)
 {
     Q_UNUSED(that);
     Q_UNUSED(e);
-}
-
-ReturnedValue RegExp::get(Managed *, const StringRef, bool *)
-{
-    return Encode::undefined();
-}
-
-ReturnedValue RegExp::getIndexed(Managed *m, uint index, bool *hasProperty)
-{
-    Q_UNUSED(m);
-    Q_UNUSED(index);
-    Q_UNUSED(hasProperty);
-
-    return Encode::undefined();
-}
-
-void RegExp::put(Managed *m, const StringRef name, const ValueRef value)
-{
-    Q_UNUSED(m);
-    Q_UNUSED(name);
-    Q_UNUSED(value);
-}
-
-void RegExp::putIndexed(Managed *m, uint index, const ValueRef value)
-{
-    Q_UNUSED(m);
-    Q_UNUSED(index);
-    Q_UNUSED(value);
-}
-
-PropertyAttributes RegExp::query(const Managed *m, StringRef name)
-{
-    Q_UNUSED(m);
-    Q_UNUSED(name);
-
-    return Attr_Invalid;
-}
-
-PropertyAttributes RegExp::queryIndexed(const Managed *m, uint index)
-{
-    Q_UNUSED(m);
-    Q_UNUSED(index);
-
-    return Attr_Invalid;
-}
-
-bool RegExp::deleteProperty(Managed *, const StringRef)
-{
-    return false;
-}
-
-bool RegExp::deleteIndexedProperty(Managed *m, uint index)
-{
-    Q_UNUSED(m);
-    Q_UNUSED(index);
-
-    return false;
-}
-
-Property *RegExp::advanceIterator(Managed *m, ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attributes)
-{
-    Q_UNUSED(m);
-    Q_UNUSED(it);
-    Q_UNUSED(name);
-    Q_UNUSED(index);
-    Q_UNUSED(attributes);
-
-    return 0;
 }

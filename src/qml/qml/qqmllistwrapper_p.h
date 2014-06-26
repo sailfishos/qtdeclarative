@@ -58,7 +58,7 @@
 
 #include <QtQml/qqmllist.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4object_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -69,7 +69,7 @@ namespace QV4 {
 
 struct Q_QML_EXPORT QmlListWrapper : Object
 {
-    Q_MANAGED
+    V4_OBJECT
 protected:
     QmlListWrapper(QV8Engine *engine);
     ~QmlListWrapper();
@@ -84,7 +84,7 @@ public:
     static ReturnedValue get(Managed *m, const StringRef name, bool *hasProperty);
     static ReturnedValue getIndexed(Managed *m, uint index, bool *hasProperty);
     static void put(Managed *m, const StringRef name, const ValueRef value);
-    static Property *advanceIterator(Managed *m, ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attributes);
+    static void advanceIterator(Managed *m, ObjectIterator *it, StringRef name, uint *index, Property *p, PropertyAttributes *attributes);
     static void destroy(Managed *that);
 
 private:

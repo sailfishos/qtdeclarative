@@ -83,7 +83,7 @@ QQmlEngineDebugService::~QQmlEngineDebugService()
     delete m_statesDelegate;
 }
 
-QDataStream &operator<<(QDataStream &ds, 
+QDataStream &operator<<(QDataStream &ds,
                         const QQmlEngineDebugService::QQmlObjectData &data)
 {
     ds << data.url << data.lineNumber << data.columnNumber << data.idString
@@ -92,7 +92,7 @@ QDataStream &operator<<(QDataStream &ds,
     return ds;
 }
 
-QDataStream &operator>>(QDataStream &ds, 
+QDataStream &operator>>(QDataStream &ds,
                         QQmlEngineDebugService::QQmlObjectData &data)
 {
     ds >> data.url >> data.lineNumber >> data.columnNumber >> data.idString
@@ -101,7 +101,7 @@ QDataStream &operator>>(QDataStream &ds,
     return ds;
 }
 
-QDataStream &operator<<(QDataStream &ds, 
+QDataStream &operator<<(QDataStream &ds,
                         const QQmlEngineDebugService::QQmlObjectProperty &data)
 {
     ds << (int)data.type << data.name << data.value << data.valueTypeName
@@ -109,7 +109,7 @@ QDataStream &operator<<(QDataStream &ds,
     return ds;
 }
 
-QDataStream &operator>>(QDataStream &ds,  
+QDataStream &operator>>(QDataStream &ds,
                         QQmlEngineDebugService::QQmlObjectProperty &data)
 {
     int type;
@@ -219,13 +219,13 @@ QVariant QQmlEngineDebugService::valueContents(const QVariant &value) const
     return QString(QStringLiteral("<unknown value>"));
 }
 
-void QQmlEngineDebugService::buildObjectDump(QDataStream &message, 
+void QQmlEngineDebugService::buildObjectDump(QDataStream &message,
                                                      QObject *object, bool recur, bool dumpProperties)
 {
     message << objectData(object);
 
     QObjectList children = object->children();
-    
+
     int childrenCount = children.count();
     for (int ii = 0; ii < children.count(); ++ii) {
         if (qobject_cast<QQmlContext*>(children[ii]))
@@ -759,20 +759,22 @@ void QQmlEngineDebugService::propertyChanged(int id, int objectId, const QMetaPr
     sendMessage(reply);
 }
 
-void QQmlEngineDebugService::addEngine(QQmlEngine *engine)
+void QQmlEngineDebugService::engineAboutToBeAdded(QQmlEngine *engine)
 {
     Q_ASSERT(engine);
     Q_ASSERT(!m_engines.contains(engine));
 
     m_engines.append(engine);
+    emit attachedToEngine(engine);
 }
 
-void QQmlEngineDebugService::remEngine(QQmlEngine *engine)
+void QQmlEngineDebugService::engineAboutToBeRemoved(QQmlEngine *engine)
 {
     Q_ASSERT(engine);
     Q_ASSERT(m_engines.contains(engine));
 
     m_engines.removeAll(engine);
+    emit detachedFromEngine(engine);
 }
 
 void QQmlEngineDebugService::objectCreated(QQmlEngine *engine, QObject *object)

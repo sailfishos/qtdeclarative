@@ -46,7 +46,7 @@
 #include <private/qqmlproperty_p.h>
 #include <private/qv8engine_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4functionobject_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -219,6 +219,7 @@ public:
         QV4::Scoped<QV4::Object> proto(scope, v4->newObject());
         proto->defineAccessorProperty(QStringLiteral("index"), get_index, 0);
         proto->defineAccessorProperty(QStringLiteral("hasModelChildren"), get_hasModelChildren, 0);
+        QV4::ScopedProperty p(scope);
 
         typedef QHash<QByteArray, int>::const_iterator iterator;
         for (iterator it = roleNames.constBegin(), end = roleNames.constEnd(); it != end; ++it) {
@@ -226,9 +227,9 @@ public:
             const QByteArray &propertyName = it.key();
 
             QV4::ScopedString name(scope, v4->newString(QString::fromUtf8(propertyName)));
-            QV4::Property *p = proto->insertMember(name, QV4::Attr_Accessor|QV4::Attr_NotEnumerable|QV4::Attr_NotConfigurable);
             p->setGetter(new (v4->memoryManager) QV4::IndexedBuiltinFunction(v4->rootContext, propertyId, QQmlDMCachedModelData::get_property));
             p->setSetter(new (v4->memoryManager) QV4::IndexedBuiltinFunction(v4->rootContext, propertyId, QQmlDMCachedModelData::set_property));
+            proto->insertMember(name, p, QV4::Attr_Accessor|QV4::Attr_NotEnumerable|QV4::Attr_NotConfigurable);
         }
         prototype = proto;
     }
@@ -466,10 +467,8 @@ public:
                                 vdm, SLOT(_q_rowsMoved(QModelIndex,int,int,QModelIndex,int)));
             QObject::disconnect(aim, SIGNAL(modelReset()),
                                 vdm, SLOT(_q_modelReset()));
-            QObject::disconnect(aim, SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
-                                vdm, SLOT(_q_layoutAboutToBeChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)));
-            QObject::disconnect(aim, SIGNAL(layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
-                                vdm, SLOT(_q_layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)));
+            QObject::disconnect(aim, SIGNAL(layoutChanged()),
+                                vdm, SLOT(_q_layoutChanged()));
         }
 
         const_cast<VDMAbstractItemModelDataType *>(this)->release();
@@ -921,10 +920,8 @@ void QQmlAdaptorModel::setModel(const QVariant &variant, QQmlDelegateModel *vdm,
                               vdm, QQmlDelegateModel, SLOT(_q_rowsMoved(QModelIndex,int,int,QModelIndex,int)));
             qmlobject_connect(model, QAbstractItemModel, SIGNAL(modelReset()),
                               vdm, QQmlDelegateModel, SLOT(_q_modelReset()));
-            qmlobject_connect(model, QAbstractItemModel, SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
-                              vdm, QQmlDelegateModel, SLOT(_q_layoutAboutToBeChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)));
-            qmlobject_connect(model, QAbstractItemModel, SIGNAL(layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
-                              vdm, QQmlDelegateModel, SLOT(_q_layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)));
+            qmlobject_connect(model, QAbstractItemModel, SIGNAL(layoutChanged()),
+                              vdm, QQmlDelegateModel, SLOT(_q_layoutChanged()));
         } else {
             accessors = new VDMObjectDelegateDataType;
         }

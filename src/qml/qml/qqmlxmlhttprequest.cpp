@@ -122,11 +122,11 @@ QQmlXMLHttpRequestData::~QQmlXMLHttpRequestData()
 namespace {
 
 class DocumentImpl;
-class NodeImpl 
+class NodeImpl
 {
 public:
     NodeImpl() : type(Element), document(0), parent(0) {}
-    virtual ~NodeImpl() { 
+    virtual ~NodeImpl() {
         for (int ii = 0; ii < children.count(); ++ii)
             delete children.at(ii);
         for (int ii = 0; ii < attributes.count(); ++ii)
@@ -134,18 +134,18 @@ public:
     }
 
     // These numbers are copied from the Node IDL definition
-    enum Type { 
-        Attr = 2, 
-        CDATA = 4, 
-        Comment = 8, 
-        Document = 9, 
-        DocumentFragment = 11, 
+    enum Type {
+        Attr = 2,
+        CDATA = 4,
+        Comment = 8,
+        Document = 9,
+        DocumentFragment = 11,
         DocumentType = 10,
-        Element = 1, 
-        Entity = 6, 
+        Element = 1,
+        Entity = 6,
         EntityReference = 5,
-        Notation = 12, 
-        ProcessingInstruction = 7, 
+        Notation = 12,
+        ProcessingInstruction = 7,
         Text = 3
     };
     Type type;
@@ -185,14 +185,14 @@ public:
 
 class NamedNodeMap : public Object
 {
-    Q_MANAGED
+    V4_OBJECT
 public:
     NamedNodeMap(ExecutionEngine *engine, NodeImpl *data, const QList<NodeImpl *> &list)
         : Object(engine)
         , list(list)
         , d(data)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
 
         if (d)
             d->addref();
@@ -216,17 +216,17 @@ public:
     NodeImpl *d;
 };
 
-DEFINE_MANAGED_VTABLE(NamedNodeMap);
+DEFINE_OBJECT_VTABLE(NamedNodeMap);
 
 class NodeList : public Object
 {
-    Q_MANAGED
+    V4_OBJECT
 public:
     NodeList(ExecutionEngine *engine, NodeImpl *data)
         : Object(engine)
         , d(data)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
 
         if (d)
             d->addref();
@@ -249,16 +249,16 @@ public:
     NodeImpl *d;
 };
 
-DEFINE_MANAGED_VTABLE(NodeList);
+DEFINE_OBJECT_VTABLE(NodeList);
 
 class NodePrototype : public Object
 {
-    Q_MANAGED
+    V4_OBJECT
 public:
     NodePrototype(ExecutionEngine *engine)
         : Object(engine)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
 
         Scope scope(engine);
         ScopedObject protectThis(scope, this);
@@ -302,17 +302,17 @@ public:
 
 };
 
-DEFINE_MANAGED_VTABLE(NodePrototype);
+DEFINE_OBJECT_VTABLE(NodePrototype);
 
 class Node : public Object
 {
-    Q_MANAGED
+    V4_OBJECT
 
     Node(ExecutionEngine *engine, NodeImpl *data)
         : Object(engine)
         , d(data)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
 
         if (d)
             d->addref();
@@ -339,7 +339,7 @@ private:
     Node &operator=(const Node &);
 };
 
-DEFINE_MANAGED_VTABLE(Node);
+DEFINE_OBJECT_VTABLE(Node);
 
 class Element : public Node
 {
@@ -407,7 +407,7 @@ public:
 
 }
 
-void NodeImpl::addref() 
+void NodeImpl::addref()
 {
     document->addref();
 }
@@ -826,7 +826,7 @@ ReturnedValue Document::load(QV8Engine *engine, const QByteArray &data)
             break;
         case QXmlStreamReader::EndDocument:
             break;
-        case QXmlStreamReader::StartElement: 
+        case QXmlStreamReader::StartElement:
         {
             Q_ASSERT(document);
             NodeImpl *node = new NodeImpl;
@@ -851,7 +851,7 @@ ReturnedValue Document::load(QV8Engine *engine, const QByteArray &data)
                 attr->parent = node;
                 node->attributes.append(attr);
             }
-        } 
+        }
             break;
         case QXmlStreamReader::EndElement:
             nodeStack.pop();
@@ -905,8 +905,11 @@ ReturnedValue NamedNodeMap::getIndexed(Managed *m, uint index, bool *hasProperty
 {
     QV4::ExecutionEngine *v4 = m->engine();
     NamedNodeMap *r = m->as<NamedNodeMap>();
-    if (!r)
+    if (!r) {
+        if (hasProperty)
+            *hasProperty = false;
         return v4->currentContext()->throwTypeError();
+    }
 
     QV8Engine *engine = v4->v8Engine;
 
@@ -960,8 +963,11 @@ ReturnedValue NodeList::getIndexed(Managed *m, uint index, bool *hasProperty)
 {
     QV4::ExecutionEngine *v4 = m->engine();
     NodeList *r = m->as<NodeList>();
-    if (!r)
+    if (!r) {
+        if (hasProperty)
+            *hasProperty = false;
         return v4->currentContext()->throwTypeError();
+    }
 
     QV8Engine *engine = v4->v8Engine;
 
@@ -1045,7 +1051,7 @@ class QQmlXMLHttpRequest : public QObject
 {
     Q_OBJECT
 public:
-    enum State { Unsent = 0, 
+    enum State { Unsent = 0,
                  Opened = 1, HeadersReceived = 2,
                  Loading = 3, Done = 4 };
 
@@ -1250,7 +1256,7 @@ void QQmlXMLHttpRequest::requestFromUrl(const QUrl &url)
             }
             request.setHeader(QNetworkRequest::ContentTypeHeader, str);
         } else {
-            request.setHeader(QNetworkRequest::ContentTypeHeader, 
+            request.setHeader(QNetworkRequest::ContentTypeHeader,
                               QLatin1String("text/plain;charset=UTF-8"));
         }
     }
@@ -1258,7 +1264,7 @@ void QQmlXMLHttpRequest::requestFromUrl(const QUrl &url)
     if (xhrDump()) {
         qWarning().nospace() << "XMLHttpRequest: " << qPrintable(m_method) << ' ' << qPrintable(url.toString());
         if (!m_data.isEmpty()) {
-            qWarning().nospace() << "                " 
+            qWarning().nospace() << "                "
                                  << qPrintable(QString::fromUtf8(m_data));
         }
     }
@@ -1303,7 +1309,7 @@ ReturnedValue QQmlXMLHttpRequest::abort(const ValueRef me)
     m_errorFlag = true;
     m_request = QNetworkRequest();
 
-    if (!(m_state == Unsent || 
+    if (!(m_state == Unsent ||
           (m_state == Opened && !m_sendFlag) ||
           m_state == Done)) {
 
@@ -1329,7 +1335,7 @@ void QQmlXMLHttpRequest::setMe(const ValueRef me)
 
 void QQmlXMLHttpRequest::readyRead()
 {
-    m_status = 
+    m_status =
         m_network->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     m_statusText =
         QString::fromUtf8(m_network->attribute(QNetworkRequest::HttpReasonPhraseAttribute).toByteArray());
@@ -1388,13 +1394,14 @@ void QQmlXMLHttpRequest::error(QNetworkReply::NetworkError error)
         error == QNetworkReply::ContentNotFoundError ||
         error == QNetworkReply::AuthenticationRequiredError ||
         error == QNetworkReply::ContentReSendError ||
-        error == QNetworkReply::UnknownContentError) {
+        error == QNetworkReply::UnknownContentError ||
+        error == QNetworkReply::ProtocolInvalidOperationError) {
         m_state = Loading;
         dispatchCallback(me);
     } else {
         m_errorFlag = true;
         m_responseEntityBody = QByteArray();
-    } 
+    }
 
     m_state = Done;
 
@@ -1438,7 +1445,7 @@ void QQmlXMLHttpRequest::finished()
     if (xhrDump()) {
         qWarning().nospace() << "XMLHttpRequest: RESPONSE " << qPrintable(m_url.toString());
         if (!m_responseEntityBody.isEmpty()) {
-            qWarning().nospace() << "                " 
+            qWarning().nospace() << "                "
                                  << qPrintable(QString::fromUtf8(m_responseEntityBody));
         }
     }
@@ -1479,7 +1486,7 @@ void QQmlXMLHttpRequest::readEncoding()
         }
     }
 
-    if (m_mime.isEmpty() || m_mime == "text/xml" || m_mime == "application/xml" || m_mime.endsWith("+xml")) 
+    if (m_mime.isEmpty() || m_mime == "text/xml" || m_mime == "application/xml" || m_mime.endsWith("+xml"))
         m_gotXml = true;
 }
 
@@ -1494,7 +1501,7 @@ QTextCodec* QQmlXMLHttpRequest::findTextCodec() const
 {
     QTextCodec *codec = 0;
 
-    if (!m_charset.isEmpty()) 
+    if (!m_charset.isEmpty())
         codec = QTextCodec::codecForName(m_charset);
 
     if (!codec && m_gotXml) {
@@ -1503,7 +1510,7 @@ QTextCodec* QQmlXMLHttpRequest::findTextCodec() const
         codec = QTextCodec::codecForName(reader.documentEncoding().toString().toUtf8());
     }
 
-    if (!codec && m_mime == "text/html") 
+    if (!codec && m_mime == "text/html")
         codec = QTextCodec::codecForHtml(m_responseEntityBody, 0);
 
     if (!codec)
@@ -1600,12 +1607,12 @@ void QQmlXMLHttpRequest::destroyNetwork()
 
 struct QQmlXMLHttpRequestWrapper : public Object
 {
-    Q_MANAGED
+    V4_OBJECT
     QQmlXMLHttpRequestWrapper(ExecutionEngine *engine, QQmlXMLHttpRequest *request)
         : Object(engine)
         , request(request)
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
     ~QQmlXMLHttpRequestWrapper() {
         delete request;
@@ -1618,15 +1625,15 @@ struct QQmlXMLHttpRequestWrapper : public Object
     QQmlXMLHttpRequest *request;
 };
 
-DEFINE_MANAGED_VTABLE(QQmlXMLHttpRequestWrapper);
+DEFINE_OBJECT_VTABLE(QQmlXMLHttpRequestWrapper);
 
 struct QQmlXMLHttpRequestCtor : public FunctionObject
 {
-    Q_MANAGED
+    V4_OBJECT
     QQmlXMLHttpRequestCtor(ExecutionEngine *engine)
         : FunctionObject(engine->rootContext, QStringLiteral("XMLHttpRequest"))
     {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
         Scope scope(engine);
         ScopedValue protectThis(scope, this);
 
@@ -1689,7 +1696,7 @@ struct QQmlXMLHttpRequestCtor : public FunctionObject
     Object *proto;
 };
 
-DEFINE_MANAGED_VTABLE(QQmlXMLHttpRequestCtor);
+DEFINE_OBJECT_VTABLE(QQmlXMLHttpRequestCtor);
 
 void QQmlXMLHttpRequestCtor::setupProto()
 {
@@ -1738,7 +1745,7 @@ ReturnedValue QQmlXMLHttpRequestCtor::method_open(CallContext *ctx)
 
     // Argument 0 - Method
     QString method = ctx->callData->args[0].toQStringNoThrow().toUpper();
-    if (method != QLatin1String("GET") && 
+    if (method != QLatin1String("GET") &&
         method != QLatin1String("PUT") &&
         method != QLatin1String("HEAD") &&
         method != QLatin1String("POST") &&
@@ -1748,7 +1755,7 @@ ReturnedValue QQmlXMLHttpRequestCtor::method_open(CallContext *ctx)
     // Argument 1 - URL
     QUrl url = QUrl(ctx->callData->args[1].toQStringNoThrow());
 
-    if (url.isRelative()) 
+    if (url.isRelative())
         url = engine->callingContext()->resolvedUrl(url);
 
     // Argument 2 - async (optional)
@@ -1812,7 +1819,7 @@ ReturnedValue QQmlXMLHttpRequestCtor::method_setRequestHeader(CallContext *ctx)
         nameUpper == QLatin1String("USER-AGENT") ||
         nameUpper == QLatin1String("VIA") ||
         nameUpper.startsWith(QLatin1String("PROXY-")) ||
-        nameUpper.startsWith(QLatin1String("SEC-"))) 
+        nameUpper.startsWith(QLatin1String("SEC-")))
         return Encode::undefined();
 
     r->addHeader(name, value);
@@ -1959,7 +1966,7 @@ ReturnedValue QQmlXMLHttpRequestCtor::method_get_responseText(CallContext *ctx)
     if (r->readyState() != QQmlXMLHttpRequest::Loading &&
         r->readyState() != QQmlXMLHttpRequest::Done)
         return engine->toString(QString());
-    else 
+    else
         return engine->toString(r->responseBody());
 }
 

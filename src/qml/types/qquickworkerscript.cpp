@@ -62,7 +62,7 @@
 #include <private/qv8engine_p.h>
 #include <private/qv4serialize_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4functionobject_p.h>
 #include <private/qv4script_p.h>
 #include <private/qv4scopedvalue_p.h>
@@ -195,15 +195,15 @@ private:
     void reportScriptException(WorkerScript *, const QQmlError &error);
 };
 
-QQuickWorkerScriptEnginePrivate::WorkerEngine::WorkerEngine(QQuickWorkerScriptEnginePrivate *parent) 
+QQuickWorkerScriptEnginePrivate::WorkerEngine::WorkerEngine(QQuickWorkerScriptEnginePrivate *parent)
 : QV8Engine(0), p(parent), accessManager(0)
 {
     m_v4Engine->v8Engine = this;
 }
 
-QQuickWorkerScriptEnginePrivate::WorkerEngine::~WorkerEngine() 
-{ 
-    delete accessManager; 
+QQuickWorkerScriptEnginePrivate::WorkerEngine::~WorkerEngine()
+{
+    delete accessManager;
 }
 
 void QQuickWorkerScriptEnginePrivate::WorkerEngine::init()
@@ -264,7 +264,7 @@ QV4::ReturnedValue QQuickWorkerScriptEnginePrivate::WorkerEngine::sendFunction(i
     return v.asReturnedValue();
 }
 
-QNetworkAccessManager *QQuickWorkerScriptEnginePrivate::WorkerEngine::networkAccessManager() 
+QNetworkAccessManager *QQuickWorkerScriptEnginePrivate::WorkerEngine::networkAccessManager()
 {
     if (!accessManager) {
         if (p->qmlengine && p->qmlengine->networkAccessManagerFactory()) {
@@ -340,7 +340,11 @@ bool QQuickWorkerScriptEnginePrivate::event(QEvent *event)
         return true;
     } else if (event->type() == (QEvent::Type)WorkerRemoveEvent::WorkerRemove) {
         WorkerRemoveEvent *workerEvent = static_cast<WorkerRemoveEvent *>(event);
-        workers.remove(workerEvent->workerId());
+        QHash<int, WorkerScript *>::iterator itr = workers.find(workerEvent->workerId());
+        if (itr != workers.end()) {
+            delete itr.value();
+            workers.erase(itr);
+        }
         return true;
     } else {
         return QObject::event(event);
@@ -382,7 +386,7 @@ void QQuickWorkerScriptEnginePrivate::processLoad(int id, const QUrl &url)
     if (f.open(QIODevice::ReadOnly)) {
         QByteArray data = f.readAll();
         QString sourceCode = QString::fromUtf8(data);
-        QQmlScript::Parser::extractPragmas(sourceCode);
+        QmlIR::Document::removeScriptPragmas(sourceCode);
 
         WorkerScript *script = workers.value(id);
         if (!script)
@@ -411,7 +415,7 @@ void QQuickWorkerScriptEnginePrivate::processLoad(int id, const QUrl &url)
     }
 }
 
-void QQuickWorkerScriptEnginePrivate::reportScriptException(WorkerScript *script, 
+void QQuickWorkerScriptEnginePrivate::reportScriptException(WorkerScript *script,
                                                                   const QQmlError &error)
 {
     QQuickWorkerScriptEnginePrivate *p = QQuickWorkerScriptEnginePrivate::get(workerEngine);
@@ -580,7 +584,7 @@ void QQuickWorkerScriptEngine::run()
     that the main GUI thread is not blocked.
 
     Messages can be passed between the new thread and the parent thread
-    using \l sendMessage() and the \l {WorkerScript::onMessage}{onMessage()} handler.
+    using \l sendMessage() and the \c onMessage() handler.
 
     An example:
 
@@ -716,10 +720,12 @@ void QQuickWorkerScript::componentComplete()
 }
 
 /*!
-    \qmlsignal WorkerScript::onMessage(jsobject msg)
+    \qmlsignal WorkerScript::message(jsobject msg)
 
-    This handler is called when a message \a msg is received from a worker
+    This signal is emitted when a message \a msg is received from a worker
     script in another thread through a call to sendMessage().
+
+    The corresponding handler is \c onMessage.
 */
 
 bool QQuickWorkerScript::event(QEvent *event)
