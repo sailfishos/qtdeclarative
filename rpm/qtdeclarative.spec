@@ -255,12 +255,13 @@ touch .git
 # the right place: it's after everything has happened except for
 # default_post.prf, which sets up the real QMAKE_C{XX}FLAGS, so brutally abuse
 # it to acomplish our evil goals.
-%qmake5 -after \
+%qmake5 \
+    QT.widgets.name= DEFINES+=QT_NO_WIDGETS \
+    -after \
     QMAKE_CFLAGS_RELEASE-=-mno-thumb     QMAKE_CFLAGS_DEBUG-=-mno-thumb \
     QMAKE_CXXFLAGS_RELEASE-=-mno-thumb   QMAKE_CXXFLAGS_DEBUG-=-mno-thumb \
     QMAKE_CFLAGS_RELEASE+=-mthumb        QMAKE_CFLAGS_DEBUG+=-mthumb \
-    QMAKE_CXXFLAGS_RELEASE+=-mthumb      QMAKE_CXXFLAGS_DEBUG+=-mthumb \
-    QT.widgets.name= DEFINES+=QT_NO_WIDGETS
+    QMAKE_CXXFLAGS_RELEASE+=-mthumb      QMAKE_CXXFLAGS_DEBUG+=-mthumb
 %else
 %qmake5 QT.widgets.name= DEFINES+=QT_NO_WIDGETS
 %endif
