@@ -46,7 +46,7 @@
 #include "qquickitem_p.h"
 #include "qquickitemchangelistener_p.h"
 
-#include <private/qqmlprofilerservice_p.h>
+#include <private/qquickprofiler_p.h>
 #include <private/qqmlinspectorservice_p.h>
 #include <private/qqmlmemoryprofiler_p.h>
 
@@ -55,6 +55,26 @@
 #include <QtCore/qbasictimer.h>
 
 QT_BEGIN_NAMESPACE
+
+DEFINE_OBJECT_VTABLE(QQuickRootItemMarker);
+
+QQuickRootItemMarker::QQuickRootItemMarker(QQuickViewPrivate *view)
+    : QV4::Object(QQmlEnginePrivate::getV4Engine(view->engine.data()))
+    , view(view)
+{
+    setVTable(staticVTable());
+}
+
+void QQuickRootItemMarker::markObjects(QV4::Managed *that, QV4::ExecutionEngine *e)
+{
+    QQuickItem *root = static_cast<QQuickRootItemMarker*>(that)->view->root;
+    if (root) {
+        QQuickItemPrivate *rootPrivate = QQuickItemPrivate::get(root);
+        rootPrivate->markObjects(e);
+    }
+
+    QV4::Object::markObjects(that, e);
+}
 
 void QQuickViewPrivate::init(QQmlEngine* e)
 {
@@ -67,6 +87,13 @@ void QQuickViewPrivate::init(QQmlEngine* e)
 
     if (!engine.data()->incubationController())
         engine.data()->setIncubationController(q->incubationController());
+
+    {
+        QV4::ExecutionEngine *v4 = QQmlEnginePrivate::getV4Engine(engine.data());
+        QV4::Scope scope(v4);
+        QV4::Scoped<QQuickRootItemMarker> v(scope, new (v4->memoryManager) QQuickRootItemMarker(this));
+        rootItemMarker = v;
+    }
 
     if (QQmlDebugService::isDebuggingEnabled())
         QQmlInspectorService::instance()->addView(q);
@@ -576,7 +603,7 @@ void QQuickView::resizeEvent(QResizeEvent *e)
 /*! \reimp */
 void QQuickView::keyPressEvent(QKeyEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Key);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Key>());
 
     QQuickWindow::keyPressEvent(e);
 }
@@ -584,7 +611,7 @@ void QQuickView::keyPressEvent(QKeyEvent *e)
 /*! \reimp */
 void QQuickView::keyReleaseEvent(QKeyEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Key);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Key>());
 
     QQuickWindow::keyReleaseEvent(e);
 }
@@ -592,7 +619,7 @@ void QQuickView::keyReleaseEvent(QKeyEvent *e)
 /*! \reimp */
 void QQuickView::mouseMoveEvent(QMouseEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Mouse);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Mouse>());
 
     QQuickWindow::mouseMoveEvent(e);
 }
@@ -600,7 +627,7 @@ void QQuickView::mouseMoveEvent(QMouseEvent *e)
 /*! \reimp */
 void QQuickView::mousePressEvent(QMouseEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Mouse);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Mouse>());
 
     QQuickWindow::mousePressEvent(e);
 }
@@ -608,7 +635,7 @@ void QQuickView::mousePressEvent(QMouseEvent *e)
 /*! \reimp */
 void QQuickView::mouseReleaseEvent(QMouseEvent *e)
 {
-    QQmlProfilerService::addEvent(QQmlProfilerService::Mouse);
+    Q_QUICK_PROFILE(addEvent<QQuickProfiler::Mouse>());
 
     QQuickWindow::mouseReleaseEvent(e);
 }

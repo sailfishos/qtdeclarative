@@ -48,8 +48,8 @@ QT_BEGIN_NAMESPACE
 class QTextStream;
 class QQmlEnginePrivate;
 
-namespace QQmlJS {
-namespace V4IR {
+namespace QV4 {
+namespace IR {
 
 class Q_AUTOTEST_EXPORT LifeTimeInterval {
 public:
@@ -77,23 +77,22 @@ private:
 public:
     enum { Invalid = -1 };
 
-    LifeTimeInterval()
+    explicit LifeTimeInterval(int rangeCapacity = 2)
         : _end(Invalid)
         , _reg(Invalid)
         , _isFixedInterval(0)
         , _isSplitFromInterval(0)
-    {}
+    { _ranges.reserve(rangeCapacity); }
 
     bool isValid() const { return _end != Invalid; }
 
     void setTemp(const Temp &temp) { this->_temp = temp; }
     Temp temp() const { return _temp; }
-    bool isFP() const { return _temp.type == V4IR::DoubleType; }
+    bool isFP() const { return _temp.type == IR::DoubleType; }
 
     void setFrom(Stmt *from);
     void addRange(int from, int to);
-    Ranges ranges() const { return _ranges; }
-    void reserveRanges(int capacity) { _ranges.reserve(capacity); }
+    const Ranges &ranges() const { return _ranges; }
 
     int start() const { return _ranges.first().start; }
     int end() const { return _end; }
@@ -137,13 +136,12 @@ public:
     }
 };
 
-class Optimizer
+class Q_QML_PRIVATE_EXPORT Optimizer
 {
+    Q_DISABLE_COPY(Optimizer)
+
 public:
-    Optimizer(Function *function)
-        : function(function)
-        , inSSA(false)
-    {}
+    Optimizer(Function *function);
 
     void run(QQmlEnginePrivate *qmlEngine);
     void convertOutOfSSA();
@@ -153,9 +151,9 @@ public:
 
     QHash<BasicBlock *, BasicBlock *> loopStartEndBlocks() const { return startEndLoops; }
 
-    QVector<LifeTimeInterval> lifeRanges() const;
+    QVector<LifeTimeInterval> lifeTimeIntervals() const;
 
-    QSet<V4IR::Jump *> calculateOptionalJumps();
+    QSet<IR::Jump *> calculateOptionalJumps();
 
     static void showMeTheCode(Function *function);
 
@@ -188,7 +186,7 @@ class MoveMapping
 public:
     void add(Expr *from, Temp *to);
     void order();
-    void insertMoves(BasicBlock *bb, Function *function, bool atEnd) const;
+    QList<IR::Move *> insertMoves(BasicBlock *bb, Function *function, bool atEnd) const;
 
     void dump() const;
 
@@ -198,12 +196,12 @@ private:
                     QList<Move> &swaps) const;
 };
 
-} // V4IR namespace
-} // QQmlJS namespace
+} // IR namespace
+} // QV4 namespace
 
 
-Q_DECLARE_TYPEINFO(QQmlJS::V4IR::LifeTimeInterval, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QQmlJS::V4IR::LifeTimeInterval::Range, Q_PRIMITIVE_TYPE);
+Q_DECLARE_TYPEINFO(QV4::IR::LifeTimeInterval, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QV4::IR::LifeTimeInterval::Range, Q_PRIMITIVE_TYPE);
 
 QT_END_NAMESPACE
 

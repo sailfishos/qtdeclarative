@@ -45,7 +45,7 @@
 #include <QtCore/QVector>
 #include <QtCore/QDebug>
 #include "qv4global_p.h"
-#include "qv4value_def_p.h"
+#include "qv4value_p.h"
 #include "qv4internalclass_p.h"
 
 QT_BEGIN_NAMESPACE
@@ -53,8 +53,8 @@ QT_BEGIN_NAMESPACE
 namespace QV4 {
 
 #define Q_MANAGED_CHECK \
-    template <typename T> inline void qt_check_for_QMANAGED_macro(const T &_q_argument) const \
-    { int i = qYouForgotTheQ_MANAGED_Macro(this, &_q_argument); i = i + 1; }
+    template <typename T> inline void qt_check_for_QMANAGED_macro(const T *_q_argument) const \
+    { int i = qYouForgotTheQ_MANAGED_Macro(this, _q_argument); i = i + 1; }
 
 template <typename T>
 inline int qYouForgotTheQ_MANAGED_Macro(T, T) { return 0; }
@@ -62,13 +62,25 @@ inline int qYouForgotTheQ_MANAGED_Macro(T, T) { return 0; }
 template <typename T1, typename T2>
 inline void qYouForgotTheQ_MANAGED_Macro(T1, T2) {}
 
-#define Q_MANAGED \
+#define V4_MANAGED \
     public: \
         Q_MANAGED_CHECK \
         static const QV4::ManagedVTable static_vtbl; \
+        static inline const QV4::ManagedVTable *staticVTable() { return &static_vtbl; } \
         template <typename T> \
         QV4::Returned<T> *asReturned() { return QV4::Returned<T>::create(this); } \
 
+#define V4_OBJECT \
+    public: \
+        Q_MANAGED_CHECK \
+        static const QV4::ObjectVTable static_vtbl; \
+        static inline const QV4::ManagedVTable *staticVTable() { return &static_vtbl.managedVTable; } \
+        template <typename T> \
+        QV4::Returned<T> *asReturned() { return QV4::Returned<T>::create(this); } \
+
+#define Q_MANAGED_TYPE(type) \
+    public: \
+        enum { MyType = Type_##type };
 
 struct GCDeletable
 {
@@ -80,11 +92,25 @@ struct GCDeletable
 
 struct ManagedVTable
 {
+    uint isExecutionContext : 1;
+    uint isString : 1;
+    uint isObject : 1;
+    uint isFunctionObject : 1;
+    uint isErrorObject : 1;
+    uint isArrayData : 1;
+    uint unused : 18;
+    uint type : 8;
+    const char *className;
+    void (*destroy)(Managed *);
+    void (*markObjects)(Managed *, ExecutionEngine *e);
+    bool (*isEqualTo)(Managed *m, Managed *other);
+};
+
+struct ObjectVTable
+{
+    ManagedVTable managedVTable;
     ReturnedValue (*call)(Managed *, CallData *data);
     ReturnedValue (*construct)(Managed *, CallData *data);
-    void (*markObjects)(Managed *, ExecutionEngine *e);
-    void (*destroy)(Managed *);
-    void (*collectDeletables)(Managed *, GCDeletable **deletable);
     ReturnedValue (*get)(Managed *, const StringRef name, bool *hasProperty);
     ReturnedValue (*getIndexed)(Managed *, uint index, bool *hasProperty);
     void (*put)(Managed *, const StringRef name, const ValueRef value);
@@ -95,42 +121,37 @@ struct ManagedVTable
     bool (*deleteIndexedProperty)(Managed *m, uint index);
     ReturnedValue (*getLookup)(Managed *m, Lookup *l);
     void (*setLookup)(Managed *m, Lookup *l, const ValueRef v);
-    bool (*isEqualTo)(Managed *m, Managed *other);
-    Property *(*advanceIterator)(Managed *m, ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attributes);
-    const char *className;
+    uint (*getLength)(const Managed *m);
+    void (*advanceIterator)(Managed *m, ObjectIterator *it, StringRef name, uint *index, Property *p, PropertyAttributes *attributes);
 };
 
-#define DEFINE_MANAGED_VTABLE(classname) \
-const QV4::ManagedVTable classname::static_vtbl =    \
-{                                               \
-    call,                                       \
-    construct,                                  \
-    markObjects,                                \
-    destroy,                                    \
+#define DEFINE_MANAGED_VTABLE_INT(classname) \
+{     \
+    classname::IsExecutionContext,   \
+    classname::IsString,   \
+    classname::IsObject,   \
+    classname::IsFunctionObject,   \
+    classname::IsErrorObject,   \
+    classname::IsArrayData,   \
     0,                                          \
-    get,                                        \
-    getIndexed,                                 \
-    put,                                        \
-    putIndexed,                                 \
-    query,                                      \
-    queryIndexed,                               \
-    deleteProperty,                             \
-    deleteIndexedProperty,                      \
-    getLookup,                                  \
-    setLookup,                                  \
-    isEqualTo,                                  \
-    advanceIterator,                            \
-    #classname                                  \
+    classname::MyType,                          \
+    #classname,                                 \
+    destroy,                                    \
+    markObjects,                                \
+    isEqualTo                                  \
 }
 
-#define DEFINE_MANAGED_VTABLE_WITH_DELETABLES(classname) \
-const QV4::ManagedVTable classname::static_vtbl =    \
-{                                               \
+
+#define DEFINE_MANAGED_VTABLE(classname) \
+const QV4::ManagedVTable classname::static_vtbl = DEFINE_MANAGED_VTABLE_INT(classname)
+
+
+#define DEFINE_OBJECT_VTABLE(classname) \
+const QV4::ObjectVTable classname::static_vtbl =    \
+{     \
+    DEFINE_MANAGED_VTABLE_INT(classname), \
     call,                                       \
     construct,                                  \
-    markObjects,                                \
-    destroy,                                    \
-    collectDeletables,                          \
     get,                                        \
     getIndexed,                                 \
     put,                                        \
@@ -141,14 +162,42 @@ const QV4::ManagedVTable classname::static_vtbl =    \
     deleteIndexedProperty,                      \
     getLookup,                                  \
     setLookup,                                  \
-    isEqualTo,                                  \
-    advanceIterator,                            \
-    #classname                                  \
+    getLength,                                  \
+    advanceIterator                            \
 }
 
-struct Q_QML_EXPORT Managed
+#define DEFINE_MANAGED_VTABLE_WITH_NAME(classname, name) \
+const QV4::ObjectVTable classname::static_vtbl =    \
+{                                               \
+    DEFINE_MANAGED_VTABLE_INT(name), \
+    call,                                       \
+    construct,                                  \
+    get,                                        \
+    getIndexed,                                 \
+    put,                                        \
+    putIndexed,                                 \
+    query,                                      \
+    queryIndexed,                               \
+    deleteProperty,                             \
+    deleteIndexedProperty,                      \
+    getLookup,                                  \
+    setLookup,                                  \
+    getLength,                                  \
+    advanceIterator                            \
+}
+
+
+struct Q_QML_PRIVATE_EXPORT Managed
 {
-    Q_MANAGED
+    V4_MANAGED
+    enum {
+        IsExecutionContext = false,
+        IsString = false,
+        IsObject = false,
+        IsFunctionObject = false,
+        IsErrorObject = false,
+        IsArrayData = false
+    };
 private:
     void *operator new(size_t);
     Managed(const Managed &other);
@@ -158,7 +207,7 @@ protected:
     Managed(InternalClass *internal)
         : internalClass(internal), _data(0)
     {
-        Q_ASSERT(!internalClass || internalClass->vtable);
+        Q_ASSERT(internalClass && internalClass->vtable);
         inUse = 1; extensible = 1;
     }
 
@@ -183,13 +232,16 @@ public:
         Type_RegExpObject,
         Type_ErrorObject,
         Type_ArgumentsObject,
-        Type_JSONObject,
+        Type_JsonObject,
         Type_MathObject,
+
+        Type_ExecutionContext,
         Type_ForeachIteratorObject,
         Type_RegExp,
 
         Type_QmlSequence
     };
+    Q_MANAGED_TYPE(Invalid)
 
     ExecutionEngine *engine() const;
 
@@ -199,9 +251,9 @@ public:
         if (!this || !internalClass)
             return 0;
 #if !defined(QT_NO_QOBJECT_CHECK)
-        static_cast<T *>(this)->qt_check_for_QMANAGED_macro(*static_cast<T *>(this));
+        static_cast<T *>(this)->qt_check_for_QMANAGED_macro(static_cast<T *>(this));
 #endif
-        return internalClass->vtable == &T::static_vtbl ? static_cast<T *>(this) : 0;
+        return internalClass->vtable == T::staticVTable() ? static_cast<T *>(this) : 0;
     }
     template <typename T>
     const T *as() const {
@@ -209,26 +261,26 @@ public:
         if (!this)
             return 0;
 #if !defined(QT_NO_QOBJECT_CHECK)
-        reinterpret_cast<T *>(this)->qt_check_for_QMANAGED_macro(*reinterpret_cast<T *>(const_cast<Managed *>(this)));
+        static_cast<T *>(this)->qt_check_for_QMANAGED_macro(static_cast<T *>(const_cast<Managed *>(this)));
 #endif
-        return internalClass->vtable == &T::static_vtbl ? static_cast<const T *>(this) : 0;
+        return internalClass->vtable == T::staticVTable() ? static_cast<const T *>(this) : 0;
     }
 
-    String *asString() { return type == Type_String ? reinterpret_cast<String *>(this) : 0; }
-    Object *asObject() { return type != Type_String ? reinterpret_cast<Object *>(this) : 0; }
-    ArrayObject *asArrayObject() { return type == Type_ArrayObject ? reinterpret_cast<ArrayObject *>(this) : 0; }
-    FunctionObject *asFunctionObject() { return type == Type_FunctionObject ? reinterpret_cast<FunctionObject *>(this) : 0; }
-    BooleanObject *asBooleanObject() { return type == Type_BooleanObject ? reinterpret_cast<BooleanObject *>(this) : 0; }
-    NumberObject *asNumberObject() { return type == Type_NumberObject ? reinterpret_cast<NumberObject *>(this) : 0; }
-    StringObject *asStringObject() { return type == Type_StringObject ? reinterpret_cast<StringObject *>(this) : 0; }
-    DateObject *asDateObject() { return type == Type_DateObject ? reinterpret_cast<DateObject *>(this) : 0; }
-    ErrorObject *asErrorObject() { return type == Type_ErrorObject ? reinterpret_cast<ErrorObject *>(this) : 0; }
-    ArgumentsObject *asArgumentsObject() { return type == Type_ArgumentsObject ? reinterpret_cast<ArgumentsObject *>(this) : 0; }
+    String *asString() { return internalClass->vtable->isString ? reinterpret_cast<String *>(this) : 0; }
+    Object *asObject() { return internalClass->vtable->isObject ? reinterpret_cast<Object *>(this) : 0; }
+    ArrayObject *asArrayObject() { return internalClass->vtable->type == Type_ArrayObject ? reinterpret_cast<ArrayObject *>(this) : 0; }
+    FunctionObject *asFunctionObject() { return internalClass->vtable->isFunctionObject ? reinterpret_cast<FunctionObject *>(this) : 0; }
+    BooleanObject *asBooleanObject() { return internalClass->vtable->type == Type_BooleanObject ? reinterpret_cast<BooleanObject *>(this) : 0; }
+    NumberObject *asNumberObject() { return internalClass->vtable->type == Type_NumberObject ? reinterpret_cast<NumberObject *>(this) : 0; }
+    StringObject *asStringObject() { return internalClass->vtable->type == Type_StringObject ? reinterpret_cast<StringObject *>(this) : 0; }
+    DateObject *asDateObject() { return internalClass->vtable->type == Type_DateObject ? reinterpret_cast<DateObject *>(this) : 0; }
+    ErrorObject *asErrorObject() { return internalClass->vtable->isErrorObject ? reinterpret_cast<ErrorObject *>(this) : 0; }
+    ArgumentsObject *asArgumentsObject() { return internalClass->vtable->type == Type_ArgumentsObject ? reinterpret_cast<ArgumentsObject *>(this) : 0; }
 
-    bool isListType() const { return type == Type_QmlSequence; }
+    bool isListType() const { return internalClass->vtable->type == Type_QmlSequence; }
 
-    bool isArrayObject() const { return type == Type_ArrayObject; }
-    bool isStringObject() const { return type == Type_StringObject; }
+    bool isArrayObject() const { return internalClass->vtable->type == Type_ArrayObject; }
+    bool isStringObject() const { return internalClass->vtable->type == Type_StringObject; }
 
     QString className() const;
 
@@ -244,46 +296,16 @@ public:
 
     void setVTable(const ManagedVTable *vt);
 
-    ReturnedValue construct(CallData *d);
-    ReturnedValue call(CallData *d);
-    ReturnedValue get(const StringRef name, bool *hasProperty = 0);
-    ReturnedValue getIndexed(uint index, bool *hasProperty = 0);
-    void put(const StringRef name, const ValueRef value);
-    void putIndexed(uint index, const ValueRef value);
-    PropertyAttributes query(StringRef name) const;
-    PropertyAttributes queryIndexed(uint index) const
-    { return internalClass->vtable->queryIndexed(this, index); }
-
-    bool deleteProperty(const StringRef name);
-    bool deleteIndexedProperty(uint index)
-    { return internalClass->vtable->deleteIndexedProperty(this, index); }
-    ReturnedValue getLookup(Lookup *l)
-    { return internalClass->vtable->getLookup(this, l); }
-    void setLookup(Lookup *l, const ValueRef v);
-
     bool isEqualTo(Managed *other)
     { return internalClass->vtable->isEqualTo(this, other); }
-    Property *advanceIterator(ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attributes);
 
     static void destroy(Managed *that) { that->_data = 0; }
-    static ReturnedValue construct(Managed *m, CallData *d);
-    static ReturnedValue call(Managed *m, CallData *);
-    static ReturnedValue getLookup(Managed *m, Lookup *);
-    static void setLookup(Managed *m, Lookup *l, const ValueRef v);
     static bool isEqualTo(Managed *m, Managed *other);
-
-    uint internalType() const {
-        return type;
-    }
 
     ReturnedValue asReturnedValue() { return Value::fromManaged(this).asReturnedValue(); }
 
 
     InternalClass *internalClass;
-
-    enum {
-        SimpleArray = 1
-    };
 
     union {
         uint _data;
@@ -291,14 +313,14 @@ public:
             uchar markBit :  1;
             uchar inUse   :  1;
             uchar extensible : 1; // used by Object
-            uchar isNonStrictArgumentsObject : 1;
+            uchar _unused : 1;
             uchar needsActivation : 1; // used by FunctionObject
             uchar strictMode : 1; // used by FunctionObject
             uchar bindingKeyFlag : 1;
             uchar hasAccessorProperty : 1;
-            uchar type;
+            uchar _type;
             mutable uchar subtype;
-            uchar flags;
+            uchar _flags;
         };
     };
 
@@ -307,6 +329,7 @@ private:
     friend struct Identifiers;
     friend struct ObjectIterator;
 };
+
 
 template<>
 inline Managed *value_cast(const Value &v) {
@@ -336,12 +359,67 @@ inline FunctionObject *managed_cast(Managed *m)
 }
 
 
-inline ReturnedValue Managed::construct(CallData *d) {
-    return internalClass->vtable->construct(this, d);
-}
-inline ReturnedValue Managed::call(CallData *d) {
-    return internalClass->vtable->call(this, d);
-}
+Value *extractValuePointer(const ScopedValue &);
+template<typename T>
+Value *extractValuePointer(const Scoped<T> &);
+
+#define DEFINE_REF_METHODS(Class, Base) \
+    Class##Ref(const QV4::ScopedValue &v) \
+    { QV4::Value *val = extractValuePointer(v); ptr = QV4::value_cast<Class>(*val) ? val : 0; } \
+    Class##Ref(const QV4::Scoped<Class> &v) { ptr = extractValuePointer(v); } \
+    Class##Ref(QV4::TypedValue<Class> &v) { ptr = &v; } \
+    Class##Ref(QV4::Value &v) { ptr = QV4::value_cast<Class>(v) ? &v : 0; } \
+    Class##Ref &operator=(Class *t) { \
+        if (sizeof(void *) == 4) \
+            ptr->tag = QV4::Value::Managed_Type; \
+        ptr->m = t; \
+        return *this; \
+    } \
+    Class##Ref &operator=(QV4::Returned<Class> *t) { \
+        if (sizeof(void *) == 4) \
+            ptr->tag = QV4::Value::Managed_Type; \
+        ptr->m = t->getPointer(); \
+        return *this; \
+    } \
+    operator const Class *() const { return ptr ? static_cast<Class*>(ptr->managed()) : 0; } \
+    const Class *operator->() const { return static_cast<Class*>(ptr->managed()); } \
+    operator Class *() { return ptr ? static_cast<Class*>(ptr->managed()) : 0; } \
+    Class *operator->() { return static_cast<Class*>(ptr->managed()); } \
+    Class *getPointer() const { return static_cast<Class *>(ptr->managed()); } \
+    operator QV4::Returned<Class> *() const { return ptr ? QV4::Returned<Class>::create(getPointer()) : 0; } \
+    static Class##Ref null() { Class##Ref c; c.ptr = 0; return c; } \
+protected: \
+    Class##Ref() {} \
+public: \
+
+#define DEFINE_REF(Class, Base) \
+struct Class##Ref : public Base##Ref \
+{ DEFINE_REF_METHODS(Class, Base) } \
+
+
+struct ManagedRef {
+    // Important: Do NOT add a copy constructor to this class or any derived class
+    // adding a copy constructor actually changes the calling convention, ie.
+    // is not even binary compatible. Adding it would break assumptions made
+    // in the jit'ed code.
+    DEFINE_REF_METHODS(Managed, Managed);
+
+    bool operator==(const ManagedRef &other) {
+        if (ptr == other.ptr)
+            return true;
+        return ptr && other.ptr && ptr->m == other.ptr->m;
+    }
+    bool operator!=(const ManagedRef &other) {
+        return !operator==(other);
+    }
+    bool operator!() const { return !ptr || !ptr->managed(); }
+
+    bool isNull() const { return !ptr; }
+    ReturnedValue asReturnedValue() const { return ptr ? ptr->val : Primitive::undefinedValue().asReturnedValue(); }
+
+public:
+    Value *ptr;
+};
 
 }
 

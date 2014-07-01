@@ -40,10 +40,13 @@
 ****************************************************************************/
 
 #include "qv4string_p.h"
+#include "qv4value_inl_p.h"
+#ifndef V4_BOOTSTRAP
 #include "qv4identifiertable_p.h"
 #include "qv4runtime_p.h"
 #include "qv4objectproto_p.h"
 #include "qv4stringobject_p.h"
+#endif
 #include <QtCore/QHash>
 
 using namespace QV4;
@@ -74,6 +77,8 @@ static uint toArrayIndex(const QChar *ch, const QChar *end, bool *ok)
     return i;
 }
 
+#ifndef V4_BOOTSTRAP
+
 static uint toArrayIndex(const char *ch, const char *end, bool *ok)
 {
     *ok = false;
@@ -101,13 +106,11 @@ static uint toArrayIndex(const char *ch, const char *end, bool *ok)
 }
 
 
-const ManagedVTable String::static_vtbl =
+const ObjectVTable String::static_vtbl =
 {
-    call,
-    construct,
-    markObjects,
-    destroy,
-    0 /*collectDeletables*/,
+    DEFINE_MANAGED_VTABLE_INT(String),
+    0,
+    0,
     get,
     getIndexed,
     put,
@@ -118,9 +121,8 @@ const ManagedVTable String::static_vtbl =
     deleteIndexedProperty,
     0 /*getLookup*/,
     0 /*setLookup*/,
-    isEqualTo,
+    0,
     0 /*advanceIterator*/,
-    "String",
 };
 
 void String::destroy(Managed *that)
@@ -233,10 +235,9 @@ bool String::isEqualTo(Managed *t, Managed *o)
     if (t == o)
         return true;
 
-    if (o->type != Type_String)
+    if (!o->internalClass->vtable->isString)
         return false;
 
-    Q_ASSERT(t->type == Type_String);
     String *that = static_cast<String *>(t);
     String *other = static_cast<String *>(o);
     if (that->hashValue() != other->hashValue())
@@ -257,7 +258,6 @@ String::String(ExecutionEngine *engine, const QString &text)
 {
     _text->ref.ref();
     len = _text->size;
-    type = Type_String;
     subtype = StringType_Unknown;
 }
 
@@ -267,7 +267,6 @@ String::String(ExecutionEngine *engine, String *l, String *r)
     , stringHash(UINT_MAX), largestSubLength(qMax(l->largestSubLength, r->largestSubLength))
     , len(l->len + r->len)
 {
-    type = Type_String;
     subtype = StringType_Unknown;
 
     if (!l->largestSubLength && l->len > largestSubLength)
@@ -290,7 +289,7 @@ uint String::toUInt(bool *ok) const
         return stringHash;
 
     // ### this conversion shouldn't be required
-    double d = __qmljs_string_to_number(toQString());
+    double d = RuntimeHelpers::stringToNumber(toQString());
     uint l = (uint)d;
     if (d == l)
         return l;
@@ -413,8 +412,16 @@ uint String::createHashValue(const char *ch, int length)
     return h;
 }
 
+uint String::getLength(const Managed *m)
+{
+    return static_cast<const String *>(m)->length();
+}
+
+#endif // V4_BOOTSTRAP
+
 uint String::toArrayIndex(const QString &str)
 {
     bool ok;
     return ::toArrayIndex(str.constData(), str.constData() + str.length(), &ok);
 }
+

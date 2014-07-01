@@ -83,7 +83,7 @@ private:
 
 template<typename T>
 QFiniteStack<T>::QFiniteStack()
-: _array(0), _alloc(0), _size(0) 
+: _array(0), _alloc(0), _size(0)
 {
 }
 
@@ -114,6 +114,7 @@ T &QFiniteStack<T>::top()
 template<typename T>
 void QFiniteStack<T>::push(const T &o)
 {
+    Q_ASSERT(_size < _alloc);
     if (QTypeInfo<T>::isComplex) {
         new (_array + _size++) T(o);
     } else {
@@ -124,6 +125,7 @@ void QFiniteStack<T>::push(const T &o)
 template<typename T>
 T QFiniteStack<T>::pop()
 {
+    Q_ASSERT(_size > 0);
     --_size;
 
     if (QTypeInfo<T>::isComplex) {
@@ -134,7 +136,7 @@ T QFiniteStack<T>::pop()
         return _array[_size];
     }
 }
-    
+
 template<typename T>
 int QFiniteStack<T>::count() const
 {
@@ -154,7 +156,7 @@ T &QFiniteStack<T>::operator[](int index)
 }
 
 template<typename T>
-void QFiniteStack<T>::allocate(int size) 
+void QFiniteStack<T>::allocate(int size)
 {
     Q_ASSERT(_array == 0);
     Q_ASSERT(_alloc == 0);
@@ -171,7 +173,7 @@ void QFiniteStack<T>::deallocate()
 {
     if (QTypeInfo<T>::isComplex) {
         T *i = _array + _size;
-        while (i != _array) 
+        while (i != _array)
             (--i)->~T();
     }
 

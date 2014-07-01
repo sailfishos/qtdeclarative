@@ -50,7 +50,7 @@
 #include <private/qqmlaccessors_p.h>
 #include <private/qmetaobjectbuilder_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 
 #include <QtCore/qdebug.h>
 
@@ -1007,7 +1007,7 @@ QQmlPropertyData *QQmlPropertyCache::findProperty(StringCache::ConstIterator it,
     return 0;
 }
 
-QString QQmlPropertyData::name(QObject *object)
+QString QQmlPropertyData::name(QObject *object) const
 {
     if (!object)
         return QString();
@@ -1015,7 +1015,7 @@ QString QQmlPropertyData::name(QObject *object)
     return name(object->metaObject());
 }
 
-QString QQmlPropertyData::name(const QMetaObject *metaObject)
+QString QQmlPropertyData::name(const QMetaObject *metaObject) const
 {
     if (!metaObject || coreIndex == -1)
         return QString();
@@ -1140,7 +1140,7 @@ QString QQmlPropertyCache::signalParameterStringForJS(QQmlEngine *engine, const 
 {
     QQmlEnginePrivate *ep = QQmlEnginePrivate::get(engine);
     bool unnamedParameter = false;
-    const QV4::IdentifierHash<bool> &illegalNames = ep->v8engine()->illegalNames();
+    const QSet<QString> &illegalNames = ep->v8engine()->illegalNames();
     QString error;
     QString parameters;
 
@@ -1195,7 +1195,7 @@ int *QQmlPropertyCache::methodParameterTypes(QObject *object, int index,
 
         int argc = m.parameterCount();
         if (!rv->arguments) {
-            A *args = c->createArgumentsObject(argc);
+            A *args = c->createArgumentsObject(argc, m.parameterNames());
             rv->arguments = args;
         }
         A *args = static_cast<A *>(rv->arguments);

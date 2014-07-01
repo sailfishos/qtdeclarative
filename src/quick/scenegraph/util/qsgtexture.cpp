@@ -45,7 +45,7 @@
 #include <qopenglfunctions.h>
 #include <QtQuick/private/qsgcontext_p.h>
 #include <qthread.h>
-#include <private/qqmlprofilerservice_p.h>
+#include <private/qquickprofiler_p.h>
 #include <private/qqmlglobal_p.h>
 #include <QtGui/qguiapplication.h>
 #include <QtGui/qpa/qplatformnativeinterface.h>
@@ -622,7 +622,7 @@ void QSGPlainTexture::bind()
     m_dirty_texture = false;
 
 #ifndef QSG_NO_RENDER_TIMING
-    bool profileFrames = qsg_render_timing || QQmlProfilerService::enabled;
+    bool profileFrames = qsg_render_timing || QQuickProfiler::enabled;
     if (profileFrames)
         qsg_renderer_timer.start();
 #endif
@@ -640,11 +640,8 @@ void QSGPlainTexture::bind()
                        m_texture_size.width(),
                        m_texture_size.height());
             }
-            if (QQmlProfilerService::enabled) {
-                QQmlProfilerService::sceneGraphFrame(
-                            QQmlProfilerService::SceneGraphTextureDeletion,
-                            qsg_renderer_timer.nsecsElapsed());
-            }
+            Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphTextureDeletion, (
+                    qsg_renderer_timer.nsecsElapsed()));
 #endif
         }
         m_texture_id = 0;
@@ -771,17 +768,12 @@ void QSGPlainTexture::bind()
 
     }
 
-    if (QQmlProfilerService::enabled) {
-        mipmapTime = qsg_renderer_timer.nsecsElapsed();
-
-        QQmlProfilerService::sceneGraphFrame(
-                    QQmlProfilerService::SceneGraphTexturePrepare,
-                    bindTime,
-                    convertTime - bindTime,
-                    swizzleTime - convertTime,
-                    uploadTime - swizzleTime,
-                    mipmapTime - uploadTime);
-    }
+    Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphTexturePrepare, (
+            bindTime,
+            convertTime - bindTime,
+            swizzleTime - convertTime,
+            uploadTime - swizzleTime,
+            qsg_renderer_timer.nsecsElapsed() - uploadTime));
 
 #endif
 

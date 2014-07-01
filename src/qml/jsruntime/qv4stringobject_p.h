@@ -50,9 +50,10 @@ QT_BEGIN_NAMESPACE
 namespace QV4 {
 
 struct StringObject: Object {
-    Q_MANAGED
+    V4_OBJECT
+    Q_MANAGED_TYPE(StringObject)
 
-    SafeValue value;
+    Value value;
     mutable Property tmpProperty;
     StringObject(ExecutionEngine *engine, const ValueRef value);
 
@@ -62,13 +63,13 @@ struct StringObject: Object {
 
 protected:
     StringObject(InternalClass *ic);
-    static Property *advanceIterator(Managed *m, ObjectIterator *it, StringRef name, uint *index, PropertyAttributes *attrs);
+    static void advanceIterator(Managed *m, ObjectIterator *it, StringRef name, uint *index, Property *p, PropertyAttributes *attrs);
     static void markObjects(Managed *that, ExecutionEngine *e);
 };
 
 struct StringCtor: FunctionObject
 {
-    Q_MANAGED
+    V4_OBJECT
     StringCtor(ExecutionContext *scope);
 
     static ReturnedValue construct(Managed *m, CallData *callData);

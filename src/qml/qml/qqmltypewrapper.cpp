@@ -54,13 +54,13 @@ QT_BEGIN_NAMESPACE
 
 using namespace QV4;
 
-DEFINE_MANAGED_VTABLE(QmlTypeWrapper);
+DEFINE_OBJECT_VTABLE(QmlTypeWrapper);
 
 QmlTypeWrapper::QmlTypeWrapper(QV8Engine *engine)
     : Object(QV8Engine::getV4(engine)),
       v8(engine), mode(IncludeEnums), type(0), typeNamespace(0), importNamespace(0)
 {
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
 }
 
 QmlTypeWrapper::~QmlTypeWrapper()
@@ -248,7 +248,7 @@ void QmlTypeWrapper::put(Managed *m, const StringRef name, const ValueRef value)
     if (type && !type->isSingleton() && w->object) {
         QObject *object = w->object;
         QObject *ao = qmlAttachedPropertiesObjectById(type->attachedPropertiesId(), object);
-        if (ao) 
+        if (ao)
             QV4::QObjectWrapper::setQmlProperty(v4->currentContext(), context, ao, name.getPointer(), QV4::QObjectWrapper::IgnoreRevision, value);
     } else if (type && type->isSingleton()) {
         QQmlEngine *e = v8engine->engine();
@@ -277,7 +277,7 @@ PropertyAttributes QmlTypeWrapper::query(const Managed *m, StringRef name)
     Scope scope(m->engine());
     ScopedString n(scope, name);
     bool hasProperty = false;
-    const_cast<Managed*>(m)->get(n, &hasProperty);
+    static_cast<Object *>(const_cast<Managed*>(m))->get(n, &hasProperty);
     return hasProperty ? Attr_Data : Attr_Invalid;
 }
 

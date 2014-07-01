@@ -67,54 +67,51 @@
 #include <iostream>
 #include <algorithm>
 #include "qv4alloca_p.h"
+#include "qv4profiling_p.h"
 
 using namespace QV4;
 
 
-DEFINE_MANAGED_VTABLE(FunctionObject);
+DEFINE_OBJECT_VTABLE(FunctionObject);
 
 FunctionObject::FunctionObject(ExecutionContext *scope, const StringRef name, bool createProto)
-    : Object(createProto ? scope->engine->functionWithProtoClass : scope->engine->functionClass)
+    : Object(scope->engine->functionClass)
     , scope(scope)
-    , formalParameterCount(0)
-    , varCount(0)
     , function(0)
-    , protoCacheClass(0)
-    , protoCacheIndex(UINT_MAX)
 {
      init(name, createProto);
 }
 
 FunctionObject::FunctionObject(ExecutionContext *scope, const QString &name, bool createProto)
-    : Object(createProto ? scope->engine->functionWithProtoClass : scope->engine->functionClass)
+    : Object(scope->engine->functionClass)
     , scope(scope)
-    , formalParameterCount(0)
-    , varCount(0)
     , function(0)
-    , protoCacheClass(0)
-    , protoCacheIndex(UINT_MAX)
 {
-    // set the name to something here, so that a gc run a few lines below doesn't crash on it
-    this->name = scope->engine->id_undefined;
-
     Scope s(scope);
     ScopedValue protectThis(s, this);
     ScopedString n(s, s.engine->newString(name));
     init(n, createProto);
 }
 
+FunctionObject::FunctionObject(ExecutionContext *scope, const ReturnedValue name)
+    : Object(scope->engine->functionClass)
+    , scope(scope)
+    , function(0)
+{
+    Scope s(scope);
+    ScopedValue protectThis(s, this);
+    ScopedString n(s, name);
+    init(n, false);
+}
+
 FunctionObject::FunctionObject(InternalClass *ic)
     : Object(ic)
     , scope(ic->engine->rootContext)
-    , formalParameterCount(0)
-    , varCount(0)
     , function(0)
 {
-    name = ic->engine->id_undefined;
-
-    type = Type_FunctionObject;
     needsActivation = false;
     strictMode = false;
+    memberData[Index_Prototype] = Encode::undefined();
 }
 
 FunctionObject::~FunctionObject()
@@ -125,24 +122,29 @@ FunctionObject::~FunctionObject()
 
 void FunctionObject::init(const StringRef n, bool createProto)
 {
-    name = n;
-
     Scope s(internalClass->engine);
     ScopedValue protectThis(s, this);
 
-    type = Type_FunctionObject;
     needsActivation = true;
     strictMode = false;
 
     if (createProto) {
         Scoped<Object> proto(s, scope->engine->newObject(scope->engine->protoClass));
-        proto->memberData[Index_ProtoConstructor].value = this->asReturnedValue();
-        memberData[Index_Prototype].value = proto.asReturnedValue();
+        proto->memberData[Index_ProtoConstructor] = this->asReturnedValue();
+        memberData[Index_Prototype] = proto.asReturnedValue();
+    } else {
+        memberData[Index_Prototype] = Encode::undefined();
     }
 
     ScopedValue v(s, n.asReturnedValue());
     defineReadonlyProperty(scope->engine->id_name, v);
 }
+
+ReturnedValue FunctionObject::name()
+{
+    return get(scope->engine->id_name);
+}
+
 
 ReturnedValue FunctionObject::newInstance()
 {
@@ -153,13 +155,8 @@ ReturnedValue FunctionObject::newInstance()
 
 ReturnedValue FunctionObject::construct(Managed *that, CallData *)
 {
-    ExecutionEngine *v4 = that->internalClass->engine;
-    Scope scope(v4);
-    Scoped<FunctionObject> f(scope, that, Scoped<FunctionObject>::Cast);
-
-    InternalClass *ic = f->internalClassForConstructor();
-    Scoped<Object> obj(scope, v4->newObject(ic));
-    return obj.asReturnedValue();
+    that->internalClass->engine->currentContext()->throwTypeError();
+    return Encode::undefined();
 }
 
 ReturnedValue FunctionObject::call(Managed *, CallData *)
@@ -170,73 +167,28 @@ ReturnedValue FunctionObject::call(Managed *, CallData *)
 void FunctionObject::markObjects(Managed *that, ExecutionEngine *e)
 {
     FunctionObject *o = static_cast<FunctionObject *>(that);
-    if (o->name.managed())
-        o->name->mark(e);
-    // these are marked in VM::Function:
-//    for (uint i = 0; i < formalParameterCount; ++i)
-//        formalParameterList[i]->mark();
-//    for (uint i = 0; i < varCount; ++i)
-//        varList[i]->mark();
-    o->scope->mark(e);
-    if (o->function)
-        o->function->mark(e);
+    if (o->scope)
+        o->scope->mark(e);
 
     Object::markObjects(that, e);
 }
 
-FunctionObject *FunctionObject::creatScriptFunction(ExecutionContext *scope, Function *function)
+FunctionObject *FunctionObject::createScriptFunction(ExecutionContext *scope, Function *function, bool createProto)
 {
     if (function->needsActivation() ||
         function->compiledFunction->flags & CompiledData::Function::HasCatchOrWith ||
         function->compiledFunction->nFormals > QV4::Global::ReservedArgumentCount ||
         function->isNamedExpression())
         return new (scope->engine->memoryManager) ScriptFunction(scope, function);
-    return new (scope->engine->memoryManager) SimpleScriptFunction(scope, function);
+    return new (scope->engine->memoryManager) SimpleScriptFunction(scope, function, createProto);
 }
 
-ReturnedValue FunctionObject::protoProperty()
-{
-    if (protoCacheClass != internalClass) {
-        protoCacheClass = internalClass;
-        protoCacheIndex = internalClass->find(internalClass->engine->id_prototype);
-    }
-    if (protoCacheIndex < UINT_MAX) {
-        if (internalClass->propertyData.at(protoCacheIndex).isData()) {
-            ReturnedValue v = memberData[protoCacheIndex].value.asReturnedValue();
-            if (v != protoValue) {
-                classForConstructor = 0;
-                protoValue = v;
-            }
-            return v;
-        }
-    }
-    classForConstructor = 0;
-    return get(internalClass->engine->id_prototype);
-}
-
-InternalClass *FunctionObject::internalClassForConstructor()
-{
-    // need to call this first to ensure we don't use a wrong class
-    ReturnedValue proto = protoProperty();
-    if (classForConstructor)
-        return classForConstructor;
-
-    Scope scope(internalClass->engine);
-    ScopedObject p(scope, proto);
-    if (p)
-        classForConstructor = InternalClass::create(scope.engine, &Object::static_vtbl, p.getPointer());
-    else
-        classForConstructor = scope.engine->objectClass;
-
-    return classForConstructor;
-}
-
-DEFINE_MANAGED_VTABLE(FunctionCtor);
+DEFINE_OBJECT_VTABLE(FunctionCtor);
 
 FunctionCtor::FunctionCtor(ExecutionContext *scope)
     : FunctionObject(scope, QStringLiteral("Function"))
 {
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
 }
 
 // 15.3.2
@@ -275,17 +227,17 @@ ReturnedValue FunctionCtor::construct(Managed *that, CallData *callData)
     if (!fe)
         return v4->currentContext()->throwSyntaxError(QLatin1String("Parse error"));
 
-    QQmlJS::V4IR::Module module(v4->debugger != 0);
+    IR::Module module(v4->debugger != 0);
 
     QQmlJS::RuntimeCodegen cg(v4->currentContext(), f->strictMode);
     cg.generateFromFunctionExpression(QString(), function, fe, &module);
 
     QV4::Compiler::JSUnitGenerator jsGenerator(&module);
-    QScopedPointer<QQmlJS::EvalInstructionSelection> isel(v4->iselFactory->create(QQmlEnginePrivate::get(v4), v4->executableAllocator, &module, &jsGenerator));
+    QScopedPointer<EvalInstructionSelection> isel(v4->iselFactory->create(QQmlEnginePrivate::get(v4), v4->executableAllocator, &module, &jsGenerator));
     QV4::CompiledData::CompilationUnit *compilationUnit = isel->compile();
     QV4::Function *vmf = compilationUnit->linkToEngine(v4);
 
-    return FunctionObject::creatScriptFunction(v4->rootContext, vmf)->asReturnedValue();
+    return FunctionObject::createScriptFunction(v4->rootContext, vmf)->asReturnedValue();
 }
 
 // 15.3.1: This is equivalent to new Function(...)
@@ -342,19 +294,19 @@ ReturnedValue FunctionPrototype::method_apply(CallContext *ctx)
         if (!arg->isNullOrUndefined())
             return ctx->throwTypeError();
     } else {
-        len = ArrayPrototype::getLength(ctx, arr);
+        len = arr->getLength();
     }
 
     ScopedCallData callData(scope, len);
 
     if (len) {
-        if (!(arr->flags & SimpleArray) || arr->protoHasArray() || arr->hasAccessorProperty) {
+        if (arr->arrayType() != ArrayData::Simple || arr->protoHasArray() || arr->hasAccessorProperty) {
             for (quint32 i = 0; i < len; ++i)
                 callData->args[i] = arr->getIndexed(i);
         } else {
-            int alen = qMin(len, arr->arrayDataLen);
-            for (int i = 0; i < alen; ++i)
-                callData->args[i] = arr->arrayData[i].value;
+            int alen = qMin(len, arr->arrayData->length());
+            if (alen)
+                memcpy(callData->args, arr->arrayData->data, alen*sizeof(Value));
             for (quint32 i = alen; i < len; ++i)
                 callData->args[i] = Primitive::undefinedValue();
         }
@@ -374,8 +326,8 @@ ReturnedValue FunctionPrototype::method_call(CallContext *ctx)
 
     ScopedCallData callData(scope, ctx->callData->argc ? ctx->callData->argc - 1 : 0);
     if (ctx->callData->argc) {
-        std::copy(ctx->callData->args + 1,
-                  ctx->callData->args + ctx->callData->argc, callData->args);
+        for (int i = 1; i < ctx->callData->argc; ++i)
+            callData->args[i - 1] = ctx->callData->args[i];
     }
     callData->thisObject = ctx->argument(0);
     return o->call(callData);
@@ -389,27 +341,22 @@ ReturnedValue FunctionPrototype::method_bind(CallContext *ctx)
         return ctx->throwTypeError();
 
     ScopedValue boundThis(scope, ctx->argument(0));
-    QVector<SafeValue> boundArgs;
+    QVector<Value> boundArgs;
     for (int i = 1; i < ctx->callData->argc; ++i)
         boundArgs += ctx->callData->args[i];
 
     return ctx->engine->newBoundFunction(ctx->engine->rootContext, target, boundThis, boundArgs)->asReturnedValue();
 }
 
-DEFINE_MANAGED_VTABLE(ScriptFunction);
+DEFINE_OBJECT_VTABLE(ScriptFunction);
 
 ScriptFunction::ScriptFunction(ExecutionContext *scope, Function *function)
-    : FunctionObject(scope, function->name, true)
+    : SimpleScriptFunction(scope, function, true)
 {
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
 
     Scope s(scope);
     ScopedValue protectThis(s, this);
-
-    this->function = function;
-    this->function->compilationUnit->ref();
-    Q_ASSERT(function);
-    Q_ASSERT(function->code);
 
     // global function
     if (!scope)
@@ -419,15 +366,13 @@ ScriptFunction::ScriptFunction(ExecutionContext *scope, Function *function)
 
     needsActivation = function->needsActivation();
     strictMode = function->isStrict();
-    formalParameterCount = function->nArguments;
-    varCount = function->internalClass->size - function->nArguments;
 
-    defineReadonlyProperty(scope->engine->id_length, Primitive::fromInt32(formalParameterCount));
+    defineReadonlyProperty(scope->engine->id_length, Primitive::fromInt32(formalParameterCount()));
 
     if (scope->strictMode) {
-        Property pd = Property::fromAccessor(v4->thrower, v4->thrower);
-        *insertMember(scope->engine->id_caller, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable) = pd;
-        *insertMember(scope->engine->id_arguments, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable) = pd;
+        Property pd(v4->thrower, v4->thrower);
+        insertMember(scope->engine->id_caller, pd, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable);
+        insertMember(scope->engine->id_arguments, pd, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable);
     }
 }
 
@@ -449,7 +394,7 @@ ReturnedValue ScriptFunction::construct(Managed *that, CallData *callData)
     ExecutionContext *ctx = context->newCallContext(f.getPointer(), callData);
 
     ExecutionContextSaver ctxSaver(context);
-    ScopedValue result(scope, f->function->code(ctx, f->function->codeData));
+    ScopedValue result(scope, Q_V4_PROFILE(v4, ctx, f->function));
 
     if (f->function->compiledFunction->hasQmlDependencies())
         QmlContextWrapper::registerQmlDependencies(v4, f->function->compiledFunction);
@@ -473,7 +418,7 @@ ReturnedValue ScriptFunction::call(Managed *that, CallData *callData)
     CallContext *ctx = context->newCallContext(f, callData);
 
     ExecutionContextSaver ctxSaver(context);
-    ScopedValue result(scope, f->function->code(ctx, f->function->codeData));
+    ScopedValue result(scope, Q_V4_PROFILE(v4, ctx, f->function));
 
     if (f->function->compiledFunction->hasQmlDependencies())
         QmlContextWrapper::registerQmlDependencies(ctx->engine, f->function->compiledFunction);
@@ -481,12 +426,12 @@ ReturnedValue ScriptFunction::call(Managed *that, CallData *callData)
     return result.asReturnedValue();
 }
 
-DEFINE_MANAGED_VTABLE(SimpleScriptFunction);
+DEFINE_OBJECT_VTABLE(SimpleScriptFunction);
 
-SimpleScriptFunction::SimpleScriptFunction(ExecutionContext *scope, Function *function)
-    : FunctionObject(scope, function->name, true)
+SimpleScriptFunction::SimpleScriptFunction(ExecutionContext *scope, Function *function, bool createProto)
+    : FunctionObject(scope, function->name(), createProto)
 {
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
 
     Scope s(scope);
     ScopedValue protectThis(s, this);
@@ -504,15 +449,13 @@ SimpleScriptFunction::SimpleScriptFunction(ExecutionContext *scope, Function *fu
 
     needsActivation = function->needsActivation();
     strictMode = function->isStrict();
-    formalParameterCount = function->nArguments;
-    varCount = function->internalClass->size - function->nArguments;
 
-    defineReadonlyProperty(scope->engine->id_length, Primitive::fromInt32(formalParameterCount));
+    defineReadonlyProperty(scope->engine->id_length, Primitive::fromInt32(formalParameterCount()));
 
     if (scope->strictMode) {
-        Property pd = Property::fromAccessor(v4->thrower, v4->thrower);
-        *insertMember(scope->engine->id_caller, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable) = pd;
-        *insertMember(scope->engine->id_arguments, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable) = pd;
+        Property pd(v4->thrower, v4->thrower);
+        insertMember(scope->engine->id_caller, pd, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable);
+        insertMember(scope->engine->id_arguments, pd, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable);
     }
 }
 
@@ -539,14 +482,14 @@ ReturnedValue SimpleScriptFunction::construct(Managed *that, CallData *callData)
     ctx.compilationUnit = f->function->compilationUnit;
     ctx.lookups = ctx.compilationUnit->runtimeLookups;
     ctx.outer = f->scope;
-    ctx.locals = v4->stackPush(f->varCount);
-    while (callData->argc < (int)f->formalParameterCount) {
+    ctx.locals = v4->stackPush(f->varCount());
+    while (callData->argc < (int)f->formalParameterCount()) {
         callData->args[callData->argc] = Encode::undefined();
         ++callData->argc;
     }
     Q_ASSERT(v4->currentContext() == &ctx);
 
-    Scoped<Object> result(scope, f->function->code(&ctx, f->function->codeData));
+    Scoped<Object> result(scope, Q_V4_PROFILE(v4, &ctx, f->function));
 
     if (f->function->compiledFunction->hasQmlDependencies())
         QmlContextWrapper::registerQmlDependencies(v4, f->function->compiledFunction);
@@ -576,14 +519,14 @@ ReturnedValue SimpleScriptFunction::call(Managed *that, CallData *callData)
     ctx.compilationUnit = f->function->compilationUnit;
     ctx.lookups = ctx.compilationUnit->runtimeLookups;
     ctx.outer = f->scope;
-    ctx.locals = v4->stackPush(f->varCount);
-    while (callData->argc < (int)f->formalParameterCount) {
+    ctx.locals = v4->stackPush(f->varCount());
+    while (callData->argc < (int)f->formalParameterCount()) {
         callData->args[callData->argc] = Encode::undefined();
         ++callData->argc;
     }
     Q_ASSERT(v4->currentContext() == &ctx);
 
-    ScopedValue result(scope, f->function->code(&ctx, f->function->codeData));
+    ScopedValue result(scope, Q_V4_PROFILE(v4, &ctx, f->function));
 
     if (f->function->compiledFunction->hasQmlDependencies())
         QmlContextWrapper::registerQmlDependencies(v4, f->function->compiledFunction);
@@ -591,16 +534,29 @@ ReturnedValue SimpleScriptFunction::call(Managed *that, CallData *callData)
     return result.asReturnedValue();
 }
 
+InternalClass *SimpleScriptFunction::internalClassForConstructor()
+{
+    ReturnedValue proto = protoProperty();
+    InternalClass *classForConstructor;
+    Scope scope(internalClass->engine);
+    ScopedObject p(scope, proto);
+    if (p)
+        classForConstructor = internalClass->engine->constructClass->changePrototype(p.getPointer());
+    else
+        classForConstructor = scope.engine->objectClass;
+
+    return classForConstructor;
+}
 
 
 
-DEFINE_MANAGED_VTABLE(BuiltinFunction);
+DEFINE_OBJECT_VTABLE(BuiltinFunction);
 
 BuiltinFunction::BuiltinFunction(ExecutionContext *scope, const StringRef name, ReturnedValue (*code)(CallContext *))
     : FunctionObject(scope, name)
     , code(code)
 {
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
 }
 
 ReturnedValue BuiltinFunction::construct(Managed *f, CallData *)
@@ -646,16 +602,16 @@ ReturnedValue IndexedBuiltinFunction::call(Managed *that, CallData *callData)
     return f->code(&ctx, f->index);
 }
 
-DEFINE_MANAGED_VTABLE(IndexedBuiltinFunction);
+DEFINE_OBJECT_VTABLE(IndexedBuiltinFunction);
 
-DEFINE_MANAGED_VTABLE(BoundFunction);
+DEFINE_OBJECT_VTABLE(BoundFunction);
 
-BoundFunction::BoundFunction(ExecutionContext *scope, FunctionObjectRef target, const ValueRef boundThis, const QVector<SafeValue> &boundArgs)
+BoundFunction::BoundFunction(ExecutionContext *scope, FunctionObjectRef target, const ValueRef boundThis, const QVector<Value> &boundArgs)
     : FunctionObject(scope, QStringLiteral("__bound function__"))
     , target(target)
     , boundArgs(boundArgs)
 {
-    setVTable(&static_vtbl);
+    setVTable(staticVTable());
     subtype = FunctionObject::BoundFunction;
     this->boundThis = boundThis;
 
@@ -671,9 +627,9 @@ BoundFunction::BoundFunction(ExecutionContext *scope, FunctionObjectRef target, 
 
     ExecutionEngine *v4 = scope->engine;
 
-    Property pd = Property::fromAccessor(v4->thrower, v4->thrower);
-    *insertMember(scope->engine->id_arguments, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable) = pd;
-    *insertMember(scope->engine->id_caller, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable) = pd;
+    Property pd(v4->thrower, v4->thrower);
+    insertMember(scope->engine->id_arguments, pd, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable);
+    insertMember(scope->engine->id_caller, pd, Attr_Accessor|Attr_NotConfigurable|Attr_NotEnumerable);
 }
 
 void BoundFunction::destroy(Managed *that)
@@ -690,8 +646,8 @@ ReturnedValue BoundFunction::call(Managed *that, CallData *dd)
 
     ScopedCallData callData(scope, f->boundArgs.size() + dd->argc);
     callData->thisObject = f->boundThis;
-    memcpy(callData->args, f->boundArgs.constData(), f->boundArgs.size()*sizeof(SafeValue));
-    memcpy(callData->args + f->boundArgs.size(), dd->args, dd->argc*sizeof(SafeValue));
+    memcpy(callData->args, f->boundArgs.constData(), f->boundArgs.size()*sizeof(Value));
+    memcpy(callData->args + f->boundArgs.size(), dd->args, dd->argc*sizeof(Value));
     return f->target->call(callData);
 }
 
@@ -703,8 +659,8 @@ ReturnedValue BoundFunction::construct(Managed *that, CallData *dd)
         return Encode::undefined();
 
     ScopedCallData callData(scope, f->boundArgs.size() + dd->argc);
-    memcpy(callData->args, f->boundArgs.constData(), f->boundArgs.size()*sizeof(SafeValue));
-    memcpy(callData->args + f->boundArgs.size(), dd->args, dd->argc*sizeof(SafeValue));
+    memcpy(callData->args, f->boundArgs.constData(), f->boundArgs.size()*sizeof(Value));
+    memcpy(callData->args + f->boundArgs.size(), dd->args, dd->argc*sizeof(Value));
     return f->target->construct(callData);
 }
 

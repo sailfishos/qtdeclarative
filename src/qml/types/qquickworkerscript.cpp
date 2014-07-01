@@ -62,7 +62,7 @@
 #include <private/qv8engine_p.h>
 #include <private/qv4serialize_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4functionobject_p.h>
 #include <private/qv4script_p.h>
 #include <private/qv4scopedvalue_p.h>
@@ -195,15 +195,15 @@ private:
     void reportScriptException(WorkerScript *, const QQmlError &error);
 };
 
-QQuickWorkerScriptEnginePrivate::WorkerEngine::WorkerEngine(QQuickWorkerScriptEnginePrivate *parent) 
+QQuickWorkerScriptEnginePrivate::WorkerEngine::WorkerEngine(QQuickWorkerScriptEnginePrivate *parent)
 : QV8Engine(0), p(parent), accessManager(0)
 {
     m_v4Engine->v8Engine = this;
 }
 
-QQuickWorkerScriptEnginePrivate::WorkerEngine::~WorkerEngine() 
-{ 
-    delete accessManager; 
+QQuickWorkerScriptEnginePrivate::WorkerEngine::~WorkerEngine()
+{
+    delete accessManager;
 }
 
 void QQuickWorkerScriptEnginePrivate::WorkerEngine::init()
@@ -264,7 +264,7 @@ QV4::ReturnedValue QQuickWorkerScriptEnginePrivate::WorkerEngine::sendFunction(i
     return v.asReturnedValue();
 }
 
-QNetworkAccessManager *QQuickWorkerScriptEnginePrivate::WorkerEngine::networkAccessManager() 
+QNetworkAccessManager *QQuickWorkerScriptEnginePrivate::WorkerEngine::networkAccessManager()
 {
     if (!accessManager) {
         if (p->qmlengine && p->qmlengine->networkAccessManagerFactory()) {
@@ -340,7 +340,11 @@ bool QQuickWorkerScriptEnginePrivate::event(QEvent *event)
         return true;
     } else if (event->type() == (QEvent::Type)WorkerRemoveEvent::WorkerRemove) {
         WorkerRemoveEvent *workerEvent = static_cast<WorkerRemoveEvent *>(event);
-        workers.remove(workerEvent->workerId());
+        QHash<int, WorkerScript *>::iterator itr = workers.find(workerEvent->workerId());
+        if (itr != workers.end()) {
+            delete itr.value();
+            workers.erase(itr);
+        }
         return true;
     } else {
         return QObject::event(event);
@@ -378,40 +382,48 @@ void QQuickWorkerScriptEnginePrivate::processLoad(int id, const QUrl &url)
 
     QString fileName = QQmlFile::urlToLocalFileOrQrc(url);
 
-    QFile f(fileName);
-    if (f.open(QIODevice::ReadOnly)) {
+    QV4::ExecutionEngine *v4 = QV8Engine::getV4(workerEngine);
+    QV4::Scope scope(v4);
+    QScopedPointer<QV4::Script> program;
+
+    WorkerScript *script = workers.value(id);
+    if (!script)
+        return;
+    script->source = url;
+
+    QV4::Scoped<QV4::Object> activation(scope, getWorker(script));
+    if (!activation)
+        return;
+
+    if (const QQmlPrivate::CachedQmlUnit *cachedUnit = QQmlMetaType::findCachedCompilationUnit(url)) {
+        QV4::CompiledData::CompilationUnit *jsUnit = cachedUnit->createCompilationUnit();
+        program.reset(new QV4::Script(v4, activation, jsUnit));
+    } else {
+        QFile f(fileName);
+        if (!f.open(QIODevice::ReadOnly)) {
+            qWarning().nospace() << "WorkerScript: Cannot find source file " << url.toString();
+            return;
+        }
+
         QByteArray data = f.readAll();
         QString sourceCode = QString::fromUtf8(data);
-        QQmlScript::Parser::extractPragmas(sourceCode);
+        QmlIR::Document::removeScriptPragmas(sourceCode);
 
-        WorkerScript *script = workers.value(id);
-        if (!script)
-            return;
-        script->source = url;
+        program.reset(new QV4::Script(v4, activation, sourceCode, url.toString()));
+        program->parse();
+    }
 
-        QV4::ExecutionEngine *v4 = QV8Engine::getV4(workerEngine);
-        QV4::Scope scope(v4);
+    if (!v4->hasException)
+        program->run();
 
-        QV4::Scoped<QV4::Object> activation(scope, getWorker(script));
-        if (!activation)
-            return;
-
-        QV4::Script program(v4, activation, sourceCode, url.toString());
-
+    if (v4->hasException) {
         QV4::ExecutionContext *ctx = v4->currentContext();
-        program.parse();
-        if (!v4->hasException)
-            program.run();
-        if (v4->hasException) {
-            QQmlError error = QV4::ExecutionEngine::catchExceptionAsQmlError(ctx);
-            reportScriptException(script, error);
-        }
-    } else {
-        qWarning().nospace() << "WorkerScript: Cannot find source file " << url.toString();
+        QQmlError error = QV4::ExecutionEngine::catchExceptionAsQmlError(ctx);
+        reportScriptException(script, error);
     }
 }
 
-void QQuickWorkerScriptEnginePrivate::reportScriptException(WorkerScript *script, 
+void QQuickWorkerScriptEnginePrivate::reportScriptException(WorkerScript *script,
                                                                   const QQmlError &error)
 {
     QQuickWorkerScriptEnginePrivate *p = QQuickWorkerScriptEnginePrivate::get(workerEngine);
@@ -580,7 +592,7 @@ void QQuickWorkerScriptEngine::run()
     that the main GUI thread is not blocked.
 
     Messages can be passed between the new thread and the parent thread
-    using \l sendMessage() and the \l {WorkerScript::onMessage}{onMessage()} handler.
+    using \l sendMessage() and the \c onMessage() handler.
 
     An example:
 
@@ -716,10 +728,12 @@ void QQuickWorkerScript::componentComplete()
 }
 
 /*!
-    \qmlsignal WorkerScript::onMessage(jsobject msg)
+    \qmlsignal WorkerScript::message(jsobject msg)
 
-    This handler is called when a message \a msg is received from a worker
+    This signal is emitted when a message \a msg is received from a worker
     script in another thread through a call to sendMessage().
+
+    The corresponding handler is \c onMessage.
 */
 
 bool QQuickWorkerScript::event(QEvent *event)

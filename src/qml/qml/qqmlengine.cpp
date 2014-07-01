@@ -62,12 +62,13 @@
 #include "qqmllist_p.h"
 #include "qqmltypenamecache_p.h"
 #include "qqmlnotifier_p.h"
+#include <private/qqmldebugserver_p.h>
 #include <private/qqmlprofilerservice_p.h>
 #include <private/qv4debugservice_p.h>
 #include <private/qdebugmessageservice_p.h>
+#include <private/qqmlenginecontrolservice_p.h>
 #include "qqmlincubator.h"
 #include "qqmlabstracturlinterceptor.h"
-#include <private/qv8profilerservice_p.h>
 #include <private/qqmlboundsignal_p.h>
 
 #include <QtCore/qstandardpaths.h>
@@ -107,7 +108,9 @@
 #include <qlibrary.h>
 #include <windows.h>
 
-#define CSIDL_APPDATA		0x001a	// <username>\Application Data
+#ifndef CSIDL_APPDATA
+#  define CSIDL_APPDATA           0x001a  // <username>\Application Data
+#endif
 #endif
 
 Q_DECLARE_METATYPE(QQmlProperty)
@@ -550,19 +553,17 @@ the same object as is returned from the Qt.include() call.
 */
 // Qt.include() is implemented in qv4include.cpp
 
-DEFINE_BOOL_CONFIG_OPTION(qmlUseNewCompiler, QML_NEW_COMPILER)
-
 QQmlEnginePrivate::QQmlEnginePrivate(QQmlEngine *e)
 : propertyCapture(0), rootContext(0), isDebugging(false),
-  outputWarningsToStdErr(true),
+  profiler(0), outputWarningsToStdErr(true),
   cleanup(0), erroredBindings(0), inProgressCreations(0),
-  workerScriptEngine(0), activeVME(0),
+  workerScriptEngine(0),
   activeObjectCreator(0),
   networkAccessManager(0), networkAccessManagerFactory(0), urlInterceptor(0),
   scarceResourcesRefCount(0), importDatabase(e), typeLoader(e), uniqueId(1),
   incubatorCount(0), incubationController(0), mutex(QMutex::Recursive)
 {
-    useNewCompiler = qmlUseNewCompiler();
+    useNewCompiler = true;
 }
 
 QQmlEnginePrivate::~QQmlEnginePrivate()
@@ -593,6 +594,12 @@ QQmlEnginePrivate::~QQmlEnginePrivate()
         (*iter)->release();
     for (QHash<int, QQmlCompiledData *>::Iterator iter = m_compositeTypes.begin(); iter != m_compositeTypes.end(); ++iter)
         iter.value()->isRegisteredWithEngine = false;
+    delete profiler;
+}
+
+void QQmlEnginePrivate::enableProfiler()
+{
+    profiler = new QQmlProfiler();
 }
 
 void QQmlPrivate::qdeclarativeelement_destructor(QObject *o)
@@ -805,6 +812,7 @@ void QQmlEnginePrivate::init()
     qRegisterMetaType<QList<QObject*> >();
     qRegisterMetaType<QList<int> >();
     qRegisterMetaType<QQmlV4Handle>();
+    qRegisterMetaType<QQmlBinding*>();
 
     v8engine()->setEngine(q);
 
@@ -813,11 +821,12 @@ void QQmlEnginePrivate::init()
     if (QCoreApplication::instance()->thread() == q->thread() &&
         QQmlEngineDebugService::isDebuggingEnabled()) {
         isDebugging = true;
-        QQmlEngineDebugService::instance()->addEngine(q);
-        QV4DebugService::instance()->addEngine(q);
-        QV8ProfilerService::initialize();
-        QQmlProfilerService::initialize();
+        QQmlEngineDebugService::instance();
+        QV4DebugService::instance();
+        QQmlProfilerService::instance();
         QDebugMessageService::instance();
+        QQmlEngineControlService::instance();
+        QQmlDebugServer::instance()->addEngine(q);
     }
 }
 
@@ -895,10 +904,8 @@ QQmlEngine::QQmlEngine(QQmlEnginePrivate &dd, QObject *parent)
 QQmlEngine::~QQmlEngine()
 {
     Q_D(QQmlEngine);
-    if (d->isDebugging) {
-        QQmlEngineDebugService::instance()->remEngine(this);
-        QV4DebugService::instance()->removeEngine(this);
-    }
+    if (d->isDebugging)
+        QQmlDebugServer::instance()->removeEngine(this);
 
     // Emit onDestruction signals for the root context before
     // we destroy the contexts, engine, Singleton Types etc. that
@@ -1039,10 +1046,8 @@ QQmlNetworkAccessManagerFactory *QQmlEngine::networkAccessManagerFactory() const
 
 void QQmlEnginePrivate::registerFinalizeCallback(QObject *obj, int index)
 {
-    if (activeVME) {
-        activeVME->finalizeCallbacks.append(qMakePair(QPointer<QObject>(obj), index));
-    } else if (activeObjectCreator) {
-        activeObjectCreator->finalizeCallbacks.append(qMakePair(QPointer<QObject>(obj), index));
+    if (activeObjectCreator) {
+        activeObjectCreator->finalizeCallbacks()->append(qMakePair(QPointer<QObject>(obj), index));
     } else {
         void *args[] = { 0 };
         QMetaObject::metacall(obj, QMetaObject::InvokeMetaMethod, index, args);
@@ -1201,6 +1206,8 @@ void QQmlEngine::setOutputWarningsToStandardError(bool enabled)
 
   When the QQmlEngine instantiates a QObject, the context is
   set automatically.
+
+  \sa qmlContext(), qmlEngine()
   */
 QQmlContext *QQmlEngine::contextForObject(const QObject *object)
 {
@@ -1586,6 +1593,17 @@ void QQmlData::destroyed(QObject *object)
         binding = next;
     }
 
+    if (compiledData) {
+        compiledData->release();
+        compiledData = 0;
+    }
+
+    if (deferredData) {
+        deferredData->compiledData->release();
+        delete deferredData;
+        deferredData = 0;
+    }
+
     QQmlAbstractBoundSignal *signalHandler = signalHandlers;
     while (signalHandler) {
         if (signalHandler->isEvaluating()) {
@@ -1596,11 +1614,11 @@ void QQmlData::destroyed(QObject *object)
             QString locationString;
             QQmlBoundSignalExpression *expr = signalHandler->expression();
             if (expr) {
-                QString fileName = expr->sourceFile();
-                if (fileName.isEmpty())
-                    fileName = QStringLiteral("<Unknown File>");
-                locationString.append(fileName);
-                locationString.append(QString::fromLatin1(":%0: ").arg(expr->lineNumber()));
+                QQmlSourceLocation location = expr->sourceLocation();
+                if (location.sourceFile.isEmpty())
+                    location.sourceFile = QStringLiteral("<Unknown File>");
+                locationString.append(location.sourceFile);
+                locationString.append(QString::fromLatin1(":%0: ").arg(location.line));
                 QString source = expr->expression();
                 if (source.size() > 100) {
                     source.truncate(96);
@@ -1640,17 +1658,6 @@ void QQmlData::destroyed(QObject *object)
     }
 
     disconnectNotifiers();
-
-    if (compiledData) {
-        compiledData->release();
-        compiledData = 0;
-    }
-
-    if (deferredData) {
-        deferredData->compiledData->release();
-        delete deferredData;
-        deferredData = 0;
-    }
 
     if (extendedData)
         delete extendedData;
@@ -1977,7 +1984,7 @@ void QQmlEngine::setPluginPathList(const QStringList &paths)
 bool QQmlEngine::importPlugin(const QString &filePath, const QString &uri, QList<QQmlError> *errors)
 {
     Q_D(QQmlEngine);
-    return d->importDatabase.importPlugin(filePath, uri, QString(), errors);
+    return d->importDatabase.importDynamicPlugin(filePath, uri, QString(), errors);
 }
 
 /*!
@@ -2296,12 +2303,23 @@ static inline QString shellNormalizeFileName(const QString &name)
 {
     const QString nativeSeparatorName(QDir::toNativeSeparators(name));
     const LPCTSTR nameC = reinterpret_cast<LPCTSTR>(nativeSeparatorName.utf16());
+// The correct declaration of the SHGetPathFromIDList symbol is
+// being used in mingw-w64 as of r6215, which is a v3 snapshot.
+#if defined(Q_CC_MINGW) && (!defined(__MINGW64_VERSION_MAJOR) || __MINGW64_VERSION_MAJOR < 3)
+    ITEMIDLIST file;
+    if (FAILED(SHParseDisplayName(nameC, NULL, &file, 0, NULL)))
+        return name;
+    TCHAR buffer[MAX_PATH];
+    if (!SHGetPathFromIDList(&file, buffer))
+        return name;
+#else
     PIDLIST_ABSOLUTE file;
     if (FAILED(SHParseDisplayName(nameC, NULL, &file, 0, NULL)))
         return name;
     TCHAR buffer[MAX_PATH];
     if (!SHGetPathFromIDList(file, buffer))
         return name;
+#endif
     QString canonicalName = QString::fromWCharArray(buffer);
     // Upper case drive letter
     if (canonicalName.size() > 2 && canonicalName.at(1) == QLatin1Char(':'))
@@ -2362,6 +2380,8 @@ bool QQml_isFileCaseCorrect(const QString &fileName, int lengthIn /* = -1 */)
 
     Returns the QQmlEngine associated with \a object, if any.  This is equivalent to
     QQmlEngine::contextForObject(object)->engine(), but more efficient.
+
+    \sa {QQmlEngine::contextForObject()}{contextForObject()}, qmlContext()
 */
 
 /*!
@@ -2370,6 +2390,8 @@ bool QQml_isFileCaseCorrect(const QString &fileName, int lengthIn /* = -1 */)
 
     Returns the QQmlContext associated with \a object, if any.  This is equivalent to
     QQmlEngine::contextForObject(object).
+
+    \sa {QQmlEngine::contextForObject()}{contextForObject()}, qmlEngine()
 */
 
 QT_END_NAMESPACE

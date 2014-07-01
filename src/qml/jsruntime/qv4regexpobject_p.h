@@ -66,7 +66,8 @@ namespace QV4 {
 class RegExp;
 
 struct RegExpObject: Object {
-    Q_MANAGED
+    V4_OBJECT
+    Q_MANAGED_TYPE(RegExpObject)
     // needs to be compatible with the flags in qv4jsir_p.h
     enum Flags {
         RegExp_Global     = 0x01,
@@ -83,7 +84,7 @@ struct RegExpObject: Object {
     Property *lastIndexProperty(ExecutionContext *ctx);
     bool global;
 
-    RegExpObject(ExecutionEngine *engine, Referenced<RegExp> value, bool global);
+    RegExpObject(ExecutionEngine *engine, RegExpRef value, bool global);
     RegExpObject(ExecutionEngine *engine, const QRegExp &re);
     ~RegExpObject() {}
 
@@ -100,14 +101,15 @@ protected:
     static void markObjects(Managed *that, ExecutionEngine *e);
 };
 
+DEFINE_REF(RegExp, Object);
 
 struct RegExpCtor: FunctionObject
 {
-    Q_MANAGED
+    V4_OBJECT
     RegExpCtor(ExecutionContext *scope);
 
-    SafeValue lastMatch;
-    SafeString lastInput;
+    Value lastMatch;
+    StringValue lastInput;
     int lastMatchStart;
     int lastMatchEnd;
     void clearLastMatch();

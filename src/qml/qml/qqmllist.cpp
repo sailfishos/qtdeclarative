@@ -92,8 +92,8 @@ void QQmlListReferencePrivate::release()
 \brief The QQmlListReference class allows the manipulation of QQmlListProperty properties.
 
 QQmlListReference allows C++ programs to read from, and assign values to a QML list property in a
-simple and type safe way.  A QQmlListReference can be created by passing an object and property
-name or through a QQmlProperty instance.  These two are equivalant:
+simple and type-safe way.  A QQmlListReference can be created by passing an object and property
+name or through a QQmlProperty instance.  These two are equivalent:
 
 \code
 QQmlListReference ref1(object, "children");
@@ -105,11 +105,11 @@ QQmlListReference ref2 = qvariant_cast<QQmlListReference>(ref2.read());
 Not all QML list properties support all operations.  A set of methods, canAppend(), canAt(), canClear() and
 canCount() allow programs to query whether an operation is supported on a given property.
 
-QML list properties are typesafe.  Only QObject's that derive from the correct base class can be assigned to
+QML list properties are type-safe.  Only QObject's that derive from the correct base class can be assigned to
 the list.  The listElementType() method can be used to query the QMetaObject of the QObject type supported.
 Attempting to add objects of the incorrect type to a list property will fail.
 
-Like with normal lists, when accessing a list element by index, it is the callers responsibility to ensure 
+Like with normal lists, when accessing a list element by index, it is the callers responsibility to ensure
 that it does not request an out of range element using the count() method before calling at().
 
 The \l {Qt Quick 1} version of this class is named QDeclarativeListReference.
@@ -125,7 +125,7 @@ QQmlListReference::QQmlListReference()
 
 /*!
 Constructs a QQmlListReference for \a object's \a property.  If \a property is not a list
-property, an invalid QQmlListReference is created.  If \a object is destroyed after 
+property, an invalid QQmlListReference is created.  If \a object is destroyed after
 the reference is constructed, it will automatically become invalid.  That is, it is safe to hold
 QQmlListReference instances even after \a object is deleted.
 
@@ -243,7 +243,7 @@ bool QQmlListReference::canClear() const
 }
 
 /*!
-Returns true if the list property can be queried for its element count, otherwise false.  
+Returns true if the list property can be queried for its element count, otherwise false.
 Returns false if the reference is invalid.
 
 \sa count()
@@ -336,7 +336,7 @@ int QQmlListReference::count() const
 \class QQmlListProperty
 \since 5.0
 \inmodule QtQml
-\brief The QQmlListProperty class allows applications to expose list-like 
+\brief The QQmlListProperty class allows applications to expose list-like
 properties to QML.
 
 QML has many list properties, where more than one object value can be assigned.
@@ -344,7 +344,7 @@ The use of a list property from QML looks like this:
 
 \code
 FruitBasket {
-    fruit: [ 
+    fruit: [
         Apple {},
         Orange{},
         Banana{}
@@ -352,12 +352,12 @@ FruitBasket {
 }
 \endcode
 
-The QQmlListProperty encapsulates a group of function pointers that represet the
+The QQmlListProperty encapsulates a group of function pointers that represent the
 set of actions QML can perform on the list - adding items, retrieving items and
-clearing the list.  In the future, additional operations may be supported.  All 
+clearing the list.  In the future, additional operations may be supported.  All
 list properties must implement the append operation, but the rest are optional.
 
-To provide a list property, a C++ class must implement the operation callbacks, 
+To provide a list property, a C++ class must implement the operation callbacks,
 and then return an appropriate QQmlListProperty value from the property getter.
 List properties should have no setter.  In the example above, the Q_PROPERTY()
 declarative will look like this:
@@ -366,7 +366,7 @@ declarative will look like this:
 Q_PROPERTY(QQmlListProperty<Fruit> fruit READ fruit);
 \endcode
 
-QML list properties are typesafe - in this case \c {Fruit} is a QObject type that 
+QML list properties are type-safe - in this case \c {Fruit} is a QObject type that
 \c {Apple}, \c {Orange} and \c {Banana} all derive from.
 
 The \l {Qt Quick 1} version of this class is named QDeclarativeListProperty.
@@ -375,7 +375,7 @@ The \l {Qt Quick 1} version of this class is named QDeclarativeListProperty.
 */
 
 /*!
-\fn QQmlListProperty::QQmlListProperty() 
+\fn QQmlListProperty::QQmlListProperty()
 \internal
 */
 
@@ -386,9 +386,9 @@ Convenience constructor for making a QQmlListProperty value from an existing
 QList \a list.  The \a list reference must remain valid for as long as \a object
 exists.  \a object must be provided.
 
-Generally this constructor should not be used in production code, as a 
+Generally this constructor should not be used in production code, as a
 writable QList violates QML's memory management rules.  However, this constructor
-can very useful while prototyping.
+can be very useful while prototyping.
 */
 
 /*!
@@ -401,12 +401,12 @@ remains valid while \a object exists.
 */
 
 /*!
-\fn QQmlListProperty::QQmlListProperty(QObject *object, void *data, AppendFunction append, 
+\fn QQmlListProperty::QQmlListProperty(QObject *object, void *data, AppendFunction append,
                                      CountFunction count, AtFunction at,
                                      ClearFunction clear)
 
 Construct a QQmlListProperty from a set of operation functions.  An opaque \a data handle
-may be passed which can be accessed from within the operation functions.  The list property 
+may be passed which can be accessed from within the operation functions.  The list property
 remains valid while \a object exists.
 
 Null pointers can be passed for any function. If any null pointers are passed in, the list
@@ -431,7 +431,7 @@ Return the number of elements in the list \a property.
 */
 
 /*!
-\fn bool QQmlListProperty::operator==(const QQmlListProperty &other) const 
+\fn bool QQmlListProperty::operator==(const QQmlListProperty &other) const
 
 Returns true if this QQmlListProperty is equal to \a other, otherwise false.
 */

@@ -62,14 +62,14 @@
 #include <QtQml/qqmlabstracturlinterceptor.h>
 
 #include <private/qhashedstring_p.h>
-#include <private/qqmlscript_p.h>
 #include <private/qqmlimport_p.h>
 #include <private/qqmlcleanup_p.h>
 #include <private/qqmldirparser_p.h>
 #include <private/qqmlbundle_p.h>
 #include <private/qflagpointer_p.h>
+#include <private/qqmlirbuilder_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4script_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -84,8 +84,8 @@ class QQmlTypeData;
 class QQmlDataLoader;
 class QQmlExtensionInterface;
 
-namespace QtQml {
-struct ParsedQML;
+namespace QmlIR {
+struct Document;
 }
 
 class Q_QML_PRIVATE_EXPORT QQmlDataBlob : public QQmlRefCount
@@ -155,6 +155,7 @@ protected:
 
     // Callbacks made in load thread
     virtual void dataReceived(const Data &) = 0;
+    virtual void initializeFromCachedUnit(const QQmlPrivate::CachedQmlUnit*) = 0;
     virtual void done();
     virtual void networkError(QNetworkReply::NetworkError);
     virtual void dependencyError(QQmlDataBlob *);
@@ -189,7 +190,7 @@ private:
 
     // m_errors should *always* be written before the status is set to Error.
     // We use the status change as a memory fence around m_errors so that locking
-    // isn't required.  Once the status is set to Error (or Complete), m_errors 
+    // isn't required.  Once the status is set to Error (or Complete), m_errors
     // cannot be changed.
     QList<QQmlError> m_errors;
 
@@ -228,6 +229,7 @@ public:
 
     void load(QQmlDataBlob *, Mode = PreferSynchronous);
     void loadWithStaticData(QQmlDataBlob *, const QByteArray &, Mode = PreferSynchronous);
+    void loadWithCachedUnit(QQmlDataBlob *blob, const QQmlPrivate::CachedQmlUnit *unit);
 
     QQmlEngine *engine() const;
     void initializeEngine(QQmlExtensionInterface *, const char *);
@@ -242,14 +244,16 @@ private:
 
     void loadThread(QQmlDataBlob *);
     void loadWithStaticDataThread(QQmlDataBlob *, const QByteArray &);
+    void loadWithCachedUnitThread(QQmlDataBlob *blob, const QQmlPrivate::CachedQmlUnit *unit);
     void networkReplyFinished(QNetworkReply *);
     void networkReplyProgress(QNetworkReply *, qint64, qint64);
-    
+
     typedef QHash<QNetworkReply *, QQmlDataBlob *> NetworkReplies;
 
     void setData(QQmlDataBlob *, const QByteArray &);
     void setData(QQmlDataBlob *, QQmlFile *);
     void setData(QQmlDataBlob *, const QQmlDataBlob::Data &);
+    void setCachedUnit(QQmlDataBlob *blob, const QQmlPrivate::CachedQmlUnit *unit);
 
     QQmlEngine *m_engine;
     QQmlDataLoaderThread *m_thread;
@@ -264,7 +268,7 @@ public:
     QString fileName;
 };
 
-class QQmlTypeLoader : public QQmlDataLoader
+class Q_AUTOTEST_EXPORT QQmlTypeLoader : public QQmlDataLoader
 {
     Q_DECLARE_TR_FUNCTIONS(QQmlTypeLoader)
 public:
@@ -275,28 +279,30 @@ public:
         ~Blob();
 
         QQmlTypeLoader *typeLoader() const { return m_typeLoader; }
-        const QQmlImports &imports() const { return m_imports; }
+        const QQmlImports &imports() const { return m_importCache; }
 
     protected:
-        bool addImport(const QQmlScript::Import &import, QList<QQmlError> *errors);
-        bool addPragma(const QQmlScript::Pragma &pragma, QList<QQmlError> *errors);
+        bool addImport(const QV4::CompiledData::Import *import, QList<QQmlError> *errors);
+        bool addPragma(const QmlIR::Pragma &pragma, QList<QQmlError> *errors);
 
-        bool fetchQmldir(const QUrl &url, const QQmlScript::Import *import, int priority, QList<QQmlError> *errors);
-        bool updateQmldir(QQmlQmldirData *data, const QQmlScript::Import *import, QList<QQmlError> *errors);
+        bool fetchQmldir(const QUrl &url, const QV4::CompiledData::Import *import, int priority, QList<QQmlError> *errors);
+        bool updateQmldir(QQmlQmldirData *data, const QV4::CompiledData::Import *import, QList<QQmlError> *errors);
 
     private:
         virtual bool qmldirDataAvailable(QQmlQmldirData *, QList<QQmlError> *);
 
-        virtual void scriptImported(QQmlScriptBlob *, const QQmlScript::Location &, const QString &, const QString &) {}
+        virtual void scriptImported(QQmlScriptBlob *, const QV4::CompiledData::Location &, const QString &, const QString &) {}
 
         virtual void dependencyError(QQmlDataBlob *);
         virtual void dependencyComplete(QQmlDataBlob *);
 
     protected:
+        virtual QString stringAt(int) const { return QString(); }
+
         QQmlTypeLoader *m_typeLoader;
-        QQmlImports m_imports;
+        QQmlImports m_importCache;
         bool m_isSingleton;
-        QHash<const QQmlScript::Import *, int> m_unresolvedImports;
+        QHash<const QV4::CompiledData::Import*, int> m_unresolvedImports;
         QList<QQmlQmldirData *> m_qmldirs;
     };
 
@@ -396,21 +402,22 @@ class Q_AUTOTEST_EXPORT QQmlTypeData : public QQmlTypeLoader::Blob
 public:
     struct TypeReference
     {
-        TypeReference() : type(0), majorVersion(0), minorVersion(0), typeData(0) {}
+        TypeReference() : type(0), majorVersion(0), minorVersion(0), typeData(0), needsCreation(true) {}
 
-        QQmlScript::Location location;
+        QV4::CompiledData::Location location;
         QQmlType *type;
         int majorVersion;
         int minorVersion;
         QQmlTypeData *typeData;
         QString prefix; // used by CompositeSingleton types
+        bool needsCreation;
     };
 
     struct ScriptReference
     {
         ScriptReference() : script(0) {}
 
-        QQmlScript::Location location;
+        QV4::CompiledData::Location location;
         QString qualifier;
         QQmlScriptBlob *script;
     };
@@ -423,9 +430,8 @@ private:
 public:
     ~QQmlTypeData();
 
-    const QQmlScript::Parser &parser() const;
+    const QHash<int, TypeReference> &resolvedTypeRefs() const { return m_resolvedTypes; }
 
-    const QList<TypeReference> &resolvedTypes() const;
     const QList<ScriptReference> &resolvedScripts() const;
     const QSet<QString> &namespaces() const;
     const QList<TypeReference> &compositeSingletons() const;
@@ -445,51 +451,44 @@ protected:
     virtual void done();
     virtual void completed();
     virtual void dataReceived(const Data &);
+    virtual void initializeFromCachedUnit(const QQmlPrivate::CachedQmlUnit *unit);
     virtual void allDependenciesDone();
     virtual void downloadProgressChanged(qreal);
 
+    virtual QString stringAt(int index) const;
+
 private:
+    void continueLoadFromIR();
     void resolveTypes();
     void compile();
-    bool resolveType(const QQmlScript::TypeReference *parserRef, int &majorVersion, int &minorVersion, TypeReference &ref);
+    bool resolveType(const QString &typeName, int &majorVersion, int &minorVersion, TypeReference &ref);
 
-    virtual void scriptImported(QQmlScriptBlob *blob, const QQmlScript::Location &location, const QString &qualifier, const QString &nameSpace);
+    virtual void scriptImported(QQmlScriptBlob *blob, const QV4::CompiledData::Location &location, const QString &qualifier, const QString &nameSpace);
 
-    // --- old compiler
-    QQmlScript::Parser scriptParser;
-    // --- new compiler
-    QScopedPointer<QtQml::ParsedQML> parsedQML;
-    QList<QQmlScript::Import> m_newImports;
-    QList<QQmlScript::Pragma> m_newPragmas;
-    // ---
+    QScopedPointer<QmlIR::Document> m_document;
 
     QList<ScriptReference> m_scripts;
 
     QSet<QString> m_namespaces;
     QList<TypeReference> m_compositeSingletons;
 
-    // --- old compiler
-    QList<TypeReference> m_types;
-    // --- new compiler
     // map from name index to resolved type
     QHash<int, TypeReference> m_resolvedTypes;
-    // ---
     bool m_typesResolved:1;
-    bool m_useNewCompiler:1;
 
     QQmlCompiledData *m_compiledData;
 
     QList<TypeDataCallback *> m_callbacks;
 
-    QQmlScript::Import *m_implicitImport;
+    QV4::CompiledData::Import *m_implicitImport;
     bool m_implicitImportLoaded;
     bool loadImplicitImport();
 };
 
-// QQmlScriptData instances are created, uninitialized, by the loader in the 
+// QQmlScriptData instances are created, uninitialized, by the loader in the
 // load thread.  The first time they are used by the VME, they are initialized which
 // creates their v8 objects and they are referenced and added to the  engine's cleanup
-// list.  During QQmlCleanup::clear() all v8 resources are destroyed, and the 
+// list.  During QQmlCleanup::clear() all v8 resources are destroyed, and the
 // reference that was created is released but final deletion only occurs once all the
 // references as released.  This is all intended to ensure that the v8 resources are
 // only created and destroyed in the main thread :)
@@ -507,7 +506,6 @@ public:
     QString urlString;
     QQmlTypeNameCache *importCache;
     QList<QQmlScriptBlob *> scripts;
-    QQmlScript::Object::ScriptBlock::Pragmas pragmas;
 
     QV4::PersistentValue scriptValueForContext(QQmlContextData *parentCtxt);
 
@@ -515,7 +513,6 @@ protected:
     virtual void clear(); // From QQmlCleanup
 
 private:
-    friend class QQmlVME;
     friend class QQmlScriptBlob;
 
     void initialize(QQmlEngine *);
@@ -540,25 +537,24 @@ public:
     {
         ScriptReference() : script(0) {}
 
-        QQmlScript::Location location;
+        QV4::CompiledData::Location location;
         QString qualifier;
         QString nameSpace;
         QQmlScriptBlob *script;
     };
 
-    QQmlScript::Object::ScriptBlock::Pragmas pragmas() const;
-
     QQmlScriptData *scriptData() const;
 
 protected:
     virtual void dataReceived(const Data &);
+    virtual void initializeFromCachedUnit(const QQmlPrivate::CachedQmlUnit *unit);
     virtual void done();
 
-private:
-    virtual void scriptImported(QQmlScriptBlob *blob, const QQmlScript::Location &location, const QString &qualifier, const QString &nameSpace);
+    virtual QString stringAt(int index) const;
 
-    QString m_source;
-    QQmlScript::Parser::JavaScriptMetaData m_metadata;
+private:
+    virtual void scriptImported(QQmlScriptBlob *blob, const QV4::CompiledData::Location &location, const QString &qualifier, const QString &nameSpace);
+    void initializeFromCompilationUnit(QV4::CompiledData::CompilationUnit *unit);
 
     QList<ScriptReference> m_scripts;
     QQmlScriptData *m_scriptData;
@@ -574,18 +570,19 @@ private:
 public:
     const QString &content() const;
 
-    const QQmlScript::Import *import() const;
-    void setImport(const QQmlScript::Import *);
+    const QV4::CompiledData::Import *import() const;
+    void setImport(const QV4::CompiledData::Import *);
 
     int priority() const;
     void setPriority(int);
 
 protected:
     virtual void dataReceived(const Data &);
+    virtual void initializeFromCachedUnit(const QQmlPrivate::CachedQmlUnit*);
 
 private:
     QString m_content;
-    const QQmlScript::Import *m_import;
+    const QV4::CompiledData::Import *m_import;
     int m_priority;
 };
 

@@ -56,7 +56,7 @@
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/private/qquickwindow_p.h>
 #include <QtQuick/private/qsgcontext_p.h>
-#include <private/qqmlprofilerservice_p.h>
+#include <private/qquickprofiler_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -279,12 +279,15 @@ void QSGGuiThreadRenderLoop::windowDestroyed(QQuickWindow *window)
         QCoreApplication::sendPostedEvents(0, QEvent::DeferredDelete);
         delete gl;
         gl = 0;
+    } else if (window == gl->surface()) {
+        gl->doneCurrent();
     }
 }
 
 void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
 {
-    if (!QQuickWindowPrivate::get(window)->isRenderable() || !m_windows.contains(window))
+    QQuickWindowPrivate *cd = QQuickWindowPrivate::get(window);
+    if (!cd->isRenderable() || !m_windows.contains(window))
         return;
 
     WindowData &data = const_cast<WindowData &>(m_windows[window]);
@@ -294,8 +297,6 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
     if (!gl) {
         gl = new QOpenGLContext();
         gl->setFormat(window->requestedFormat());
-        if (QSGContext::sharedOpenGLContext())
-            gl->setShareContext(QSGContext::sharedOpenGLContext());
         if (!gl->create()) {
             qWarning("QtQuick: failed to create OpenGL context");
             delete gl;
@@ -304,7 +305,7 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
             current = gl->makeCurrent(window);
         }
         if (current)
-            QQuickWindowPrivate::get(window)->context->initialize(gl);
+            cd->context->initialize(gl);
     } else {
         current = gl->makeCurrent(window);
     }
@@ -315,7 +316,6 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
     if (!current)
         return;
 
-    QQuickWindowPrivate *cd = QQuickWindowPrivate::get(window);
     if (!data.grabOnly) {
         cd->flushDelayedTouchEvent();
         // Event delivery/processing triggered the window to be deleted or stop rendering.
@@ -326,7 +326,7 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
 
     qint64 renderTime = 0, syncTime = 0;
     QElapsedTimer renderTimer;
-    bool profileFrames = qsg_render_timing()  || QQmlProfilerService::enabled;
+    bool profileFrames = qsg_render_timing()  || QQuickProfiler::enabled;
     if (profileFrames)
         renderTimer.start();
 
@@ -365,13 +365,10 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
         lastFrameTime = QTime::currentTime();
     }
 
-    if (QQmlProfilerService::enabled) {
-        QQmlProfilerService::sceneGraphFrame(
-                    QQmlProfilerService::SceneGraphRenderLoopFrame,
-                    syncTime,
-                    renderTime,
-                    swapTime);
-    }
+    Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphRenderLoopFrame, (
+            syncTime,
+            renderTime,
+            swapTime));
 
     // Might have been set during syncSceneGraph()
     if (data.updatePending)

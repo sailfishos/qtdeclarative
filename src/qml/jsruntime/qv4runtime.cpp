@@ -41,6 +41,7 @@
 
 #include "qv4global_p.h"
 #include "qv4runtime_p.h"
+#ifndef V4_BOOTSTRAP
 #include "qv4object_p.h"
 #include "qv4jsir_p.h"
 #include "qv4objectproto_p.h"
@@ -54,6 +55,7 @@
 #include <private/qqmlcontextwrapper_p.h>
 #include "qv4qobjectwrapper_p.h"
 #include <private/qv8engine_p.h>
+#endif
 
 #include <QtCore/qmath.h>
 #include <QtCore/qnumeric.h>
@@ -63,7 +65,7 @@
 #include <typeinfo>
 #include <stdlib.h>
 
-#include "../../../3rdparty/double-conversion/double-conversion.h"
+#include "../../3rdparty/double-conversion/double-conversion.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -207,7 +209,8 @@ void RuntimeCounters::count(const char *func, uint tag1, uint tag2)
 
 #endif // QV4_COUNT_RUNTIME_FUNCTIONS
 
-void __qmljs_numberToString(QString *result, double num, int radix)
+#ifndef V4_BOOTSTRAP
+void RuntimeHelpers::numberToString(QString *result, double num, int radix)
 {
     Q_ASSERT(result);
 
@@ -215,7 +218,7 @@ void __qmljs_numberToString(QString *result, double num, int radix)
         *result = QStringLiteral("NaN");
         return;
     } else if (qIsInf(num)) {
-        *result = QLatin1String(num < 0 ? "-Infinity" : "Infinity");
+        *result = num < 0 ? QStringLiteral("-Infinity") : QStringLiteral("Infinity");
         return;
     }
 
@@ -260,15 +263,15 @@ void __qmljs_numberToString(QString *result, double num, int radix)
         result->prepend(QLatin1Char('-'));
 }
 
-ReturnedValue __qmljs_init_closure(ExecutionContext *ctx, int functionId)
+ReturnedValue Runtime::closure(ExecutionContext *ctx, int functionId)
 {
     QV4::Function *clos = ctx->compilationUnit->runtimeFunctions[functionId];
     Q_ASSERT(clos);
-    FunctionObject *f = FunctionObject::creatScriptFunction(ctx, clos);
+    FunctionObject *f = FunctionObject::createScriptFunction(ctx, clos);
     return f->asReturnedValue();
 }
 
-ReturnedValue __qmljs_delete_subscript(ExecutionContext *ctx, const ValueRef base, const ValueRef index)
+ReturnedValue Runtime::deleteElement(ExecutionContext *ctx, const ValueRef base, const ValueRef index)
 {
     Scope scope(ctx);
     ScopedObject o(scope, base);
@@ -280,10 +283,10 @@ ReturnedValue __qmljs_delete_subscript(ExecutionContext *ctx, const ValueRef bas
     }
 
     ScopedString name(scope, index->toString(ctx));
-    return __qmljs_delete_member(ctx, base, name);
+    return Runtime::deleteMember(ctx, base, name);
 }
 
-ReturnedValue __qmljs_delete_member(ExecutionContext *ctx, const ValueRef base, const StringRef name)
+ReturnedValue Runtime::deleteMember(ExecutionContext *ctx, const ValueRef base, const StringRef name)
 {
     Scope scope(ctx);
     ScopedObject obj(scope, base->toObject(ctx));
@@ -292,14 +295,17 @@ ReturnedValue __qmljs_delete_member(ExecutionContext *ctx, const ValueRef base, 
     return Encode(obj->deleteProperty(name));
 }
 
-ReturnedValue __qmljs_delete_name(ExecutionContext *ctx, const StringRef name)
+ReturnedValue Runtime::deleteName(ExecutionContext *ctx, const StringRef name)
 {
     Scope scope(ctx);
     return Encode(ctx->deleteProperty(name));
 }
 
-QV4::ReturnedValue __qmljs_instanceof(ExecutionContext *ctx, const ValueRef left, const ValueRef right)
+QV4::ReturnedValue Runtime::instanceof(ExecutionContext *ctx, const ValueRef left, const ValueRef right)
 {
+    // As nothing in this method can call into the memory manager, avoid using a Scope
+    // for performance reasons
+
     FunctionObject *f = right->asFunctionObject();
     if (!f)
         return ctx->throwTypeError();
@@ -307,30 +313,27 @@ QV4::ReturnedValue __qmljs_instanceof(ExecutionContext *ctx, const ValueRef left
     if (f->subtype == FunctionObject::BoundFunction)
         f = static_cast<BoundFunction *>(f)->target;
 
-    Scope scope(ctx->engine);
-    ScopedObject v(scope, left);
+    Object *v = left->asObject();
     if (!v)
         return Encode(false);
 
-    Scoped<Object> o(scope, f->protoProperty());
-    if (!o) {
-        scope.engine->currentContext()->throwTypeError();
-        return Encode(false);
-    }
+    Object *o = QV4::Value::fromReturnedValue(f->protoProperty()).asObject();
+    if (!o)
+        return ctx->throwTypeError();
 
     while (v) {
         v = v->prototype();
 
-        if (! v)
+        if (!v)
             break;
-        else if (o.getPointer() == v)
+        else if (o == v)
             return Encode(true);
     }
 
     return Encode(false);
 }
 
-QV4::ReturnedValue __qmljs_in(ExecutionContext *ctx, const ValueRef left, const ValueRef right)
+QV4::ReturnedValue Runtime::in(ExecutionContext *ctx, const ValueRef left, const ValueRef right)
 {
     if (!right->isObject())
         return ctx->throwTypeError();
@@ -338,11 +341,11 @@ QV4::ReturnedValue __qmljs_in(ExecutionContext *ctx, const ValueRef left, const 
     ScopedString s(scope, left->toString(ctx));
     if (scope.hasException())
         return Encode::undefined();
-    bool r = right->objectValue()->__hasProperty__(s);
+    bool r = right->objectValue()->hasProperty(s);
     return Encode(r);
 }
 
-double __qmljs_string_to_number(const QString &string)
+double RuntimeHelpers::stringToNumber(const QString &string)
 {
     QString s = string.trimmed();
     if (s.startsWith(QLatin1String("0x")) || s.startsWith(QLatin1String("0X")))
@@ -363,14 +366,14 @@ double __qmljs_string_to_number(const QString &string)
     return d;
 }
 
-Returned<String> *__qmljs_string_from_number(ExecutionContext *ctx, double number)
+Returned<String> *RuntimeHelpers::stringFromNumber(ExecutionContext *ctx, double number)
 {
     QString qstr;
-    __qmljs_numberToString(&qstr, number, 10);
+    RuntimeHelpers::numberToString(&qstr, number, 10);
     return ctx->engine->newString(qstr);
 }
 
-ReturnedValue __qmljs_object_default_value(Object *object, int typeHint)
+ReturnedValue RuntimeHelpers::objectDefaultValue(Object *object, int typeHint)
 {
     if (typeHint == PREFERREDTYPE_HINT) {
         if (object->asDateObject())
@@ -383,8 +386,8 @@ ReturnedValue __qmljs_object_default_value(Object *object, int typeHint)
     if (engine->hasException)
         return Encode::undefined();
 
-    SafeString *meth1 = &engine->id_toString;
-    SafeString *meth2 = &engine->id_valueOf;
+    StringValue *meth1 = &engine->id_toString;
+    StringValue *meth2 = &engine->id_valueOf;
 
     if (typeHint == NUMBER_HINT)
         qSwap(meth1, meth2);
@@ -414,13 +417,9 @@ ReturnedValue __qmljs_object_default_value(Object *object, int typeHint)
     return ctx->throwTypeError();
 }
 
-Bool __qmljs_to_boolean(const ValueRef value)
-{
-    return value->toBoolean();
-}
 
 
-Returned<Object> *__qmljs_convert_to_object(ExecutionContext *ctx, const ValueRef value)
+Returned<Object> *RuntimeHelpers::convertToObject(ExecutionContext *ctx, const ValueRef value)
 {
     assert(!value->isObject());
     switch (value->type()) {
@@ -439,7 +438,7 @@ Returned<Object> *__qmljs_convert_to_object(ExecutionContext *ctx, const ValueRe
     }
 }
 
-Returned<String> *__qmljs_convert_to_string(ExecutionContext *ctx, const ValueRef value)
+Returned<String> *RuntimeHelpers::convertToString(ExecutionContext *ctx, const ValueRef value)
 {
     switch (value->type()) {
     case Value::Empty_Type:
@@ -458,13 +457,13 @@ Returned<String> *__qmljs_convert_to_string(ExecutionContext *ctx, const ValueRe
             return value->stringValue()->asReturned<String>();
         {
             Scope scope(ctx);
-            ScopedValue prim(scope, __qmljs_to_primitive(value, STRING_HINT));
-            return __qmljs_convert_to_string(ctx, prim);
+            ScopedValue prim(scope, RuntimeHelpers::toPrimitive(value, STRING_HINT));
+            return RuntimeHelpers::convertToString(ctx, prim);
         }
     case Value::Integer_Type:
-        return __qmljs_string_from_number(ctx, value->int_32);
+        return RuntimeHelpers::stringFromNumber(ctx, value->int_32);
     default: // double
-        return __qmljs_string_from_number(ctx, value->doubleValue());
+        return RuntimeHelpers::stringFromNumber(ctx, value->doubleValue());
     } // switch
 }
 
@@ -489,22 +488,22 @@ static Returned<String> *convert_to_string_add(ExecutionContext *ctx, const Valu
             return value->stringValue()->asReturned<String>();
         {
             Scope scope(ctx);
-            ScopedValue prim(scope, __qmljs_to_primitive(value, PREFERREDTYPE_HINT));
-            return __qmljs_convert_to_string(ctx, prim);
+            ScopedValue prim(scope, RuntimeHelpers::toPrimitive(value, PREFERREDTYPE_HINT));
+            return RuntimeHelpers::convertToString(ctx, prim);
         }
     case Value::Integer_Type:
-        return __qmljs_string_from_number(ctx, value->int_32);
+        return RuntimeHelpers::stringFromNumber(ctx, value->int_32);
     default: // double
-        return __qmljs_string_from_number(ctx, value->doubleValue());
+        return RuntimeHelpers::stringFromNumber(ctx, value->doubleValue());
     } // switch
 }
 
-QV4::ReturnedValue __qmljs_add_helper(ExecutionContext *ctx, const ValueRef left, const ValueRef right)
+QV4::ReturnedValue RuntimeHelpers::addHelper(ExecutionContext *ctx, const ValueRef left, const ValueRef right)
 {
     Scope scope(ctx);
 
-    ScopedValue pleft(scope, __qmljs_to_primitive(left, PREFERREDTYPE_HINT));
-    ScopedValue pright(scope, __qmljs_to_primitive(right, PREFERREDTYPE_HINT));
+    ScopedValue pleft(scope, RuntimeHelpers::toPrimitive(left, PREFERREDTYPE_HINT));
+    ScopedValue pright(scope, RuntimeHelpers::toPrimitive(right, PREFERREDTYPE_HINT));
     if (pleft->isString() || pright->isString()) {
         if (!pleft->isString())
             pleft = convert_to_string_add(ctx, pleft);
@@ -518,12 +517,12 @@ QV4::ReturnedValue __qmljs_add_helper(ExecutionContext *ctx, const ValueRef left
             return pleft->asReturnedValue();
         return (new (ctx->engine->memoryManager) String(ctx->engine, pleft->stringValue(), pright->stringValue()))->asReturnedValue();
     }
-    double x = __qmljs_to_number(pleft);
-    double y = __qmljs_to_number(pright);
+    double x = RuntimeHelpers::toNumber(pleft);
+    double y = RuntimeHelpers::toNumber(pright);
     return Encode(x + y);
 }
 
-QV4::ReturnedValue __qmljs_add_string(QV4::ExecutionContext *ctx, const QV4::ValueRef left, const QV4::ValueRef right)
+QV4::ReturnedValue Runtime::addString(QV4::ExecutionContext *ctx, const QV4::ValueRef left, const QV4::ValueRef right)
 {
     Q_ASSERT(left->isString() || right->isString());
 
@@ -552,7 +551,7 @@ QV4::ReturnedValue __qmljs_add_string(QV4::ExecutionContext *ctx, const QV4::Val
     return (new (ctx->engine->memoryManager) String(ctx->engine, pleft->stringValue(), pright->stringValue()))->asReturnedValue();
 }
 
-void __qmljs_set_property(ExecutionContext *ctx, const ValueRef object, const StringRef name, const ValueRef value)
+void Runtime::setProperty(ExecutionContext *ctx, const ValueRef object, const StringRef name, const ValueRef value)
 {
     Scope scope(ctx);
     ScopedObject o(scope, object->toObject(ctx));
@@ -561,7 +560,7 @@ void __qmljs_set_property(ExecutionContext *ctx, const ValueRef object, const St
     o->put(name, value);
 }
 
-ReturnedValue __qmljs_get_element(ExecutionContext *ctx, const ValueRef object, const ValueRef index)
+ReturnedValue Runtime::getElement(ExecutionContext *ctx, const ValueRef object, const ValueRef index)
 {
     Scope scope(ctx);
     uint idx = index->asArrayIndex();
@@ -583,18 +582,16 @@ ReturnedValue __qmljs_get_element(ExecutionContext *ctx, const ValueRef object, 
             return ctx->throwTypeError(message);
         }
 
-        o = __qmljs_convert_to_object(ctx, object);
+        o = RuntimeHelpers::convertToObject(ctx, object);
         if (!o) // type error
             return Encode::undefined();
     }
 
     if (idx < UINT_MAX) {
-        uint pidx = o->propertyIndexFromArrayIndex(idx);
-        if (pidx < UINT_MAX) {
-            if (!o->arrayAttributes || o->arrayAttributes[pidx].isData()) {
-                if (!o->arrayData[pidx].value.isEmpty())
-                    return o->arrayData[pidx].value.asReturnedValue();
-            }
+        if (!o->arrayData->hasAttributes()) {
+            ScopedValue v(scope, o->arrayData->get(idx));
+            if (!v->isEmpty())
+                return v->asReturnedValue();
         }
 
         return o->getIndexed(idx);
@@ -606,7 +603,7 @@ ReturnedValue __qmljs_get_element(ExecutionContext *ctx, const ValueRef object, 
     return o->get(name);
 }
 
-void __qmljs_set_element(ExecutionContext *ctx, const ValueRef object, const ValueRef index, const ValueRef value)
+void Runtime::setElement(ExecutionContext *ctx, const ValueRef object, const ValueRef index, const ValueRef value)
 {
     Scope scope(ctx);
     ScopedObject o(scope, object->toObject(ctx));
@@ -615,32 +612,10 @@ void __qmljs_set_element(ExecutionContext *ctx, const ValueRef object, const Val
 
     uint idx = index->asArrayIndex();
     if (idx < UINT_MAX) {
-        uint pidx = o->propertyIndexFromArrayIndex(idx);
-        if (pidx < UINT_MAX) {
-            if (o->arrayAttributes && !o->arrayAttributes[pidx].isEmpty() && !o->arrayAttributes[pidx].isWritable()) {
-                if (ctx->strictMode)
-                    ctx->throwTypeError();
-                return;
-            }
-
-            Property *p = o->arrayData + pidx;
-            if (!o->arrayAttributes || o->arrayAttributes[pidx].isData()) {
-                p->value = *value;
-                return;
-            }
-
-            if (o->arrayAttributes[pidx].isAccessor()) {
-                FunctionObject *setter = p->setter();
-                if (!setter) {
-                    if (ctx->strictMode)
-                        ctx->throwTypeError();
-                    return;
-                }
-
-                ScopedCallData callData(scope, 1);
-                callData->thisObject = o;
-                callData->args[0] = *value;
-                setter->call(callData);
+        if (o->arrayType() == ArrayData::Simple) {
+            SimpleArrayData *s = static_cast<SimpleArrayData *>(o->arrayData);
+            if (s && idx < s->len && !s->data[idx].isEmpty()) {
+                s->data[idx] = value;
                 return;
             }
         }
@@ -652,17 +627,17 @@ void __qmljs_set_element(ExecutionContext *ctx, const ValueRef object, const Val
     o->put(name, value);
 }
 
-ReturnedValue __qmljs_foreach_iterator_object(ExecutionContext *ctx, const ValueRef in)
+ReturnedValue Runtime::foreachIterator(ExecutionContext *ctx, const ValueRef in)
 {
     Scope scope(ctx);
     Scoped<Object> o(scope, (Object *)0);
     if (!in->isNullOrUndefined())
-        o = in;
+        o = in->toObject(ctx);
     Scoped<Object> it(scope, ctx->engine->newForEachIteratorObject(ctx, o));
     return it.asReturnedValue();
 }
 
-ReturnedValue __qmljs_foreach_next_property_name(const ValueRef foreach_iterator)
+ReturnedValue Runtime::foreachNextPropertyName(const ValueRef foreach_iterator)
 {
     Q_ASSERT(foreach_iterator->isObject());
 
@@ -673,12 +648,12 @@ ReturnedValue __qmljs_foreach_next_property_name(const ValueRef foreach_iterator
 }
 
 
-void __qmljs_set_activation_property(ExecutionContext *ctx, const StringRef name, const ValueRef value)
+void Runtime::setActivationProperty(ExecutionContext *ctx, const StringRef name, const ValueRef value)
 {
     ctx->setProperty(name, value);
 }
 
-ReturnedValue __qmljs_get_property(ExecutionContext *ctx, const ValueRef object, const StringRef name)
+ReturnedValue Runtime::getProperty(ExecutionContext *ctx, const ValueRef object, const StringRef name)
 {
     Scope scope(ctx);
 
@@ -691,18 +666,20 @@ ReturnedValue __qmljs_get_property(ExecutionContext *ctx, const ValueRef object,
         return ctx->throwTypeError(message);
     }
 
-    o = __qmljs_convert_to_object(ctx, object);
+    o = RuntimeHelpers::convertToObject(ctx, object);
     if (!o) // type error
         return Encode::undefined();
     return o->get(name);
 }
 
-ReturnedValue __qmljs_get_activation_property(ExecutionContext *ctx, const StringRef name)
+ReturnedValue Runtime::getActivationProperty(ExecutionContext *ctx, const StringRef name)
 {
     return ctx->getProperty(name);
 }
 
-uint __qmljs_equal_helper(const ValueRef x, const ValueRef y)
+#endif // V4_BOOTSTRAP
+
+uint RuntimeHelpers::equalHelper(const ValueRef x, const ValueRef y)
 {
     Q_ASSERT(x->type() != y->type() || (x->isManaged() && (x->isString() != y->isString())));
 
@@ -713,29 +690,35 @@ uint __qmljs_equal_helper(const ValueRef x, const ValueRef y)
     } else if (x->isUndefined() && y->isNull()) {
         return true;
     } else if (x->isNumber() && y->isString()) {
-        double dy = __qmljs_to_number(y);
+        double dy = RuntimeHelpers::toNumber(y);
         return x->asDouble() == dy;
     } else if (x->isString() && y->isNumber()) {
-        double dx = __qmljs_to_number(x);
+        double dx = RuntimeHelpers::toNumber(x);
         return dx == y->asDouble();
     } else if (x->isBoolean()) {
-        return __qmljs_cmp_eq(Primitive::fromDouble((double) x->booleanValue()), y);
+        return Runtime::compareEqual(Primitive::fromDouble((double) x->booleanValue()), y);
     } else if (y->isBoolean()) {
-        return __qmljs_cmp_eq(x, Primitive::fromDouble((double) y->booleanValue()));
-    } else if ((x->isNumber() || x->isString()) && y->isObject()) {
-        Scope scope(y->objectValue()->engine());
-        ScopedValue py(scope, __qmljs_to_primitive(y, PREFERREDTYPE_HINT));
-        return __qmljs_cmp_eq(x, py);
-    } else if (x->isObject() && (y->isNumber() || y->isString())) {
-        Scope scope(x->objectValue()->engine());
-        ScopedValue px(scope, __qmljs_to_primitive(x, PREFERREDTYPE_HINT));
-        return __qmljs_cmp_eq(px, y);
+        return Runtime::compareEqual(x, Primitive::fromDouble((double) y->booleanValue()));
+    } else {
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+#else
+        if ((x->isNumber() || x->isString()) && y->isObject()) {
+            Scope scope(y->objectValue()->engine());
+            ScopedValue py(scope, RuntimeHelpers::toPrimitive(y, PREFERREDTYPE_HINT));
+            return Runtime::compareEqual(x, py);
+        } else if (x->isObject() && (y->isNumber() || y->isString())) {
+            Scope scope(x->objectValue()->engine());
+            ScopedValue px(scope, RuntimeHelpers::toPrimitive(x, PREFERREDTYPE_HINT));
+            return Runtime::compareEqual(px, y);
+        }
+#endif
     }
 
     return false;
 }
 
-Bool __qmljs_strict_equal(const ValueRef x, const ValueRef y)
+Bool RuntimeHelpers::strictEqual(const ValueRef x, const ValueRef y)
 {
     TRACE2(x, y);
 
@@ -750,100 +733,140 @@ Bool __qmljs_strict_equal(const ValueRef x, const ValueRef y)
     return false;
 }
 
-QV4::Bool __qmljs_cmp_gt(const QV4::ValueRef l, const QV4::ValueRef r)
+QV4::Bool Runtime::compareGreaterThan(const QV4::ValueRef l, const QV4::ValueRef r)
 {
     TRACE2(l, r);
-    if (QV4::Value::integerCompatible(*l, *r))
+    if (l->isInteger() && r->isInteger())
         return l->integerValue() > r->integerValue();
-    if (QV4::Value::bothDouble(*l, *r))
-        return l->doubleValue() > r->doubleValue();
-    if (l->isString() && r->isString())
+    if (l->isNumber() && r->isNumber())
+        return l->asDouble() > r->asDouble();
+    if (l->isString() && r->isString()) {
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+        return false;
+#else
         return r->stringValue()->compare(l->stringValue());
-
-    if (l->isObject() || r->isObject()) {
-        QV4::ExecutionEngine *e = (l->isObject() ? l->objectValue() : r->objectValue())->engine();
-        QV4::Scope scope(e);
-        QV4::ScopedValue pl(scope, __qmljs_to_primitive(l, QV4::NUMBER_HINT));
-        QV4::ScopedValue pr(scope, __qmljs_to_primitive(r, QV4::NUMBER_HINT));
-        return __qmljs_cmp_gt(pl, pr);
+#endif
     }
 
-    double dl = __qmljs_to_number(l);
-    double dr = __qmljs_to_number(r);
+    if (l->isObject() || r->isObject()) {
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+#else
+        QV4::ExecutionEngine *e = (l->isObject() ? l->objectValue() : r->objectValue())->engine();
+        QV4::Scope scope(e);
+        QV4::ScopedValue pl(scope, RuntimeHelpers::toPrimitive(l, QV4::NUMBER_HINT));
+        QV4::ScopedValue pr(scope, RuntimeHelpers::toPrimitive(r, QV4::NUMBER_HINT));
+        return Runtime::compareGreaterThan(pl, pr);
+#endif
+    }
+
+    double dl = RuntimeHelpers::toNumber(l);
+    double dr = RuntimeHelpers::toNumber(r);
     return dl > dr;
 }
 
-QV4::Bool __qmljs_cmp_lt(const QV4::ValueRef l, const QV4::ValueRef r)
+QV4::Bool Runtime::compareLessThan(const QV4::ValueRef l, const QV4::ValueRef r)
 {
     TRACE2(l, r);
-    if (QV4::Value::integerCompatible(*l, *r))
+    if (l->isInteger() && r->isInteger())
         return l->integerValue() < r->integerValue();
-    if (QV4::Value::bothDouble(*l, *r))
-        return l->doubleValue() < r->doubleValue();
-    if (l->isString() && r->isString())
+    if (l->isNumber() && r->isNumber())
+        return l->asDouble() < r->asDouble();
+    if (l->isString() && r->isString()) {
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+        return false;
+#else
         return l->stringValue()->compare(r->stringValue());
-
-    if (l->isObject() || r->isObject()) {
-        QV4::ExecutionEngine *e = (l->isObject() ? l->objectValue() : r->objectValue())->engine();
-        QV4::Scope scope(e);
-        QV4::ScopedValue pl(scope, __qmljs_to_primitive(l, QV4::NUMBER_HINT));
-        QV4::ScopedValue pr(scope, __qmljs_to_primitive(r, QV4::NUMBER_HINT));
-        return __qmljs_cmp_lt(pl, pr);
+#endif
     }
 
-    double dl = __qmljs_to_number(l);
-    double dr = __qmljs_to_number(r);
+    if (l->isObject() || r->isObject()) {
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+#else
+        QV4::ExecutionEngine *e = (l->isObject() ? l->objectValue() : r->objectValue())->engine();
+        QV4::Scope scope(e);
+        QV4::ScopedValue pl(scope, RuntimeHelpers::toPrimitive(l, QV4::NUMBER_HINT));
+        QV4::ScopedValue pr(scope, RuntimeHelpers::toPrimitive(r, QV4::NUMBER_HINT));
+        return Runtime::compareLessThan(pl, pr);
+#endif
+    }
+
+    double dl = RuntimeHelpers::toNumber(l);
+    double dr = RuntimeHelpers::toNumber(r);
     return dl < dr;
 }
 
-QV4::Bool __qmljs_cmp_ge(const QV4::ValueRef l, const QV4::ValueRef r)
+QV4::Bool Runtime::compareGreaterEqual(const QV4::ValueRef l, const QV4::ValueRef r)
 {
     TRACE2(l, r);
-    if (QV4::Value::integerCompatible(*l, *r))
+    if (l->isInteger() && r->isInteger())
         return l->integerValue() >= r->integerValue();
-    if (QV4::Value::bothDouble(*l, *r))
-        return l->doubleValue() >= r->doubleValue();
-    if (l->isString() && r->isString())
+    if (l->isNumber() && r->isNumber())
+        return l->asDouble() >= r->asDouble();
+    if (l->isString() && r->isString()) {
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+        return false;
+#else
         return !l->stringValue()->compare(r->stringValue());
-
-    if (l->isObject() || r->isObject()) {
-        QV4::ExecutionEngine *e = (l->isObject() ? l->objectValue() : r->objectValue())->engine();
-        QV4::Scope scope(e);
-        QV4::ScopedValue pl(scope, __qmljs_to_primitive(l, QV4::NUMBER_HINT));
-        QV4::ScopedValue pr(scope, __qmljs_to_primitive(r, QV4::NUMBER_HINT));
-        return __qmljs_cmp_ge(pl, pr);
+#endif
     }
 
-    double dl = __qmljs_to_number(l);
-    double dr = __qmljs_to_number(r);
+    if (l->isObject() || r->isObject()) {
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+#else
+        QV4::ExecutionEngine *e = (l->isObject() ? l->objectValue() : r->objectValue())->engine();
+        QV4::Scope scope(e);
+        QV4::ScopedValue pl(scope, RuntimeHelpers::toPrimitive(l, QV4::NUMBER_HINT));
+        QV4::ScopedValue pr(scope, RuntimeHelpers::toPrimitive(r, QV4::NUMBER_HINT));
+        return Runtime::compareGreaterEqual(pl, pr);
+#endif
+    }
+
+    double dl = RuntimeHelpers::toNumber(l);
+    double dr = RuntimeHelpers::toNumber(r);
     return dl >= dr;
 }
 
-QV4::Bool __qmljs_cmp_le(const QV4::ValueRef l, const QV4::ValueRef r)
+QV4::Bool Runtime::compareLessEqual(const QV4::ValueRef l, const QV4::ValueRef r)
 {
     TRACE2(l, r);
-    if (QV4::Value::integerCompatible(*l, *r))
+    if (l->isInteger() && r->isInteger())
         return l->integerValue() <= r->integerValue();
-    if (QV4::Value::bothDouble(*l, *r))
-        return l->doubleValue() <= r->doubleValue();
-    if (l->isString() && r->isString())
+    if (l->isNumber() && r->isNumber())
+        return l->asDouble() <= r->asDouble();
+    if (l->isString() && r->isString()) {
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+        return false;
+#else
         return !r->stringValue()->compare(l->stringValue());
-
-    if (l->isObject() || r->isObject()) {
-        QV4::ExecutionEngine *e = (l->isObject() ? l->objectValue() : r->objectValue())->engine();
-        QV4::Scope scope(e);
-        QV4::ScopedValue pl(scope, __qmljs_to_primitive(l, QV4::NUMBER_HINT));
-        QV4::ScopedValue pr(scope, __qmljs_to_primitive(r, QV4::NUMBER_HINT));
-        return __qmljs_cmp_le(pl, pr);
+#endif
     }
 
-    double dl = __qmljs_to_number(l);
-    double dr = __qmljs_to_number(r);
+    if (l->isObject() || r->isObject()) {
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+#else
+        QV4::ExecutionEngine *e = (l->isObject() ? l->objectValue() : r->objectValue())->engine();
+        QV4::Scope scope(e);
+        QV4::ScopedValue pl(scope, RuntimeHelpers::toPrimitive(l, QV4::NUMBER_HINT));
+        QV4::ScopedValue pr(scope, RuntimeHelpers::toPrimitive(r, QV4::NUMBER_HINT));
+        return Runtime::compareLessEqual(pl, pr);
+#endif
+    }
+
+    double dl = RuntimeHelpers::toNumber(l);
+    double dr = RuntimeHelpers::toNumber(r);
     return dl <= dr;
 }
 
-
-ReturnedValue __qmljs_call_global_lookup(ExecutionContext *context, uint index, CallDataRef callData)
+#ifndef V4_BOOTSTRAP
+ReturnedValue Runtime::callGlobalLookup(ExecutionContext *context, uint index, CallDataRef callData)
 {
     Scope scope(context);
     Q_ASSERT(callData->thisObject.isUndefined());
@@ -860,7 +883,7 @@ ReturnedValue __qmljs_call_global_lookup(ExecutionContext *context, uint index, 
 }
 
 
-ReturnedValue __qmljs_call_activation_property(ExecutionContext *context, const StringRef name, CallDataRef callData)
+ReturnedValue Runtime::callActivationProperty(ExecutionContext *context, const StringRef name, CallDataRef callData)
 {
     Q_ASSERT(callData->thisObject.isUndefined());
     Scope scope(context);
@@ -889,7 +912,7 @@ ReturnedValue __qmljs_call_activation_property(ExecutionContext *context, const 
     return o->call(callData);
 }
 
-ReturnedValue __qmljs_call_property(ExecutionContext *context, const StringRef name, CallDataRef callData)
+ReturnedValue Runtime::callProperty(ExecutionContext *context, const StringRef name, CallDataRef callData)
 {
     Scope scope(context);
     Scoped<Object> baseObject(scope, callData->thisObject);
@@ -900,7 +923,7 @@ ReturnedValue __qmljs_call_property(ExecutionContext *context, const StringRef n
             return context->throwTypeError(message);
         }
 
-        baseObject = __qmljs_convert_to_object(context, ValueRef(&callData->thisObject));
+        baseObject = RuntimeHelpers::convertToObject(context, ValueRef(&callData->thisObject));
         if (!baseObject) // type error
             return Encode::undefined();
         callData->thisObject = baseObject.asReturnedValue();
@@ -915,18 +938,18 @@ ReturnedValue __qmljs_call_property(ExecutionContext *context, const StringRef n
     return o->call(callData);
 }
 
-ReturnedValue __qmljs_call_property_lookup(ExecutionContext *context, uint index, CallDataRef callData)
+ReturnedValue Runtime::callPropertyLookup(ExecutionContext *context, uint index, CallDataRef callData)
 {
     Lookup *l = context->lookups + index;
-    SafeValue v;
+    Value v;
     v = l->getter(l, callData->thisObject);
-    if (!v.isManaged())
+    if (!v.isObject())
         return context->throwTypeError();
 
-    return v.managed()->call(callData);
+    return v.objectValue()->call(callData);
 }
 
-ReturnedValue __qmljs_call_element(ExecutionContext *context, const ValueRef index, CallDataRef callData)
+ReturnedValue Runtime::callElement(ExecutionContext *context, const ValueRef index, CallDataRef callData)
 {
     Scope scope(context);
     ScopedObject baseObject(scope, callData->thisObject.toObject(context));
@@ -943,16 +966,16 @@ ReturnedValue __qmljs_call_element(ExecutionContext *context, const ValueRef ind
     return o->call(callData);
 }
 
-ReturnedValue __qmljs_call_value(ExecutionContext *context, const ValueRef func, CallDataRef callData)
+ReturnedValue Runtime::callValue(ExecutionContext *context, const ValueRef func, CallDataRef callData)
 {
-    if (!func->isManaged())
+    if (!func->isObject())
         return context->throwTypeError();
 
-    return func->managed()->call(callData);
+    return func->objectValue()->call(callData);
 }
 
 
-ReturnedValue __qmljs_construct_global_lookup(ExecutionContext *context, uint index, CallDataRef callData)
+ReturnedValue Runtime::constructGlobalLookup(ExecutionContext *context, uint index, CallDataRef callData)
 {
     Scope scope(context);
     Q_ASSERT(callData->thisObject.isUndefined());
@@ -966,7 +989,7 @@ ReturnedValue __qmljs_construct_global_lookup(ExecutionContext *context, uint in
 }
 
 
-ReturnedValue __qmljs_construct_activation_property(ExecutionContext *context, const StringRef name, CallDataRef callData)
+ReturnedValue Runtime::constructActivationProperty(ExecutionContext *context, const StringRef name, CallDataRef callData)
 {
     Scope scope(context);
     ScopedValue func(scope, context->getProperty(name));
@@ -980,7 +1003,7 @@ ReturnedValue __qmljs_construct_activation_property(ExecutionContext *context, c
     return f->construct(callData);
 }
 
-ReturnedValue __qmljs_construct_value(ExecutionContext *context, const ValueRef func, CallDataRef callData)
+ReturnedValue Runtime::constructValue(ExecutionContext *context, const ValueRef func, CallDataRef callData)
 {
     Object *f = func->asObject();
     if (!f)
@@ -989,7 +1012,7 @@ ReturnedValue __qmljs_construct_value(ExecutionContext *context, const ValueRef 
     return f->construct(callData);
 }
 
-ReturnedValue __qmljs_construct_property(ExecutionContext *context, const StringRef name, CallDataRef callData)
+ReturnedValue Runtime::constructProperty(ExecutionContext *context, const StringRef name, CallDataRef callData)
 {
     Scope scope(context);
     ScopedObject thisObject(scope, callData->thisObject.toObject(context));
@@ -1003,25 +1026,25 @@ ReturnedValue __qmljs_construct_property(ExecutionContext *context, const String
     return f->construct(callData);
 }
 
-ReturnedValue __qmljs_construct_property_lookup(ExecutionContext *context, uint index, CallDataRef callData)
+ReturnedValue Runtime::constructPropertyLookup(ExecutionContext *context, uint index, CallDataRef callData)
 {
     Lookup *l = context->lookups + index;
-    SafeValue v;
+    Value v;
     v = l->getter(l, callData->thisObject);
-    if (!v.isManaged())
+    if (!v.isObject())
         return context->throwTypeError();
 
-    return v.managed()->construct(callData);
+    return v.objectValue()->construct(callData);
 }
 
 
-void __qmljs_throw(ExecutionContext *context, const ValueRef value)
+void Runtime::throwException(ExecutionContext *context, const ValueRef value)
 {
     if (!value->isEmpty())
         context->throwError(value);
 }
 
-ReturnedValue __qmljs_builtin_typeof(ExecutionContext *ctx, const ValueRef value)
+ReturnedValue Runtime::typeofValue(ExecutionContext *ctx, const ValueRef value)
 {
     Scope scope(ctx);
     ScopedString res(scope);
@@ -1050,26 +1073,26 @@ ReturnedValue __qmljs_builtin_typeof(ExecutionContext *ctx, const ValueRef value
     return res.asReturnedValue();
 }
 
-QV4::ReturnedValue __qmljs_builtin_typeof_name(ExecutionContext *context, const StringRef name)
+QV4::ReturnedValue Runtime::typeofName(ExecutionContext *context, const StringRef name)
 {
     Scope scope(context);
     ScopedValue prop(scope, context->getProperty(name));
     // typeof doesn't throw. clear any possible exception
     context->engine->hasException = false;
-    return __qmljs_builtin_typeof(context, prop);
+    return Runtime::typeofValue(context, prop);
 }
 
-QV4::ReturnedValue __qmljs_builtin_typeof_member(ExecutionContext *context, const ValueRef base, const StringRef name)
+QV4::ReturnedValue Runtime::typeofMember(ExecutionContext *context, const ValueRef base, const StringRef name)
 {
     Scope scope(context);
     ScopedObject obj(scope, base->toObject(context));
     if (scope.engine->hasException)
         return Encode::undefined();
     ScopedValue prop(scope, obj->get(name));
-    return __qmljs_builtin_typeof(context, prop);
+    return Runtime::typeofValue(context, prop);
 }
 
-QV4::ReturnedValue __qmljs_builtin_typeof_element(ExecutionContext *context, const ValueRef base, const ValueRef index)
+QV4::ReturnedValue Runtime::typeofElement(ExecutionContext *context, const ValueRef base, const ValueRef index)
 {
     Scope scope(context);
     ScopedString name(scope, index->toString(context));
@@ -1077,111 +1100,101 @@ QV4::ReturnedValue __qmljs_builtin_typeof_element(ExecutionContext *context, con
     if (scope.engine->hasException)
         return Encode::undefined();
     ScopedValue prop(scope, obj->get(name));
-    return __qmljs_builtin_typeof(context, prop);
+    return Runtime::typeofValue(context, prop);
 }
 
-ExecutionContext *__qmljs_builtin_push_with_scope(const ValueRef o, ExecutionContext *ctx)
+ExecutionContext *Runtime::pushWithScope(const ValueRef o, ExecutionContext *ctx)
 {
     Scope scope(ctx);
     ScopedObject obj(scope, o->toObject(ctx));
     return ctx->newWithContext(obj);
 }
 
-ReturnedValue __qmljs_builtin_unwind_exception(ExecutionContext *ctx)
+ReturnedValue Runtime::unwindException(ExecutionContext *ctx)
 {
     if (!ctx->engine->hasException)
         return Primitive::emptyValue().asReturnedValue();
     return ctx->engine->catchException(ctx, 0);
 }
 
-ExecutionContext *__qmljs_builtin_push_catch_scope(ExecutionContext *ctx, const StringRef exceptionVarName)
+ExecutionContext *Runtime::pushCatchScope(ExecutionContext *ctx, const StringRef exceptionVarName)
 {
     Scope scope(ctx);
     ScopedValue v(scope, ctx->engine->catchException(ctx, 0));
     return ctx->newCatchContext(exceptionVarName, v);
 }
 
-ExecutionContext *__qmljs_builtin_pop_scope(ExecutionContext *ctx)
+ExecutionContext *Runtime::popScope(ExecutionContext *ctx)
 {
     return ctx->engine->popContext();
 }
 
-void __qmljs_builtin_declare_var(ExecutionContext *ctx, bool deletable, const StringRef name)
+void Runtime::declareVar(ExecutionContext *ctx, bool deletable, const StringRef name)
 {
     ctx->createMutableBinding(name, deletable);
 }
 
-void __qmljs_builtin_define_property(ExecutionContext *ctx, const ValueRef object, const StringRef name, ValueRef val)
-{
-    Scope scope(ctx);
-    ScopedObject o(scope, object->asObject());
-    assert(o);
-
-    uint idx = name->asArrayIndex();
-    Property *pd = (idx != UINT_MAX) ? o->arrayInsert(idx) : o->insertMember(name, Attr_Data);
-    pd->value = val ? *val : Primitive::undefinedValue();
-}
-
-ReturnedValue __qmljs_builtin_define_array(ExecutionContext *ctx, Value *values, uint length)
+ReturnedValue Runtime::arrayLiteral(ExecutionContext *ctx, Value *values, uint length)
 {
     Scope scope(ctx);
     Scoped<ArrayObject> a(scope, ctx->engine->newArrayObject());
 
-    // ### FIXME: We need to allocate the array data to avoid crashes other places
-    // This should rather be done when required
-    a->arrayReserve(length);
     if (length) {
-        a->arrayDataLen = length;
-        Property *pd = a->arrayData;
-        for (uint i = 0; i < length; ++i) {
-            pd->value = values[i];
-            ++pd;
-        }
+        a->arrayReserve(length);
+        a->arrayPut(0, values, length);
         a->setArrayLengthUnchecked(length);
     }
     return a.asReturnedValue();
 }
 
-void __qmljs_builtin_define_getter_setter(ExecutionContext *ctx, const ValueRef object, const StringRef name, const ValueRef getter, const ValueRef setter)
-{
-    Scope scope(ctx);
-    ScopedObject o(scope, object->asObject());
-    Q_ASSERT(!!o);
-
-    uint idx = name->asArrayIndex();
-    Property *pd = (idx != UINT_MAX) ? o->arrayInsert(idx, Attr_Accessor) : o->insertMember(name, Attr_Accessor);
-    pd->setGetter(getter ? getter->asFunctionObject() : 0);
-    pd->setSetter(setter ? setter->asFunctionObject() : 0);
-}
-
-ReturnedValue __qmljs_builtin_define_object_literal(QV4::ExecutionContext *ctx, const QV4::Value *args, int classId)
+ReturnedValue Runtime::objectLiteral(QV4::ExecutionContext *ctx, const QV4::Value *args, int classId, int arrayValueCount, int arrayGetterSetterCountAndFlags)
 {
     Scope scope(ctx);
     QV4::InternalClass *klass = ctx->compilationUnit->runtimeClasses[classId];
     Scoped<Object> o(scope, ctx->engine->newObject(klass));
 
-    for (uint i = 0; i < klass->size; ++i) {
-        if (klass->propertyData[i].isData())
-            o->memberData[i].value = *args++;
-        else {
-            o->memberData[i].setGetter(args->asFunctionObject());
-            args++;
-            o->memberData[i].setSetter(args->asFunctionObject());
-            args++;
-        }
+    {
+        bool needSparseArray = arrayGetterSetterCountAndFlags >> 30;
+        if (needSparseArray)
+            o->initSparseArray();
+    }
+
+    for (uint i = 0; i < klass->size; ++i)
+        o->memberData[i] = *args++;
+
+    ScopedValue entry(scope);
+    for (int i = 0; i < arrayValueCount; ++i) {
+        uint idx = args->toUInt32();
+        ++args;
+        entry = *args++;
+        o->arraySet(idx, entry);
+    }
+
+    ScopedProperty pd(scope);
+    uint arrayGetterSetterCount = arrayGetterSetterCountAndFlags & ((1 << 30) - 1);
+    for (uint i = 0; i < arrayGetterSetterCount; ++i) {
+        uint idx = args->toUInt32();
+        ++args;
+        pd->value = *args;
+        ++args;
+        pd->set = *args;
+        ++args;
+        o->arraySet(idx, pd, Attr_Accessor);
     }
 
     return o.asReturnedValue();
 }
 
-QV4::ReturnedValue __qmljs_builtin_setup_arguments_object(ExecutionContext *ctx)
+QV4::ReturnedValue Runtime::setupArgumentsObject(ExecutionContext *ctx)
 {
     assert(ctx->type >= ExecutionContext::Type_CallContext);
     CallContext *c = static_cast<CallContext *>(ctx);
     return (new (c->engine->memoryManager) ArgumentsObject(c))->asReturnedValue();
 }
 
-QV4::ReturnedValue __qmljs_increment(const QV4::ValueRef value)
+#endif // V4_BOOTSTRAP
+
+QV4::ReturnedValue Runtime::increment(const QV4::ValueRef value)
 {
     TRACE1(value);
 
@@ -1193,7 +1206,7 @@ QV4::ReturnedValue __qmljs_increment(const QV4::ValueRef value)
     }
 }
 
-QV4::ReturnedValue __qmljs_decrement(const QV4::ValueRef value)
+QV4::ReturnedValue Runtime::decrement(const QV4::ValueRef value)
 {
     TRACE1(value);
 
@@ -1205,72 +1218,72 @@ QV4::ReturnedValue __qmljs_decrement(const QV4::ValueRef value)
     }
 }
 
-QV4::ReturnedValue __qmljs_to_string(QV4::ExecutionContext *ctx, const QV4::ValueRef value)
+#ifndef V4_BOOTSTRAP
+
+QV4::ReturnedValue RuntimeHelpers::toString(QV4::ExecutionContext *ctx, const QV4::ValueRef value)
 {
     if (value->isString())
         return value.asReturnedValue();
-    return __qmljs_convert_to_string(ctx, value)->asReturnedValue();
+    return RuntimeHelpers::convertToString(ctx, value)->asReturnedValue();
 }
 
-QV4::ReturnedValue __qmljs_to_object(QV4::ExecutionContext *ctx, const QV4::ValueRef value)
+QV4::ReturnedValue RuntimeHelpers::toObject(QV4::ExecutionContext *ctx, const QV4::ValueRef value)
 {
     if (value->isObject())
         return value.asReturnedValue();
 
-    Returned<Object> *o = __qmljs_convert_to_object(ctx, value);
+    Returned<Object> *o = RuntimeHelpers::convertToObject(ctx, value);
     if (!o) // type error
         return Encode::undefined();
 
     return Encode(o);
 }
 
-ReturnedValue __qmljs_value_to_double(const ValueRef value)
+#endif // V4_BOOTSTRAP
+
+ReturnedValue Runtime::toDouble(const ValueRef value)
 {
     TRACE1(value);
     return Encode(value->toNumber());
 }
 
-int __qmljs_value_to_int32(const ValueRef value)
+int Runtime::toInt(const ValueRef value)
 {
     TRACE1(value);
     return value->toInt32();
 }
 
-int __qmljs_double_to_int32(const double &d)
+int Runtime::doubleToInt(const double &d)
 {
     TRACE0();
     return Primitive::toInt32(d);
 }
 
-unsigned __qmljs_value_to_uint32(const ValueRef value)
+unsigned Runtime::toUInt(const ValueRef value)
 {
     TRACE1(value);
     return value->toUInt32();
 }
 
-unsigned __qmljs_double_to_uint32(const double &d)
+unsigned Runtime::doubleToUInt(const double &d)
 {
     TRACE0();
     return Primitive::toUInt32(d);
 }
 
-ReturnedValue __qmljs_value_from_string(String *string)
-{
-    TRACE0();
-    return string->asReturnedValue();
-}
+#ifndef V4_BOOTSTRAP
 
-ReturnedValue __qmljs_lookup_runtime_regexp(ExecutionContext *ctx, int id)
+ReturnedValue Runtime::regexpLiteral(ExecutionContext *ctx, int id)
 {
     return ctx->compilationUnit->runtimeRegularExpressions[id].asReturnedValue();
 }
 
-ReturnedValue __qmljs_get_id_array(NoThrowContext *ctx)
+ReturnedValue Runtime::getQmlIdArray(NoThrowContext *ctx)
 {
     return ctx->engine->qmlContextObject()->getPointer()->as<QmlContextWrapper>()->idObjectsArray();
 }
 
-ReturnedValue __qmljs_get_context_object(NoThrowContext *ctx)
+ReturnedValue Runtime::getQmlContextObject(NoThrowContext *ctx)
 {
     QQmlContextData *context = QmlContextWrapper::callingContext(ctx->engine);
     if (!context)
@@ -1278,14 +1291,14 @@ ReturnedValue __qmljs_get_context_object(NoThrowContext *ctx)
     return QObjectWrapper::wrap(ctx->engine, context->contextObject);
 }
 
-ReturnedValue __qmljs_get_scope_object(NoThrowContext *ctx)
+ReturnedValue Runtime::getQmlScopeObject(NoThrowContext *ctx)
 {
     Scope scope(ctx);
     QV4::Scoped<QmlContextWrapper> c(scope, ctx->engine->qmlContextObject()->getPointer()->as<QmlContextWrapper>());
     return QObjectWrapper::wrap(ctx->engine, c->getScopeObject());
 }
 
-ReturnedValue __qmljs_get_qobject_property(ExecutionContext *ctx, const ValueRef object, int propertyIndex, bool captureRequired)
+ReturnedValue Runtime::getQmlQObjectProperty(ExecutionContext *ctx, const ValueRef object, int propertyIndex, bool captureRequired)
 {
     Scope scope(ctx);
     QV4::Scoped<QObjectWrapper> wrapper(scope, object);
@@ -1296,7 +1309,7 @@ ReturnedValue __qmljs_get_qobject_property(ExecutionContext *ctx, const ValueRef
     return QV4::QObjectWrapper::getProperty(wrapper->object(), ctx, propertyIndex, captureRequired);
 }
 
-QV4::ReturnedValue __qmljs_get_attached_property(ExecutionContext *ctx, int attachedPropertiesId, int propertyIndex)
+QV4::ReturnedValue Runtime::getQmlAttachedProperty(ExecutionContext *ctx, int attachedPropertiesId, int propertyIndex)
 {
     Scope scope(ctx);
     QV4::Scoped<QmlContextWrapper> c(scope, ctx->engine->qmlContextObject()->getPointer()->as<QmlContextWrapper>());
@@ -1308,7 +1321,7 @@ QV4::ReturnedValue __qmljs_get_attached_property(ExecutionContext *ctx, int atta
     return QV4::QObjectWrapper::getProperty(attachedObject, ctx, propertyIndex, /*captureRequired*/true);
 }
 
-void __qmljs_set_qobject_property(ExecutionContext *ctx, const ValueRef object, int propertyIndex, const ValueRef value)
+void Runtime::setQmlQObjectProperty(ExecutionContext *ctx, const ValueRef object, int propertyIndex, const ValueRef value)
 {
     Scope scope(ctx);
     QV4::Scoped<QObjectWrapper> wrapper(scope, object);
@@ -1319,7 +1332,7 @@ void __qmljs_set_qobject_property(ExecutionContext *ctx, const ValueRef object, 
     wrapper->setProperty(ctx, propertyIndex, value);
 }
 
-ReturnedValue __qmljs_get_imported_scripts(NoThrowContext *ctx)
+ReturnedValue Runtime::getQmlImportedScripts(NoThrowContext *ctx)
 {
     QQmlContextData *context = QmlContextWrapper::callingContext(ctx->engine);
     if (!context)
@@ -1327,14 +1340,14 @@ ReturnedValue __qmljs_get_imported_scripts(NoThrowContext *ctx)
     return context->importedScripts.value();
 }
 
-QV4::ReturnedValue __qmljs_get_qml_singleton(QV4::NoThrowContext *ctx, const QV4::StringRef name)
+QV4::ReturnedValue Runtime::getQmlSingleton(QV4::NoThrowContext *ctx, const QV4::StringRef name)
 {
-    return ctx->engine->qmlContextObject()->getPointer()->as<QmlContextWrapper>()->qmlSingletonWrapper(name);
+    return ctx->engine->qmlContextObject()->getPointer()->as<QmlContextWrapper>()->qmlSingletonWrapper(ctx->engine->v8Engine, name);
 }
 
-void __qmljs_builtin_convert_this_to_object(ExecutionContext *ctx)
+void Runtime::convertThisToObject(ExecutionContext *ctx)
 {
-    SafeValue *t = &ctx->callData->thisObject;
+    Value *t = &ctx->callData->thisObject;
     if (t->isObject())
         return;
     if (t->isNullOrUndefined()) {
@@ -1343,6 +1356,8 @@ void __qmljs_builtin_convert_this_to_object(ExecutionContext *ctx)
         *t = t->toObject(ctx)->asReturnedValue();
     }
 }
+
+#endif // V4_BOOTSTRAP
 
 } // namespace QV4
 

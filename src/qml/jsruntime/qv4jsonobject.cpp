@@ -66,6 +66,8 @@ static int indent = 0;
 #endif
 
 
+DEFINE_OBJECT_VTABLE(JsonObject);
+
 class JsonParser
 {
 public:
@@ -288,8 +290,7 @@ bool JsonParser::parseMember(ObjectRef o)
     if (idx < UINT_MAX) {
         o->putIndexed(idx, val);
     } else {
-        Property *p = o->insertMember(s, Attr_Data);
-        p->value = val.asReturnedValue();
+        o->insertMember(s, val);
     }
 
     END;
@@ -337,7 +338,7 @@ ReturnedValue JsonParser::parseArray()
         }
     }
 
-    DEBUG << "size =" << array->arrayLength();
+    DEBUG << "size =" << array->getLength();
     END;
 
     --nestingLevel;
@@ -593,8 +594,6 @@ static inline bool scanEscapeSequence(const QChar *&json, const QChar *end, uint
                 return false;
             ++json;
         }
-        if (*ch <= 0x1f)
-            return false;
         return true;
     }
     default:
@@ -853,7 +852,7 @@ QString Stringify::JA(ArrayObjectRef a)
     indent += gap;
 
     QStringList partial;
-    uint len = a->arrayLength();
+    uint len = a->getLength();
     ScopedValue v(scope);
     for (uint i = 0; i < len; ++i) {
         bool exists;
@@ -884,12 +883,10 @@ QString Stringify::JA(ArrayObjectRef a)
 }
 
 
-JsonObject::JsonObject(ExecutionEngine *engine)
-    : Object(engine)
+JsonObject::JsonObject(InternalClass *ic)
+    : Object(ic)
 {
-    type = Type_JSONObject;
-
-    Scope scope(engine);
+    Scope scope(ic->engine);
     ScopedObject protectThis(scope, this);
 
     defineDefaultProperty(QStringLiteral("parse"), method_parse, 2);
@@ -925,12 +922,12 @@ ReturnedValue JsonObject::method_stringify(CallContext *ctx)
     if (o) {
         stringify.replacerFunction = o->asFunctionObject();
         if (o->isArrayObject()) {
-            uint arrayLen = o->arrayLength();
+            uint arrayLen = o->getLength();
             ScopedValue v(scope);
             for (uint i = 0; i < arrayLen; ++i) {
                 v = o->getIndexed(i);
                 if (v->asNumberObject() || v->asStringObject() || v->isNumber())
-                    v = __qmljs_to_string(ctx, v);
+                    v = RuntimeHelpers::toString(ctx, v);
                 if (v->isString()) {
                     String *s = v->stringValue();
                     if (!stringify.propertyList.contains(s))
@@ -1057,10 +1054,9 @@ QV4::ReturnedValue JsonObject::fromJsonArray(ExecutionEngine *engine, const QJso
     int size = array.size();
     Scoped<ArrayObject> a(scope, engine->newArrayObject());
     a->arrayReserve(size);
-    for (int i = 0; i < size; i++) {
-        a->arrayData[i].value = fromJsonValue(engine, array.at(i));
-        a->arrayDataLen = i + 1;
-    }
+    ScopedValue v(scope);
+    for (int i = 0; i < size; i++)
+        a->arrayPut(i, (v = fromJsonValue(engine, array.at(i))));
     a->setArrayLengthUnchecked(size);
     return a.asReturnedValue();
 }
@@ -1083,7 +1079,7 @@ QJsonArray JsonObject::toJsonArray(ArrayObjectRef a, V4ObjectSet &visitedObjects
     visitedObjects.insert(a);
 
     ScopedValue v(scope);
-    quint32 length = a->arrayLength();
+    quint32 length = a->getLength();
     for (quint32 i = 0; i < length; ++i) {
         v = a->getIndexed(i);
         if (v->asFunctionObject())

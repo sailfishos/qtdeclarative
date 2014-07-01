@@ -55,11 +55,14 @@ namespace QV4 {
 struct Lookup {
     enum { Size = 4 };
     union {
+        ReturnedValue (*indexedGetter)(Lookup *l, const ValueRef object, const ValueRef index);
+        void (*indexedSetter)(Lookup *l, const ValueRef object, const ValueRef index, const ValueRef v);
         ReturnedValue (*getter)(Lookup *l, const ValueRef object);
         ReturnedValue (*globalGetter)(Lookup *l, ExecutionContext *ctx);
         void (*setter)(Lookup *l, const ValueRef object, const ValueRef v);
     };
     union {
+        ExecutionEngine *engine;
         InternalClass *classList[Size];
         struct {
             void *dummy0;
@@ -68,14 +71,31 @@ struct Lookup {
             unsigned type;
         };
     };
-    int level;
+    union {
+        int level;
+        uint index2;
+    };
     uint index;
     String *name;
 
+    static ReturnedValue indexedGetterGeneric(Lookup *l, const ValueRef object, const ValueRef index);
+    static ReturnedValue indexedGetterFallback(Lookup *l, const ValueRef object, const ValueRef index);
+    static ReturnedValue indexedGetterObjectInt(Lookup *l, const ValueRef object, const ValueRef index);
+
+    static void indexedSetterGeneric(Lookup *l, const ValueRef object, const ValueRef index, const ValueRef v);
+    static void indexedSetterFallback(Lookup *l, const ValueRef object, const ValueRef index, const ValueRef value);
+    static void indexedSetterObjectInt(Lookup *l, const ValueRef object, const ValueRef index, const ValueRef v);
+
     static ReturnedValue getterGeneric(Lookup *l, const ValueRef object);
+    static ReturnedValue getterTwoClasses(Lookup *l, const ValueRef object);
+    static ReturnedValue getterFallback(Lookup *l, const ValueRef object);
+
     static ReturnedValue getter0(Lookup *l, const ValueRef object);
     static ReturnedValue getter1(Lookup *l, const ValueRef object);
     static ReturnedValue getter2(Lookup *l, const ValueRef object);
+    static ReturnedValue getter0getter0(Lookup *l, const ValueRef object);
+    static ReturnedValue getter0getter1(Lookup *l, const ValueRef object);
+    static ReturnedValue getter1getter1(Lookup *l, const ValueRef object);
     static ReturnedValue getterAccessor0(Lookup *l, const ValueRef object);
     static ReturnedValue getterAccessor1(Lookup *l, const ValueRef object);
     static ReturnedValue getterAccessor2(Lookup *l, const ValueRef object);
@@ -85,6 +105,7 @@ struct Lookup {
     static ReturnedValue primitiveGetterAccessor0(Lookup *l, const ValueRef object);
     static ReturnedValue primitiveGetterAccessor1(Lookup *l, const ValueRef object);
     static ReturnedValue stringLengthGetter(Lookup *l, const ValueRef object);
+    static ReturnedValue arrayLengthGetter(Lookup *l, const ValueRef object);
 
     static ReturnedValue globalGetterGeneric(Lookup *l, ExecutionContext *ctx);
     static ReturnedValue globalGetter0(Lookup *l, ExecutionContext *ctx);
@@ -95,12 +116,16 @@ struct Lookup {
     static ReturnedValue globalGetterAccessor2(Lookup *l, ExecutionContext *ctx);
 
     static void setterGeneric(Lookup *l, const ValueRef object, const ValueRef value);
+    static void setterTwoClasses(Lookup *l, const ValueRef object, const ValueRef value);
+    static void setterFallback(Lookup *l, const ValueRef object, const ValueRef value);
     static void setter0(Lookup *l, const ValueRef object, const ValueRef value);
     static void setterInsert0(Lookup *l, const ValueRef object, const ValueRef value);
     static void setterInsert1(Lookup *l, const ValueRef object, const ValueRef value);
     static void setterInsert2(Lookup *l, const ValueRef object, const ValueRef value);
+    static void setter0setter0(Lookup *l, const ValueRef object, const ValueRef value);
 
-    Property *lookup(Object *obj, PropertyAttributes *attrs);
+    ReturnedValue lookup(ValueRef thisObject, Object *obj, PropertyAttributes *attrs);
+    ReturnedValue lookup(Object *obj, PropertyAttributes *attrs);
 
 };
 

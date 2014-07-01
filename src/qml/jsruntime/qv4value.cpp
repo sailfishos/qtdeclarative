@@ -39,9 +39,11 @@
 **
 ****************************************************************************/
 #include <qv4engine_p.h>
+#ifndef V4_BOOTSTRAP
 #include <qv4object_p.h>
 #include <qv4objectproto_p.h>
 #include "qv4mm_p.h"
+#endif
 
 #include <wtf/MathExtras.h>
 
@@ -87,22 +89,28 @@ double Value::toNumberImpl() const
     case QV4::Value::Undefined_Type:
         return std::numeric_limits<double>::quiet_NaN();
     case QV4::Value::Managed_Type:
+#ifdef V4_BOOTSTRAP
+        Q_UNIMPLEMENTED();
+#else
         if (isString())
-            return __qmljs_string_to_number(stringValue()->toQString());
+            return RuntimeHelpers::stringToNumber(stringValue()->toQString());
         {
             ExecutionContext *ctx = objectValue()->internalClass->engine->currentContext();
             Scope scope(ctx);
-            ScopedValue prim(scope, __qmljs_to_primitive(ValueRef::fromRawValue(this), NUMBER_HINT));
+            ScopedValue prim(scope, RuntimeHelpers::toPrimitive(ValueRef::fromRawValue(this), NUMBER_HINT));
             return prim->toNumber();
         }
+#endif
     case QV4::Value::Null_Type:
     case QV4::Value::Boolean_Type:
     case QV4::Value::Integer_Type:
+        return int_32;
     default: // double
         Q_UNREACHABLE();
     }
 }
 
+#ifndef V4_BOOTSTRAP
 QString Value::toQStringNoThrow() const
 {
     switch (type()) {
@@ -125,7 +133,7 @@ QString Value::toQStringNoThrow() const
             Scope scope(ctx);
             ScopedValue ex(scope);
             bool caughtException = false;
-            ScopedValue prim(scope, __qmljs_to_primitive(ValueRef::fromRawValue(this), STRING_HINT));
+            ScopedValue prim(scope, RuntimeHelpers::toPrimitive(ValueRef::fromRawValue(this), STRING_HINT));
             if (scope.hasException()) {
                 ex = ctx->catchException();
                 caughtException = true;
@@ -134,7 +142,7 @@ QString Value::toQStringNoThrow() const
             }
             // Can't nest try/catch due to CXX ABI limitations for foreign exception nesting.
             if (caughtException) {
-                ScopedValue prim(scope, __qmljs_to_primitive(ex, STRING_HINT));
+                ScopedValue prim(scope, RuntimeHelpers::toPrimitive(ex, STRING_HINT));
                 if (scope.hasException()) {
                     ex = ctx->catchException();
                 } else if (prim->isPrimitive()) {
@@ -145,12 +153,12 @@ QString Value::toQStringNoThrow() const
         }
     case Value::Integer_Type: {
         QString str;
-        __qmljs_numberToString(&str, (double)int_32, 10);
+        RuntimeHelpers::numberToString(&str, (double)int_32, 10);
         return str;
     }
     default: { // double
         QString str;
-        __qmljs_numberToString(&str, doubleValue(), 10);
+        RuntimeHelpers::numberToString(&str, doubleValue(), 10);
         return str;
     }
     } // switch
@@ -176,21 +184,22 @@ QString Value::toQString() const
         {
             ExecutionContext *ctx = objectValue()->internalClass->engine->currentContext();
             Scope scope(ctx);
-            ScopedValue prim(scope, __qmljs_to_primitive(ValueRef::fromRawValue(this), STRING_HINT));
+            ScopedValue prim(scope, RuntimeHelpers::toPrimitive(ValueRef::fromRawValue(this), STRING_HINT));
             return prim->toQString();
         }
     case Value::Integer_Type: {
         QString str;
-        __qmljs_numberToString(&str, (double)int_32, 10);
+        RuntimeHelpers::numberToString(&str, (double)int_32, 10);
         return str;
     }
     default: { // double
         QString str;
-        __qmljs_numberToString(&str, doubleValue(), 10);
+        RuntimeHelpers::numberToString(&str, doubleValue(), 10);
         return str;
     }
     } // switch
 }
+#endif // V4_BOOTSTRAP
 
 bool Value::sameValue(Value other) const {
     if (val == other.val)
@@ -262,227 +271,24 @@ double Primitive::toInteger(double number)
     return std::signbit(number) ? -v : v;
 }
 
+#ifndef V4_BOOTSTRAP
+String *Value::toString(ExecutionEngine *e) const
+{
+    return toString(e->currentContext());
+}
+
 String *Value::toString(ExecutionContext *ctx) const
 {
     if (isString())
         return stringValue();
-    return __qmljs_convert_to_string(ctx, ValueRef::fromRawValue(this))->getPointer();
+    return RuntimeHelpers::convertToString(ctx, ValueRef::fromRawValue(this))->getPointer();
 }
 
 Object *Value::toObject(ExecutionContext *ctx) const
 {
     if (isObject())
         return objectValue();
-    return __qmljs_convert_to_object(ctx, ValueRef::fromRawValue(this))->getPointer();
+    return RuntimeHelpers::convertToObject(ctx, ValueRef::fromRawValue(this))->getPointer();
 }
 
-
-PersistentValue::PersistentValue(const ValueRef val)
-    : d(new PersistentValuePrivate(val.asReturnedValue()))
-{
-}
-
-PersistentValue::PersistentValue(ReturnedValue val)
-    : d(new PersistentValuePrivate(val))
-{
-}
-
-PersistentValue::PersistentValue(const PersistentValue &other)
-    : d(other.d)
-{
-    if (d)
-        d->ref();
-}
-
-PersistentValue &PersistentValue::operator=(const PersistentValue &other)
-{
-    if (d == other.d)
-        return *this;
-
-    // the memory manager cleans up those with a refcount of 0
-
-    if (d)
-        d->deref();
-    d = other.d;
-    if (d)
-        d->ref();
-
-    return *this;
-}
-
-PersistentValue &PersistentValue::operator =(const ValueRef other)
-{
-    if (!d) {
-        d = new PersistentValuePrivate(other.asReturnedValue());
-        return *this;
-    }
-    d = d->detach(other.asReturnedValue());
-    return *this;
-}
-
-PersistentValue &PersistentValue::operator =(ReturnedValue other)
-{
-    if (!d) {
-        d = new PersistentValuePrivate(other);
-        return *this;
-    }
-    d = d->detach(other);
-    return *this;
-}
-
-PersistentValue::~PersistentValue()
-{
-    if (d)
-        d->deref();
-}
-
-WeakValue::WeakValue(const ValueRef val)
-    : d(new PersistentValuePrivate(val.asReturnedValue(), /*engine*/0, /*weak*/true))
-{
-}
-
-WeakValue::WeakValue(const WeakValue &other)
-    : d(other.d)
-{
-    if (d)
-        d->ref();
-}
-
-WeakValue::WeakValue(ReturnedValue val)
-    : d(new PersistentValuePrivate(val, /*engine*/0, /*weak*/true))
-{
-}
-
-WeakValue &WeakValue::operator=(const WeakValue &other)
-{
-    if (d == other.d)
-        return *this;
-
-    // the memory manager cleans up those with a refcount of 0
-
-    if (d)
-        d->deref();
-    d = other.d;
-    if (d)
-        d->ref();
-
-    return *this;
-}
-
-WeakValue &WeakValue::operator =(const ValueRef other)
-{
-    if (!d) {
-        d = new PersistentValuePrivate(other.asReturnedValue(), /*engine*/0, /*weak*/true);
-        return *this;
-    }
-    d = d->detach(other.asReturnedValue(), /*weak*/true);
-    return *this;
-}
-
-WeakValue &WeakValue::operator =(const ReturnedValue &other)
-{
-    if (!d) {
-        d = new PersistentValuePrivate(other, /*engine*/0, /*weak*/true);
-        return *this;
-    }
-    d = d->detach(other, /*weak*/true);
-    return *this;
-}
-
-
-WeakValue::~WeakValue()
-{
-    if (d)
-        d->deref();
-}
-
-void WeakValue::markOnce(ExecutionEngine *e)
-{
-    if (!d)
-        return;
-    d->value.mark(e);
-}
-
-PersistentValuePrivate::PersistentValuePrivate(ReturnedValue v, ExecutionEngine *e, bool weak)
-    : refcount(1)
-    , weak(weak)
-    , engine(e)
-    , prev(0)
-    , next(0)
-{
-    value.val = v;
-    init();
-}
-
-void PersistentValuePrivate::init()
-{
-    if (!engine) {
-        Managed *m = value.asManaged();
-        if (!m)
-            return;
-
-        engine = m->engine();
-    }
-    if (engine && !prev) {
-        PersistentValuePrivate **listRoot = weak ? &engine->memoryManager->m_weakValues : &engine->memoryManager->m_persistentValues;
-
-        prev = listRoot;
-        next = *listRoot;
-        *prev = this;
-        if (next)
-            next->prev = &this->next;
-    }
-}
-
-PersistentValuePrivate::~PersistentValuePrivate()
-{
-}
-
-void PersistentValuePrivate::removeFromList()
-{
-    if (prev) {
-        if (next)
-            next->prev = prev;
-        *prev = next;
-        next = 0;
-        prev = 0;
-    }
-}
-
-void PersistentValuePrivate::deref()
-{
-    // if engine is not 0, they are registered with the memory manager
-    // and will get cleaned up in the next gc run
-    if (!--refcount) {
-        removeFromList();
-        delete this;
-    }
-}
-
-PersistentValuePrivate *PersistentValuePrivate::detach(const QV4::ReturnedValue val, bool weak)
-{
-    if (refcount == 1) {
-        value.val = val;
-
-        Managed *m = value.asManaged();
-        if (!prev) {
-            if (m) {
-                ExecutionEngine *engine = m->engine();
-                if (engine) {
-                    PersistentValuePrivate **listRoot = weak ? &engine->memoryManager->m_weakValues : &engine->memoryManager->m_persistentValues;
-                    prev = listRoot;
-                    next = *listRoot;
-                    *prev = this;
-                    if (next)
-                        next->prev = &this->next;
-                }
-            }
-        } else if (!m)
-            removeFromList();
-
-        return this;
-    }
-    --refcount;
-    return new PersistentValuePrivate(val, engine, weak);
-}
-
+#endif // V4_BOOTSTRAP

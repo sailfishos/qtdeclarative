@@ -1,5 +1,12 @@
 SOURCES += \
-    $$PWD/qqmlinstruction.cpp \
+    $$PWD/qqmldirparser.cpp \
+
+HEADERS += \
+    $$PWD/qqmldirparser_p.h \
+
+!qmldevtools_build {
+
+SOURCES += \
     $$PWD/qqmlopenmetaobject.cpp \
     $$PWD/qqmlvmemetaobject.cpp \
     $$PWD/qqmlengine.cpp \
@@ -13,7 +20,6 @@ SOURCES += \
     $$PWD/qqmlpropertyvalueinterceptor.cpp \
     $$PWD/qqmlproxymetaobject.cpp \
     $$PWD/qqmlvme.cpp \
-    $$PWD/qqmlcompiler.cpp \
     $$PWD/qqmlcompileddata.cpp \
     $$PWD/qqmlboundsignal.cpp \
     $$PWD/qqmlmetatype.cpp \
@@ -22,7 +28,6 @@ SOURCES += \
     $$PWD/qqmltypeloader.cpp \
     $$PWD/qqmlinfo.cpp \
     $$PWD/qqmlerror.cpp \
-    $$PWD/qqmlscript.cpp \
     $$PWD/qqmlvaluetype.cpp \
     $$PWD/qqmlaccessors.cpp \
     $$PWD/qqmlxmlhttprequest.cpp \
@@ -34,7 +39,6 @@ SOURCES += \
     $$PWD/qqmltypenamecache.cpp \
     $$PWD/qqmlscriptstring.cpp \
     $$PWD/qqmlnetworkaccessmanagerfactory.cpp \
-    $$PWD/qqmldirparser.cpp \
     $$PWD/qqmlextensionplugin.cpp \
     $$PWD/qqmlimport.cpp \
     $$PWD/qqmllist.cpp \
@@ -60,7 +64,6 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/qqmlglobal_p.h \
-    $$PWD/qqmlinstruction_p.h \
     $$PWD/qqmlopenmetaobject_p.h \
     $$PWD/qqmlvmemetaobject_p.h \
     $$PWD/qqml.h \
@@ -70,7 +73,6 @@ HEADERS += \
     $$PWD/qqmlincubator.h \
     $$PWD/qqmlincubator_p.h \
     $$PWD/qqmlcustomparser_p.h \
-    $$PWD/qqmlcustomparser_p_p.h \
     $$PWD/qqmlpropertyvaluesource.h \
     $$PWD/qqmlpropertyvalueinterceptor_p.h \
     $$PWD/qqmlboundsignal_p.h \
@@ -95,7 +97,6 @@ HEADERS += \
     $$PWD/qqmllist_p.h \
     $$PWD/qqmldata_p.h \
     $$PWD/qqmlerror.h \
-    $$PWD/qqmlscript_p.h \
     $$PWD/qqmlvaluetype_p.h \
     $$PWD/qqmlaccessors_p.h \
     $$PWD/qqmlxmlhttprequest_p.h \
@@ -108,7 +109,6 @@ HEADERS += \
     $$PWD/qqmlscriptstring.h \
     $$PWD/qqmlguard_p.h \
     $$PWD/qqmlnetworkaccessmanagerfactory.h \
-    $$PWD/qqmldirparser_p.h \
     $$PWD/qqmlextensioninterface.h \
     $$PWD/qqmlimport_p.h \
     $$PWD/qqmlextensionplugin.h \
@@ -139,3 +139,5 @@ HEADERS += \
 
 include(ftw/ftw.pri)
 include(v8/v8.pri)
+
+}

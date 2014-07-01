@@ -61,6 +61,9 @@ namespace QV4 {
 namespace Debugging {
 class Debugger;
 } // namespace Debugging
+namespace Profiling {
+class Profiler;
+} // namespace Profiling
 namespace CompiledData {
 struct CompilationUnit;
 }
@@ -122,11 +125,6 @@ struct ExecutionContextSaver;
 
 struct Q_QML_EXPORT ExecutionEngine
 {
-    MemoryManager *memoryManager;
-    ExecutableAllocator *executableAllocator;
-    ExecutableAllocator *regExpAllocator;
-    QScopedPointer<QQmlJS::EvalISelFactory> iselFactory;
-
 private:
     friend struct ExecutionContextSaver;
     friend struct ExecutionContext;
@@ -134,20 +132,27 @@ private:
 public:
     ExecutionContext *currentContext() const { return current; }
 
+    Value *jsStackTop;
+    quint32 hasException;
     GlobalContext *rootContext;
 
-    SafeValue *jsStackTop;
-    SafeValue *jsStackLimit;
+    MemoryManager *memoryManager;
+    ExecutableAllocator *executableAllocator;
+    ExecutableAllocator *regExpAllocator;
+    QScopedPointer<EvalISelFactory> iselFactory;
+
+
+    Value *jsStackLimit;
     quintptr cStackLimit;
 
     WTF::BumpPointerAllocator *bumperPointerAllocator; // Used by Yarr Regex engine.
 
     enum { JSStackLimit = 4*1024*1024 };
     WTF::PageAllocation *jsStack;
-    SafeValue *jsStackBase;
+    Value *jsStackBase;
 
-    SafeValue *stackPush(uint nValues) {
-        SafeValue *ptr = jsStackTop;
+    Value *stackPush(uint nValues) {
+        Value *ptr = jsStackTop;
         jsStackTop = ptr + nValues;
         return ptr;
     }
@@ -168,6 +173,7 @@ public:
     IdentifierTable *identifierTable;
 
     QV4::Debugging::Debugger *debugger;
+    QV4::Profiling::Profiler *profiler;
 
     Object *globalObject;
 
@@ -175,37 +181,38 @@ public:
 
     QV8Engine *v8Engine;
 
-    SafeValue objectCtor;
-    SafeValue stringCtor;
-    SafeValue numberCtor;
-    SafeValue booleanCtor;
-    SafeValue arrayCtor;
-    SafeValue functionCtor;
-    SafeValue dateCtor;
-    SafeValue regExpCtor;
-    SafeValue errorCtor;
-    SafeValue evalErrorCtor;
-    SafeValue rangeErrorCtor;
-    SafeValue referenceErrorCtor;
-    SafeValue syntaxErrorCtor;
-    SafeValue typeErrorCtor;
-    SafeValue uRIErrorCtor;
-    SafeValue sequencePrototype;
+    Value objectCtor;
+    Value stringCtor;
+    Value numberCtor;
+    Value booleanCtor;
+    Value arrayCtor;
+    Value functionCtor;
+    Value dateCtor;
+    Value regExpCtor;
+    Value errorCtor;
+    Value evalErrorCtor;
+    Value rangeErrorCtor;
+    Value referenceErrorCtor;
+    Value syntaxErrorCtor;
+    Value typeErrorCtor;
+    Value uRIErrorCtor;
+    Value sequencePrototype;
 
     InternalClassPool *classPool;
     InternalClass *emptyClass;
     InternalClass *executionContextClass;
+    InternalClass *constructClass;
     InternalClass *stringClass;
 
     InternalClass *objectClass;
     InternalClass *arrayClass;
+    InternalClass *simpleArrayDataClass;
     InternalClass *stringObjectClass;
     InternalClass *booleanClass;
     InternalClass *numberClass;
     InternalClass *dateClass;
 
     InternalClass *functionClass;
-    InternalClass *functionWithProtoClass;
     InternalClass *protoClass;
 
     InternalClass *regExpClass;
@@ -223,45 +230,48 @@ public:
     InternalClass *strictArgumentsObjectClass;
 
     InternalClass *variantClass;
+    InternalClass *memberDataClass;
 
     EvalFunction *evalFunction;
     FunctionObject *thrower;
 
-    QVector<Property> argumentsAccessors;
+    Property *argumentsAccessors;
+    int nArgumentsAccessors;
 
-    SafeString id_undefined;
-    SafeString id_null;
-    SafeString id_true;
-    SafeString id_false;
-    SafeString id_boolean;
-    SafeString id_number;
-    SafeString id_string;
-    SafeString id_object;
-    SafeString id_function;
-    SafeString id_length;
-    SafeString id_prototype;
-    SafeString id_constructor;
-    SafeString id_arguments;
-    SafeString id_caller;
-    SafeString id_callee;
-    SafeString id_this;
-    SafeString id___proto__;
-    SafeString id_enumerable;
-    SafeString id_configurable;
-    SafeString id_writable;
-    SafeString id_value;
-    SafeString id_get;
-    SafeString id_set;
-    SafeString id_eval;
-    SafeString id_uintMax;
-    SafeString id_name;
-    SafeString id_index;
-    SafeString id_input;
-    SafeString id_toString;
-    SafeString id_valueOf;
+    StringValue id_empty;
+    StringValue id_undefined;
+    StringValue id_null;
+    StringValue id_true;
+    StringValue id_false;
+    StringValue id_boolean;
+    StringValue id_number;
+    StringValue id_string;
+    StringValue id_object;
+    StringValue id_function;
+    StringValue id_length;
+    StringValue id_prototype;
+    StringValue id_constructor;
+    StringValue id_arguments;
+    StringValue id_caller;
+    StringValue id_callee;
+    StringValue id_this;
+    StringValue id___proto__;
+    StringValue id_enumerable;
+    StringValue id_configurable;
+    StringValue id_writable;
+    StringValue id_value;
+    StringValue id_get;
+    StringValue id_set;
+    StringValue id_eval;
+    StringValue id_uintMax;
+    StringValue id_name;
+    StringValue id_index;
+    StringValue id_input;
+    StringValue id_toString;
+    StringValue id_destroy;
+    StringValue id_valueOf;
 
     QSet<CompiledData::CompilationUnit*> compilationUnits;
-    QMap<quintptr, QV4::Function*> allFunctions;
 
     quint32 m_engineId;
 
@@ -286,17 +296,18 @@ public:
     // bookkeeping.
     MultiplyWrappedQObjectMap *m_multiplyWrappedQObjects;
 
-    ExecutionEngine(QQmlJS::EvalISelFactory *iselFactory = 0);
+    ExecutionEngine(EvalISelFactory *iselFactory = 0);
     ~ExecutionEngine();
 
     void enableDebugger();
+    void enableProfiler();
 
     ExecutionContext *pushGlobalContext();
     void pushContext(CallContext *context);
     ExecutionContext *popContext();
 
     Returned<FunctionObject> *newBuiltinFunction(ExecutionContext *scope, const StringRef name, ReturnedValue (*code)(CallContext *));
-    Returned<BoundFunction> *newBoundFunction(ExecutionContext *scope, FunctionObjectRef target, const ValueRef boundThis, const QVector<SafeValue> &boundArgs);
+    Returned<BoundFunction> *newBoundFunction(ExecutionContext *scope, FunctionObjectRef target, const ValueRef boundThis, const QVector<Value> &boundArgs);
 
     Returned<Object> *newObject();
     Returned<Object> *newObject(InternalClass *internalClass);
@@ -316,7 +327,7 @@ public:
     Returned<DateObject> *newDateObject(const QDateTime &dt);
 
     Returned<RegExpObject> *newRegExpObject(const QString &pattern, int flags);
-    Returned<RegExpObject> *newRegExpObject(Referenced<RegExp> re, bool global);
+    Returned<RegExpObject> *newRegExpObject(RegExpRef re, bool global);
     Returned<RegExpObject> *newRegExpObject(const QRegExp &re);
 
     Returned<Object> *newErrorObject(const ValueRef value);
@@ -346,15 +357,12 @@ public:
 
     InternalClass *newClass(const InternalClass &other);
 
-    Function *functionForProgramCounter(quintptr pc) const;
-
     QmlExtensions *qmlExtensions();
 
     bool recheckCStackLimits();
 
     // Exception handling
-    SafeValue exceptionValue;
-    quint32 hasException;
+    Value exceptionValue;
     StackTrace exceptionStackTrace;
 
     ReturnedValue throwException(const ValueRef value);

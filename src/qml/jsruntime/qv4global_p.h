@@ -45,6 +45,7 @@
 #include <QtCore/qglobal.h>
 #include <QString>
 #include <qtqmlglobal.h>
+#include <private/qtqmlglobal_p.h>
 
 #if defined(Q_CC_MSVC)
 #include <float.h>
@@ -66,6 +67,10 @@ inline double trunc(double d) { return d > 0 ? floor(d) : ceil(d); }
 
 #define qOffsetOf(s, m) ((size_t)((((char *)&(((s *)64)->m)) - 64)))
 
+#if defined(QT_BUILD_QMLDEVTOOLS_LIB) || defined(QT_QMLDEVTOOLS_LIB)
+#define V4_BOOTSTRAP
+#endif
+
 // Decide whether to enable or disable the JIT
 
 // White list architectures
@@ -84,7 +89,7 @@ inline double trunc(double d) { return d > 0 ? floor(d) : ceil(d); }
 
 // Black list some platforms
 #if defined(V4_ENABLE_JIT)
-#if defined(Q_OS_IOS) || defined(Q_OS_WIN64) || defined(Q_OS_WINRT)
+#if defined(Q_OS_IOS) || defined(Q_OS_WINRT)
 #    undef V4_ENABLE_JIT
 #endif
 #endif
@@ -156,12 +161,16 @@ template<typename T> struct Returned;
 typedef Returned<String> ReturnedString;
 typedef Returned<Object> ReturnedObject;
 typedef Returned<FunctionObject> ReturnedFunctionObject;
-template<typename T> struct Referenced;
-typedef Referenced<Managed> ManagedRef;
-typedef Referenced<String> StringRef;
-typedef Referenced<Object> ObjectRef;
-typedef Referenced<ArrayObject> ArrayObjectRef;
-typedef Referenced<FunctionObject> FunctionObjectRef;
+struct ManagedRef;
+struct StringRef;
+struct ObjectRef;
+struct ArrayObjectRef;
+struct FunctionObjectRef;
+struct RegExpRef;
+
+struct PersistentValuePrivate;
+class PersistentValue;
+class WeakValue;
 
 
 namespace Global {
@@ -180,8 +189,8 @@ enum PropertyFlag {
     Attr_Invalid = 0xff
 };
 
-Q_DECLARE_FLAGS(PropertyFlags, PropertyFlag);
-Q_DECLARE_OPERATORS_FOR_FLAGS(PropertyFlags);
+Q_DECLARE_FLAGS(PropertyFlags, PropertyFlag)
+Q_DECLARE_OPERATORS_FOR_FLAGS(PropertyFlags)
 
 struct PropertyAttributes
 {

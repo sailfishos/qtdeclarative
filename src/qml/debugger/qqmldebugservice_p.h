@@ -60,6 +60,7 @@
 
 QT_BEGIN_NAMESPACE
 
+class QQmlEngine;
 
 class QQmlDebugServicePrivate;
 class Q_QML_PRIVATE_EXPORT QQmlDebugService : public QObject
@@ -102,6 +103,15 @@ protected:
     virtual void stateAboutToBeChanged(State);
     virtual void stateChanged(State);
     virtual void messageReceived(const QByteArray &);
+
+    virtual void engineAboutToBeAdded(QQmlEngine *);
+    virtual void engineAboutToBeRemoved(QQmlEngine *);
+    virtual void engineAdded(QQmlEngine *);
+    virtual void engineRemoved(QQmlEngine *);
+
+signals:
+    void attachedToEngine(QQmlEngine *);
+    void detachedFromEngine(QQmlEngine *);
 
 private:
     friend class QQmlDebugServer;

@@ -77,6 +77,8 @@ public:
     QList<QQmlDebugService*> services() const;
     QStringList serviceNames() const;
 
+    void addEngine(QQmlEngine *engine);
+    void removeEngine(QQmlEngine *engine);
 
     bool addService(QQmlDebugService *service);
     bool removeService(QQmlDebugService *service);
@@ -85,10 +87,14 @@ public:
 
     void sendMessages(QQmlDebugService *service, const QList<QByteArray> &messages);
 
+private slots:
+    void wakeEngine(QQmlEngine *engine);
+
 private:
     friend class QQmlDebugService;
     friend class QQmlDebugServicePrivate;
     friend class QQmlDebugServerThread;
+    friend struct QQmlDebugServerInstanceWrapper;
     QQmlDebugServer();
     Q_PRIVATE_SLOT(d_func(), void _q_changeServiceState(const QString &serviceName,
                                                         QQmlDebugService::State state))

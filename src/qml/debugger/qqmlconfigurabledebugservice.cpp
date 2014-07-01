@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtQml module of the Qt Toolkit.
@@ -39,51 +39,58 @@
 **
 ****************************************************************************/
 
-#ifndef QQMLCUSTOMPARSER_P_H
-#define QQMLCUSTOMPARSER_P_H
-
-//
-//  W A R N I N G
-//  -------------
-//
-// This file is not part of the Qt API.  It exists purely as an
-// implementation detail.  This header file may change from version to
-// version without notice, or even be removed.
-//
-// We mean it.
-//
-
-#include "qqmlcustomparser_p.h"
-
-#include "qqmlscript_p.h"
-
-#include <QtCore/qglobal.h>
+#include "qqmlconfigurabledebugservice_p.h"
+#include "qqmlconfigurabledebugservice_p_p.h"
 
 QT_BEGIN_NAMESPACE
 
-class QQmlCustomParserNodePrivate
+QQmlConfigurableDebugService::QQmlConfigurableDebugService(const QString &name, float version,
+                                                           QObject *parent) :
+    QQmlDebugService((*new QQmlConfigurableDebugServicePrivate), name, version, parent) { init(); }
+
+QQmlConfigurableDebugService::QQmlConfigurableDebugService(QQmlDebugServicePrivate &dd,
+                                                           const QString &name, float version,
+                                                           QObject *parent) :
+    QQmlDebugService(dd, name, version, parent) { init(); }
+
+QMutex *QQmlConfigurableDebugService::configMutex()
 {
-public:
-    QString name;
-    QList<QQmlCustomParserProperty> properties;
-    QQmlScript::Location location;
+    Q_D(QQmlConfigurableDebugService);
+    return &d->configMutex;
+}
 
-    static QQmlCustomParserNode fromObject(QQmlScript::Object *);
-    static QQmlCustomParserProperty fromProperty(QQmlScript::Property *);
-};
-
-class QQmlCustomParserPropertyPrivate
+void QQmlConfigurableDebugService::init()
 {
-public:
-    QQmlCustomParserPropertyPrivate()
-        : isList(false) {}
+    Q_D(QQmlConfigurableDebugService);
+    QMutexLocker lock(&d->configMutex);
+    // If we're not enabled or not blocking, don't wait for configuration
+    d->waitingForConfiguration = (registerService() == Enabled && blockingMode());
+}
 
-    QString name;
-    bool isList;
-    QQmlScript::Location location;
-    QList<QVariant> values;
-};
+void QQmlConfigurableDebugService::stopWaiting()
+{
+    Q_D(QQmlConfigurableDebugService);
+    QMutexLocker lock(&d->configMutex);
+    d->waitingForConfiguration = false;
+    foreach (QQmlEngine *engine, d->waitingEngines)
+        emit attachedToEngine(engine);
+    d->waitingEngines.clear();
+}
+
+void QQmlConfigurableDebugService::stateChanged(QQmlDebugService::State newState)
+{
+    if (newState != Enabled)
+        stopWaiting();
+}
+
+void QQmlConfigurableDebugService::engineAboutToBeAdded(QQmlEngine *engine)
+{
+    Q_D(QQmlConfigurableDebugService);
+    QMutexLocker lock(&d->configMutex);
+    if (d->waitingForConfiguration)
+        d->waitingEngines.append(engine);
+    else
+        emit attachedToEngine(engine);
+}
 
 QT_END_NAMESPACE
-
-#endif // QQMLCUSTOMPARSER_P_H

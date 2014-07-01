@@ -144,8 +144,11 @@ private:
     static QQmlListModel *createWithOwner(QQmlListModel *newOwner);
 
     void emitItemsChanged(int index, int count, const QVector<int> &roles);
+    void emitItemsAboutToBeRemoved(int index, int count);
     void emitItemsRemoved(int index, int count);
+    void emitItemsAboutToBeInserted(int index, int count);
     void emitItemsInserted(int index, int count);
+    void emitItemsAboutToBeMoved(int from, int to, int n);
     void emitItemsMoved(int from, int to, int n);
 };
 
@@ -158,9 +161,18 @@ Q_OBJECT
 class QQmlListModelParser : public QQmlCustomParser
 {
 public:
+    enum PropertyType {
+        Invalid,
+        Boolean,
+        Number,
+        String,
+        Script
+    };
+
+
     QQmlListModelParser() : QQmlCustomParser(QQmlCustomParser::AcceptsSignalHandlers) {}
-    QByteArray compile(const QList<QQmlCustomParserProperty> &);
-    void setCustomData(QObject *, const QByteArray &);
+    QByteArray compile(const QV4::CompiledData::QmlUnit *qmlUnit, const QList<const QV4::CompiledData::Binding *> &bindings);
+    void setCustomData(QObject *, const QByteArray &, QQmlCompiledData *);
 
 private:
     struct ListInstruction
@@ -174,7 +186,7 @@ private:
         int instrCount;
         ListInstruction *instructions() const;
     };
-    bool compileProperty(const QQmlCustomParserProperty &prop, QList<ListInstruction> &instr, QByteArray &data);
+    bool compileProperty(const QV4::CompiledData::QmlUnit *qmlUnit, const QV4::CompiledData::Binding *binding, QList<ListInstruction> &instr, QByteArray &data);
 
     bool definesEmptyList(const QString &);
 
@@ -188,7 +200,11 @@ private:
         ListModel *model;
         int elementIndex;
     };
+
+    friend class QTypeInfo<QQmlListModelParser::ListInstruction>;
 };
+
+Q_DECLARE_TYPEINFO(QQmlListModelParser::ListInstruction, Q_PRIMITIVE_TYPE);
 
 QT_END_NAMESPACE
 

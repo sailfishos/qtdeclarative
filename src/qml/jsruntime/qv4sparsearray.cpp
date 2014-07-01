@@ -53,32 +53,6 @@
 
 using namespace QV4;
 
-bool ArrayElementLessThan::operator()(const Property &p1, const Property &p2) const
-{
-    Scope scope(m_context);
-
-    if (p1.value.isUndefined() || p1.value.isEmpty())
-        return false;
-    if (p2.value.isUndefined() || p2.value.isEmpty())
-        return true;
-    ScopedObject o(scope, m_comparefn);
-    if (o) {
-        Scope scope(o->engine());
-        ScopedValue result(scope);
-        ScopedCallData callData(scope, 2);
-        callData->thisObject = Primitive::undefinedValue();
-        callData->args[0] = p1.value;
-        callData->args[1] = p2.value;
-        result = __qmljs_call_value(m_context, m_comparefn, callData);
-
-        return result->toNumber() < 0;
-    }
-    ScopedString p1s(scope, p1.value.toString(m_context));
-    ScopedString p2s(scope, p2.value.toString(m_context));
-    return p1s->toQString() < p2s->toQString();
-}
-
-
 const SparseArrayNode *SparseArrayNode::nextNode() const
 {
     const SparseArrayNode *n = this;
@@ -245,51 +219,51 @@ void SparseArray::deleteNode(SparseArrayNode *z)
             else
                 mostLeftNode = y->parent();
         }
-    } else {
-        if (y->right == 0) {
+    } else if (y->right == 0) {
             x = y->left;
-        } else {
-            y = y->right;
-            while (y->left != 0)
-                y = y->left;
-            x = y->right;
-        }
+    } else {
+        y = y->right;
+        while (y->left != 0)
+            y = y->left;
+        x = y->right;
     }
     if (y != z) {
-        z->left->setParent(y);
-        y->left = z->left;
+        // move y into the position of z
+        // adjust size_left so the keys are ok.
+        z->size_left += y->size_left;
+        SparseArrayNode *n = y->parent();
+        while (n != z) {
+            n->size_left -= y->size_left;
+            n = n->parent();
+        }
+        y->size_left = 0;
+        z->value = y->value;
+
         if (y != z->right) {
             x_parent = y->parent();
-            if (x)
-                x->setParent(y->parent());
             y->parent()->left = x;
-            y->right = z->right;
-            z->right->setParent(y);
         } else {
-            x_parent = y;
+            x_parent = z;
+            z->right = x;
         }
-        if (root == z)
-            root = y;
-        else if (z->parent()->left == z)
-            z->parent()->left = y;
-        else
-            z->parent()->right = y;
-        y->setParent(z->parent());
-        // Swap the colors
-        SparseArrayNode::Color c = y->color();
-        y->setColor(z->color());
-        z->setColor(c);
-        y = z;
+        if (x)
+            x->setParent(x_parent);
     } else {
         x_parent = y->parent();
         if (x)
             x->setParent(y->parent());
-        if (root == z)
+        if (root == y)
             root = x;
-        else if (z->parent()->left == z)
-            z->parent()->left = x;
-        else
-            z->parent()->right = x;
+        else if (y->parent()->left == y) {
+            y->parent()->left = x;
+            if (x)
+                x->size_left += y->size_left;
+        } else {
+            y->parent()->right = x;
+            if (x)
+                x->size_left += y->size_left;
+        }
+        y->size_left = 0;
     }
     if (y->color() != SparseArrayNode::Red) {
         while (x != root && (x == 0 || x->color() == SparseArrayNode::Black)) {

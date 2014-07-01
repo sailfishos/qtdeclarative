@@ -45,7 +45,7 @@
 #include <private/qqmllistmodel_p.h>
 #include <private/qqmllistmodelworkeragent_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4dateobject_p.h>
 #include <private/qv4regexpobject_p.h>
 #include <private/qv4sequenceobject_p.h>
@@ -55,13 +55,13 @@ QT_BEGIN_NAMESPACE
 
 using namespace QV4;
 
-// We allow the following JavaScript types to be passed between the main and 
+// We allow the following JavaScript types to be passed between the main and
 // the secondary thread:
 //    + undefined
 //    + null
 //    + Boolean
 //    + String
-//    + Function 
+//    + Function
 //    + Array
 //    + "Simple" Objects
 //    + Number
@@ -143,7 +143,7 @@ static inline void *popPtr(const char *&data)
     return rv;
 }
 
-// XXX TODO: Check that worker script is exception safe in the case of 
+// XXX TODO: Check that worker script is exception safe in the case of
 // serialization/deserialization failures
 
 #define ALIGN(size) (((size) + 3) & ~3)
@@ -171,7 +171,7 @@ void Serialize::serialize(QByteArray &data, const QV4::ValueRef v, QV8Engine *en
 
         reserve(data, utf16size + sizeof(quint32));
         push(data, valueheader(WorkerString, length));
-        
+
         int offset = data.size();
         data.resize(data.size() + utf16size);
         char *buffer = data.data() + offset;
@@ -183,7 +183,7 @@ void Serialize::serialize(QByteArray &data, const QV4::ValueRef v, QV8Engine *en
         push(data, valueheader(WorkerUndefined));
     } else if (v->asArrayObject()) {
         QV4::ScopedArrayObject array(scope, v);
-        uint32_t length = array->arrayLength();
+        uint32_t length = array->getLength();
         if (length > 0xFFFFFF) {
             push(data, valueheader(WorkerUndefined));
             return;
@@ -266,7 +266,7 @@ void Serialize::serialize(QByteArray &data, const QV4::ValueRef v, QV8Engine *en
         // regular object
         QV4::ScopedValue val(scope, *v);
         QV4::ScopedArrayObject properties(scope, QV4::ObjectPrototype::getOwnPropertyNames(v4, val));
-        quint32 length = properties->arrayLength();
+        quint32 length = properties->getLength();
         if (length > 0xFFFFFF) {
             push(data, valueheader(WorkerUndefined));
             return;
@@ -390,8 +390,7 @@ ReturnedValue Serialize::deserialize(const char *&data, QV8Engine *engine)
         array->arrayReserve(seqLength);
         for (quint32 ii = 0; ii < seqLength; ++ii) {
             value = deserialize(data, engine);
-            array->arrayData[ii].value = value.asReturnedValue();
-            array->arrayDataLen = ii + 1;
+            array->arrayPut(ii, value);
         }
         array->setArrayLengthUnchecked(seqLength);
         QVariant seqVariant = QV4::SequencePrototype::toVariant(array, sequenceType, &succeeded);

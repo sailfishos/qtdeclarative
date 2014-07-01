@@ -49,7 +49,7 @@ QT_BEGIN_NAMESPACE
 
 using namespace QV4;
 
-DEFINE_MANAGED_VTABLE(VariantObject);
+DEFINE_OBJECT_VTABLE(VariantObject);
 
 VariantObject::VariantObject(InternalClass *ic)
     : Object(ic)
@@ -77,7 +77,7 @@ QVariant VariantObject::toVariant(const QV4::ValueRef v)
     if (v->isBoolean())
         return QVariant(v->booleanValue());
     if (v->isNumber()) {
-        QV4::SafeValue val;
+        QV4::Value val;
         val = v;
         if (val.isInt32())
             return QVariant(val.integerValue());

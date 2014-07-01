@@ -106,6 +106,7 @@ struct QQmlMetaTypeData
     QBitArray lists;
 
     QList<QQmlPrivate::AutoParentFunction> parentFunctions;
+    QQmlPrivate::QmlUnitCacheLookupFunction lookupCachedQmlUnit;
 
     QSet<QString> protectedNamespaces;
 
@@ -116,7 +117,7 @@ struct QQmlMetaTypeData
 class QQmlTypeModulePrivate
 {
 public:
-    QQmlTypeModulePrivate() 
+    QQmlTypeModulePrivate()
     : minMinorVersion(INT_MAX), maxMinorVersion(0), locked(false) {}
 
     static QQmlTypeModulePrivate* get(QQmlTypeModule* q) { return q->d; }
@@ -142,6 +143,7 @@ static uint qHash(const QQmlMetaTypeData::VersionedUri &v)
 }
 
 QQmlMetaTypeData::QQmlMetaTypeData()
+    : lookupCachedQmlUnit(0)
 {
 }
 
@@ -479,7 +481,7 @@ QQmlType *QQmlType::superType() const
     return d->superType;
 }
 
-static void clone(QMetaObjectBuilder &builder, const QMetaObject *mo, 
+static void clone(QMetaObjectBuilder &builder, const QMetaObject *mo,
                   const QMetaObject *ignoreStart, const QMetaObject *ignoreEnd)
 {
     // Set classname
@@ -491,7 +493,7 @@ static void clone(QMetaObjectBuilder &builder, const QMetaObject *mo,
 
         int otherIndex = ignoreEnd->indexOfClassInfo(info.name());
         if (otherIndex >= ignoreStart->classInfoOffset() + ignoreStart->classInfoCount()) {
-            // Skip 
+            // Skip
         } else {
             builder.addClassInfo(info.name(), info.value());
         }
@@ -504,7 +506,7 @@ static void clone(QMetaObjectBuilder &builder, const QMetaObject *mo,
         int otherIndex = ignoreEnd->indexOfProperty(property.name());
         if (otherIndex >= ignoreStart->propertyOffset() + ignoreStart->propertyCount()) {
             builder.addProperty(QByteArray("__qml_ignore__") + property.name(), QByteArray("void"));
-            // Skip 
+            // Skip
         } else {
             builder.addProperty(property);
         }
@@ -520,7 +522,7 @@ static void clone(QMetaObjectBuilder &builder, const QMetaObject *mo,
 
         bool found = false;
 
-        for (int ii = ignoreStart->methodOffset() + ignoreStart->methodCount(); 
+        for (int ii = ignoreStart->methodOffset() + ignoreStart->methodCount();
              !found && ii < ignoreEnd->methodOffset() + ignoreEnd->methodCount();
              ++ii) {
 
@@ -540,7 +542,7 @@ static void clone(QMetaObjectBuilder &builder, const QMetaObject *mo,
 
         int otherIndex = ignoreEnd->indexOfEnumerator(enumerator.name());
         if (otherIndex >= ignoreStart->enumeratorOffset() + ignoreStart->enumeratorCount()) {
-            // Skip 
+            // Skip
         } else {
             builder.addEnumerator(enumerator);
         }
@@ -860,7 +862,7 @@ const QMetaObject *QQmlType::attachedPropertiesType() const
 
 /*
 This is the id passed to qmlAttachedPropertiesById().  This is different from the index
-for the case that a single class is registered under two or more names (eg. Item in 
+for the case that a single class is registered under two or more names (eg. Item in
 Qt 4.7 and QtQuick 1.0).
 */
 int QQmlType::attachedPropertiesId() const
@@ -1128,7 +1130,7 @@ int registerAutoParentFunction(QQmlPrivate::RegisterAutoParent &autoparent)
 
 int registerInterface(const QQmlPrivate::RegisterInterface &interface)
 {
-    if (interface.version > 0) 
+    if (interface.version > 0)
         qFatal("qmlRegisterType(): Cannot mix incompatible QML versions.");
 
     QWriteLocker lock(metaTypeDataLock());
@@ -1344,6 +1346,15 @@ int registerCompositeType(const QQmlPrivate::RegisterCompositeType &type)
     return index;
 }
 
+int registerQmlUnitCacheHook(const QQmlPrivate::RegisterQmlUnitCacheHook &hookRegistration)
+{
+    if (hookRegistration.version > 0)
+        qFatal("qmlRegisterType(): Cannot mix incompatible QML versions.");
+    QWriteLocker lock(metaTypeDataLock());
+    QQmlMetaTypeData *data = metaTypeData();
+    data->lookupCachedQmlUnit = hookRegistration.lookupCachedQmlUnit;
+    return 0;
+}
 
 /*
 This method is "over generalized" to allow us to (potentially) register more types of things in
@@ -1363,6 +1374,8 @@ int QQmlPrivate::qmlregister(RegistrationType type, void *data)
         return registerCompositeType(*reinterpret_cast<RegisterCompositeType *>(data));
     } else if (type == CompositeSingletonRegistration) {
         return registerCompositeSingletonType(*reinterpret_cast<RegisterCompositeSingletonType *>(data));
+    } else if (type == QmlUnitCacheHookRegistration) {
+        return registerQmlUnitCacheHook(*reinterpret_cast<RegisterQmlUnitCacheHook *>(data));
     }
     return -1;
 }
@@ -1472,7 +1485,7 @@ bool QQmlMetaType::isModule(const QString &module, int versionMajor, int version
     QQmlMetaTypeData *data = metaTypeData();
 
     // first, check Types
-    QQmlTypeModule *tm = 
+    QQmlTypeModule *tm =
         data->uriToModule.value(QQmlMetaTypeData::VersionedUri(module, versionMajor));
     if (tm && tm->minimumMinorVersion() <= versionMinor && tm->maximumMinorVersion() >= versionMinor)
         return true;
@@ -1755,7 +1768,7 @@ QQmlType *QQmlMetaType::qmlType(const QMetaObject *metaObject, const QHashedStri
 }
 
 /*!
-    Returns the type (if any) that corresponds to the QVariant::Type \a userType.  
+    Returns the type (if any) that corresponds to the QVariant::Type \a userType.
     Returns null if no type is registered.
 */
 QQmlType *QQmlMetaType::qmlType(int userType)
@@ -1865,26 +1878,13 @@ QList<QQmlType*> QQmlMetaType::qmlSingletonTypes()
     return retn;
 }
 
-int QQmlMetaType::QQuickAnchorLineMetaTypeId()
+const QQmlPrivate::CachedQmlUnit *QQmlMetaType::findCachedCompilationUnit(const QUrl &uri)
 {
-    static int id = 0;
-    if (!id) {
-        id = QMetaType::type("QQuickAnchorLine");
-    }
-    return id;
-}
-
-QQmlMetaType::CompareFunction QQmlMetaType::anchorLineCompareFunction = 0;
-
-void QQmlMetaType::setQQuickAnchorLineCompareFunction(CompareFunction fun)
-{
-    anchorLineCompareFunction = fun;
-}
-
-bool QQmlMetaType::QQuickAnchorLineCompare(const void *p1, const void *p2)
-{
-    Q_ASSERT(anchorLineCompareFunction != 0);
-    return anchorLineCompareFunction(p1, p2);
+    QReadLocker lock(metaTypeDataLock());
+    QQmlMetaTypeData *data = metaTypeData();
+    if (data->lookupCachedQmlUnit)
+        return data->lookupCachedQmlUnit(uri);
+    return 0;
 }
 
 QT_END_NAMESPACE

@@ -68,7 +68,7 @@
 #include <QtCore/qdatetime.h>
 #include <private/qsimd_p.h>
 
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4dateobject_p.h>
 #include <private/qv4objectiterator_p.h>
 #include <private/qv4mm_p.h>
@@ -164,7 +164,7 @@ QVariant QV8Engine::toVariant(const QV4::ValueRef value, int typeHint)
         QV4::ScopedArrayObject a(scope, value);
         if (typeHint == qMetaTypeId<QList<QObject *> >()) {
             QList<QObject *> list;
-            uint32_t length = a->arrayLength();
+            uint32_t length = a->getLength();
             QV4::Scoped<QV4::QObjectWrapper> qobjectWrapper(scope);
             for (uint32_t ii = 0; ii < length; ++ii) {
                 qobjectWrapper = a->getIndexed(ii);
@@ -196,10 +196,10 @@ static QV4::ReturnedValue arrayFromStringList(QV8Engine *engine, const QStringLi
     QV4::Scoped<QV4::ArrayObject> a(scope, e->newArrayObject());
     int len = list.count();
     a->arrayReserve(len);
-    for (int ii = 0; ii < len; ++ii) {
-        a->arrayData[ii].value = QV4::Encode(e->newString(list.at(ii)));
-        a->arrayDataLen = ii + 1;
-    }
+    QV4::ScopedValue v(scope);
+    for (int ii = 0; ii < len; ++ii)
+        a->arrayPut(ii, (v = QV4::Encode(e->newString(list.at(ii)))));
+
     a->setArrayLengthUnchecked(len);
     return a.asReturnedValue();
 }
@@ -211,10 +211,10 @@ static QV4::ReturnedValue arrayFromVariantList(QV8Engine *engine, const QVariant
     QV4::Scoped<QV4::ArrayObject> a(scope, e->newArrayObject());
     int len = list.count();
     a->arrayReserve(len);
-    for (int ii = 0; ii < len; ++ii) {
-        a->arrayData[ii].value = engine->fromVariant(list.at(ii));
-        a->arrayDataLen = ii + 1;
-    }
+    QV4::ScopedValue v(scope);
+    for (int ii = 0; ii < len; ++ii)
+        a->arrayPut(ii, (v = engine->fromVariant(list.at(ii))));
+
     a->setArrayLengthUnchecked(len);
     return a.asReturnedValue();
 }
@@ -226,8 +226,13 @@ static QV4::ReturnedValue objectFromVariantMap(QV8Engine *engine, const QVariant
     QV4::ScopedObject o(scope, e->newObject());
     QV4::ScopedString s(scope);
     QV4::ScopedValue v(scope);
-    for (QVariantMap::ConstIterator iter = map.begin(); iter != map.end(); ++iter)
-        o->put((s = e->newString(iter.key())), (v = engine->fromVariant(iter.value())));
+    for (QVariantMap::ConstIterator iter = map.begin(); iter != map.end(); ++iter) {
+        s = e->newString(iter.key());
+        uint idx = s->asArrayIndex();
+        if (idx > 16 && (!o->arrayData || idx > o->arrayData->length() * 2))
+            o->initSparseArray();
+        o->put(s, (v = engine->fromVariant(iter.value())));
+    }
     return o.asReturnedValue();
 }
 
@@ -298,7 +303,8 @@ QV4::ReturnedValue QV8Engine::fromVariant(const QVariant &variant)
                 return QV4::JsonObject::fromJsonObject(m_v4Engine, *reinterpret_cast<const QJsonObject *>(ptr));
             case QMetaType::QJsonArray:
                 return QV4::JsonObject::fromJsonArray(m_v4Engine, *reinterpret_cast<const QJsonArray *>(ptr));
-
+            case QMetaType::QLocale:
+                return QQmlLocale::wrap(this, *reinterpret_cast<const QLocale*>(ptr));
             default:
                 break;
         }
@@ -325,10 +331,9 @@ QV4::ReturnedValue QV8Engine::fromVariant(const QVariant &variant)
             const QList<QObject *> &list = *(QList<QObject *>*)ptr;
             QV4::Scoped<QV4::ArrayObject> a(scope, m_v4Engine->newArrayObject());
             a->arrayReserve(list.count());
-            for (int ii = 0; ii < list.count(); ++ii) {
-                a->arrayData[ii].value = QV4::QObjectWrapper::wrap(m_v4Engine, list.at(ii));
-                a->arrayDataLen = ii + 1;
-            }
+            QV4::ScopedValue v(scope);
+            for (int ii = 0; ii < list.count(); ++ii)
+                a->arrayPut(ii, (v = QV4::QObjectWrapper::wrap(m_v4Engine, list.at(ii))));
             a->setArrayLengthUnchecked(list.count());
             return a.asReturnedValue();
         } else if (QMetaType::typeFlags(type) & QMetaType::PointerToQObject) {
@@ -361,7 +366,7 @@ QNetworkAccessManager *QV8Engine::networkAccessManager()
     return QQmlEnginePrivate::get(m_engine)->getNetworkAccessManager();
 }
 
-const QV4::IdentifierHash<bool> &QV8Engine::illegalNames() const
+const QSet<QString> &QV8Engine::illegalNames() const
 {
     return m_illegalNames;
 }
@@ -392,6 +397,8 @@ QVariant QV8Engine::toBasicVariant(const QV4::ValueRef value)
         return value->asDouble();
     if (value->isString())
         return value->stringValue()->toQString();
+    if (QQmlLocaleData *ld = value->as<QQmlLocaleData>())
+        return ld->locale;
     if (QV4::DateObject *d = value->asDateObject())
         return d->toQDateTime();
     // NOTE: since we convert QTime to JS Date, round trip will change the variant type (to QDateTime)!
@@ -407,7 +414,7 @@ QVariant QV8Engine::toBasicVariant(const QV4::ValueRef value)
         QV4::ScopedValue v(scope);
         QVariantList rv;
 
-        int length = a->arrayLength();
+        int length = a->getLength();
         for (int ii = 0; ii < length; ++ii) {
             v = a->getIndexed(ii);
             rv << toVariant(v, -1);
@@ -437,9 +444,10 @@ void QV8Engine::initializeGlobal()
     qt_add_sqlexceptions(m_v4Engine);
 
     {
-        m_illegalNames = QV4::IdentifierHash<bool>(m_v4Engine);
-        for (uint i = 0; i < m_v4Engine->globalObject->internalClass->size; ++i)
-            m_illegalNames.add(m_v4Engine->globalObject->internalClass->nameMap.at(i)->toQString(), true);
+        for (uint i = 0; i < m_v4Engine->globalObject->internalClass->size; ++i) {
+            if (m_v4Engine->globalObject->internalClass->nameMap.at(i))
+                m_illegalNames.insert(m_v4Engine->globalObject->internalClass->nameMap.at(i)->toQString());
+        }
     }
 
     {
@@ -541,10 +549,9 @@ QV4::ReturnedValue QV8Engine::variantListToJS(const QVariantList &lst)
     QV4::Scope scope(m_v4Engine);
     QV4::Scoped<QV4::ArrayObject> a(scope, m_v4Engine->newArrayObject());
     a->arrayReserve(lst.size());
-    for (int i = 0; i < lst.size(); i++) {
-        a->arrayData[i].value = variantToJS(lst.at(i));
-        a->arrayDataLen = i + 1;
-    }
+    QV4::ScopedValue v(scope);
+    for (int i = 0; i < lst.size(); i++)
+        a->arrayPut(i, (v = variantToJS(lst.at(i))));
     a->setArrayLengthUnchecked(lst.size());
     return a.asReturnedValue();
 }
@@ -569,7 +576,7 @@ QVariantList QV8Engine::variantListFromJS(QV4::ArrayObjectRef a,
     QV4::Scope scope(a->engine());
     QV4::ScopedValue v(scope);
 
-    quint32 length = a->arrayLength();
+    quint32 length = a->getLength();
     for (quint32 i = 0; i < length; ++i) {
         v = a->getIndexed(i);
         result.append(variantFromJS(v, visitedObjects));
@@ -590,10 +597,15 @@ QV4::ReturnedValue QV8Engine::variantMapToJS(const QVariantMap &vmap)
     QV4::Scoped<QV4::Object> o(scope, m_v4Engine->newObject());
     QVariantMap::const_iterator it;
     QV4::ScopedString s(scope);
+    QV4::ScopedValue v(scope);
     for (it = vmap.constBegin(); it != vmap.constEnd(); ++it) {
         s = m_v4Engine->newIdentifier(it.key());
-        QV4::Property *p = o->insertMember(s, QV4::Attr_Data);
-        p->value = variantToJS(it.value());
+        v = variantToJS(it.value());
+        uint idx = s->asArrayIndex();
+        if (idx < UINT_MAX)
+            o->arraySet(idx, v);
+        else
+            o->insertMember(s, v);
     }
     return o.asReturnedValue();
 }

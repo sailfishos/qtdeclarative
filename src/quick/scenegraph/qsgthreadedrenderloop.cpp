@@ -60,7 +60,7 @@
 #include "qsgthreadedrenderloop_p.h"
 #include <private/qquickanimatorcontroller_p.h>
 
-#include <private/qqmlprofilerservice_p.h>
+#include <private/qquickprofiler_p.h>
 #include <private/qsystrace_p.h>
 
 /*
@@ -546,7 +546,7 @@ void QSGRenderThread::sync()
 void QSGRenderThread::syncAndRender()
 {
 #ifndef QSG_NO_RENDER_TIMING
-    bool profileFrames = qsg_render_timing || QQmlProfilerService::enabled;
+    bool profileFrames = qsg_render_timing || QQuickProfiler::enabled;
     if (profileFrames) {
         sinceLastTime = threadTimer.nsecsElapsed();
         threadTimer.start();
@@ -625,13 +625,11 @@ void QSGRenderThread::syncAndRender()
                    int((renderTime - syncTime)/1000000),
                    int(threadTimer.elapsed() - renderTime/1000000));
 
-        if (QQmlProfilerService::enabled) {
-            QQmlProfilerService::sceneGraphFrame(
-                        QQmlProfilerService::SceneGraphRenderLoopFrame,
-                        syncTime,
-                        renderTime - syncTime,
-                        threadTimer.nsecsElapsed() - renderTime);
-        }
+        Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphRenderLoopFrame, (
+                syncTime,
+                renderTime - syncTime,
+                threadTimer.nsecsElapsed() - renderTime));
+
 #endif
 }
 
@@ -1123,7 +1121,7 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w)
     qint64 polishTime = 0;
     qint64 waitTime = 0;
     qint64 syncTime = 0;
-    bool profileFrames = qsg_render_timing  || QQmlProfilerService::enabled;
+    bool profileFrames = qsg_render_timing  || QQuickProfiler::enabled;
     if (profileFrames)
         timer.start();
 #endif
@@ -1193,14 +1191,11 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w)
                int((syncTime - waitTime)/1000000),
                int((timer.nsecsElapsed() - syncTime)/1000000));
 
-    if (QQmlProfilerService::enabled) {
-        QQmlProfilerService::sceneGraphFrame(
-                    QQmlProfilerService::SceneGraphPolishAndSync,
-                    polishTime,
-                    waitTime - polishTime,
-                    syncTime - waitTime,
-                    timer.nsecsElapsed() - syncTime);
-    }
+    Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphPolishAndSync, (
+            polishTime,
+            waitTime - polishTime,
+            syncTime - waitTime,
+            timer.nsecsElapsed() - syncTime));
 #endif
 }
 

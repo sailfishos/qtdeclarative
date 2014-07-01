@@ -68,7 +68,7 @@
 #include <private/qqmlpropertycache_p.h>
 
 #include <private/qv4qobjectwrapper_p.h>
-#include <private/qv4value_p.h>
+#include <private/qv4value_inl_p.h>
 #include <private/qv4object_p.h>
 #include <private/qv4identifier_p.h>
 
@@ -117,7 +117,7 @@ namespace QV4 {
 //         ...
 //         Q_INVOKABLE void myMethod(QQmlV8Function*);
 //     };
-// The QQmlV8Function - and consequently the arguments and return value - only remains 
+// The QQmlV8Function - and consequently the arguments and return value - only remains
 // valid during the call.  If the return value isn't set within myMethod(), the will return
 // undefined.
 class QV8Engine;
@@ -217,7 +217,7 @@ public:
     virtual QNetworkAccessManager *networkAccessManager();
 
     // Return the list of illegal id names (the names of the properties on the global object)
-    const QV4::IdentifierHash<bool> &illegalNames() const;
+    const QSet<QString> &illegalNames() const;
 
     void gc();
 
@@ -268,7 +268,7 @@ protected:
     QVector<Deletable *> m_extensionData;
     Deletable *m_listModelData;
 
-    QV4::IdentifierHash<bool> m_illegalNames;
+    QSet<QString> m_illegalNames;
 
     QElapsedTimer m_time;
     QHash<QString, qint64> m_startedTimers;

@@ -43,13 +43,18 @@
 #include "qsgbatchrenderer_p.h"
 #include <private/qsgshadersourcebuilder_p.h>
 
+#include <QQuickWindow>
+
+#include <qmath.h>
+
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QtNumeric>
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QOpenGLFramebufferObject>
 #include <QtGui/QOpenGLVertexArrayObject>
 
-#include <private/qqmlprofilerservice_p.h>
+#include <private/qquickprofiler_p.h>
 #include <private/qsystrace_p.h>
 
 #include <algorithm>
@@ -128,11 +133,10 @@ ShaderManager::Shader *ShaderManager::prepareMaterial(QSGMaterial *material)
     Shader *shader = rewrittenShaders.value(type, 0);
     if (shader)
         return shader;
-
     QSystraceEvent systrace("graphics", "ShaderManager::prepareMaterial");
 
 #ifndef QSG_NO_RENDER_TIMING
-    if (qsg_render_timing  || QQmlProfilerService::enabled)
+    if (qsg_render_timing  || QQuickProfiler::enabled)
         qsg_renderer_timer.start();
 #endif
 
@@ -166,11 +170,8 @@ ShaderManager::Shader *ShaderManager::prepareMaterial(QSGMaterial *material)
     if (qsg_render_timing)
         qDebug("   - compiling material: %dms", (int) qsg_renderer_timer.elapsed());
 
-    if (QQmlProfilerService::enabled) {
-        QQmlProfilerService::sceneGraphFrame(
-                    QQmlProfilerService::SceneGraphContextFrame,
-                    qsg_renderer_timer.nsecsElapsed());
-    }
+    Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphContextFrame, (
+            qsg_renderer_timer.nsecsElapsed()));
 #endif
 
     rewrittenShaders[type] = shader;
@@ -185,9 +186,8 @@ ShaderManager::Shader *ShaderManager::prepareMaterialNoRewrite(QSGMaterial *mate
         return shader;
 
     QSystraceEvent systrace("graphics", "ShaderManager::prepareMaterialNoRewrite");
-
-#ifndef QSG_NO_RENDER_TIMING
-    if (qsg_render_timing  || QQmlProfilerService::enabled)
+    #ifndef QSG_NO_RENDER_TIMING
+    if (qsg_render_timing  || QQuickProfiler::enabled)
         qsg_renderer_timer.start();
 #endif
 
@@ -207,11 +207,8 @@ ShaderManager::Shader *ShaderManager::prepareMaterialNoRewrite(QSGMaterial *mate
     if (qsg_render_timing)
         qDebug("   - compiling material: %dms", (int) qsg_renderer_timer.elapsed());
 
-    if (QQmlProfilerService::enabled) {
-        QQmlProfilerService::sceneGraphFrame(
-                    QQmlProfilerService::SceneGraphContextFrame,
-                    qsg_renderer_timer.nsecsElapsed());
-    }
+    Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphContextFrame, (
+            qsg_renderer_timer.nsecsElapsed()));
 #endif
 
     return shader;
@@ -1691,7 +1688,7 @@ void Renderer::uploadMergedElement(Element *e, int vaOffset, char **vertexData, 
     *indexCount += iCount;
 }
 
-const QMatrix4x4 &Renderer::matrixForRoot(Node *node)
+static QMatrix4x4 qsg_matrixForRoot(Node *node)
 {
     if (node->type() == QSGNode::TransformNodeType)
         return static_cast<QSGTransformNode *>(node->sgNode)->combinedMatrix();
@@ -1748,7 +1745,7 @@ void Renderer::uploadBatch(Batch *b)
                 if (iCount == 0)
                     iCount = eg->vertexCount();
                 // merged Triangle strips need to contain degenerate triangles at the beginning and end.
-                // One could save 2 ushorts here by ditching the the padding for the front of the
+                // One could save 2 ushorts here by ditching the padding for the front of the
                 // first and the end of the last, but for simplicity, we simply don't care.
                 if (g->drawingMode() == GL_TRIANGLE_STRIP)
                     iCount += sizeof(quint16);
@@ -2025,7 +2022,7 @@ void Renderer::renderMergedBatch(const Batch *batch)
     // We always have dirty matrix as all batches are at a unique z range.
     QSGMaterialShader::RenderState::DirtyStates dirty = QSGMaterialShader::RenderState::DirtyMatrix;
     if (batch->root)
-        m_current_model_view_matrix = matrixForRoot(batch->root);
+        m_current_model_view_matrix = qsg_matrixForRoot(batch->root);
     else
         m_current_model_view_matrix.setToIdentity();
     m_current_determinant = m_current_model_view_matrix.determinant();
@@ -2052,6 +2049,8 @@ void Renderer::renderMergedBatch(const Batch *batch)
 
     QSGMaterial *material = gn->activeMaterial();
     ShaderManager::Shader *sms = m_useDepthBuffer ? m_shaderManager->prepareMaterial(material) : m_shaderManager->prepareMaterialNoRewrite(material);
+    if (!sms)
+        return;
     QSGMaterialShader *program = sms->program;
 
     if (m_currentShader != sms)
@@ -2136,6 +2135,8 @@ void Renderer::renderUnmergedBatch(const Batch *batch)
 
     QSGMaterial *material = gn->activeMaterial();
     ShaderManager::Shader *sms = m_shaderManager->prepareMaterialNoRewrite(material);
+    if (!sms)
+        return;
     QSGMaterialShader *program = sms->program;
 
     if (sms != m_currentShader)
@@ -2154,7 +2155,7 @@ void Renderer::renderUnmergedBatch(const Batch *batch)
     char *iOffset = indexBase + batch->vertexCount * gn->geometry()->sizeOfVertex();
 #endif
 
-    QMatrix4x4 rootMatrix = batch->root ? matrixForRoot(batch->root) : QMatrix4x4();
+    QMatrix4x4 rootMatrix = batch->root ? qsg_matrixForRoot(batch->root) : QMatrix4x4();
 
     while (e) {
         gn = e->node;
@@ -2188,6 +2189,10 @@ void Renderer::renderUnmergedBatch(const Batch *batch)
 
         if (g->drawingMode() == GL_LINE_STRIP || g->drawingMode() == GL_LINE_LOOP || g->drawingMode() == GL_LINES)
             glLineWidth(g->lineWidth());
+#if !defined(QT_OPENGL_ES_2)
+        else if (!QOpenGLContext::currentContext()->isOpenGLES() && g->drawingMode() == GL_POINTS)
+            glPointSize(g->lineWidth());
+#endif
 
         if (g->indexCount())
             glDrawElements(g->drawingMode(), g->indexCount(), g->indexType(), iOffset);
@@ -2374,7 +2379,6 @@ void Renderer::render()
     cleanupBatches(&m_opaqueBatches);
     cleanupBatches(&m_alphaBatches);
 
-
     if (m_rebuild & BuildBatches) {
         prepareOpaqueBatches();
         prepareAlphaBatches();
@@ -2465,14 +2469,11 @@ void Renderer::renderRenderNode(Batch *batch)
 
     QSGNode *xform = e->renderNode->parent();
     QMatrix4x4 matrix;
-    QSGNode *root = rootNode();
-    if (e->root) {
-        matrix = matrixForRoot(e->root);
-        root = e->root->sgNode;
-    }
-    while (xform != root) {
+    while (xform != rootNode()) {
         if (xform->type() == QSGNode::TransformNodeType) {
-            matrix = matrix * static_cast<QSGTransformNode *>(xform)->combinedMatrix();
+            matrix = static_cast<QSGTransformNode *>(xform)->combinedMatrix();
+            if (e->root)
+                matrix = qsg_matrixForRoot(e->root) * matrix;
             break;
         }
         xform = xform->parent();

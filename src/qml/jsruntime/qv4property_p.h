@@ -42,7 +42,7 @@
 #define QV4PROPERTYDESCRIPTOR_H
 
 #include "qv4global_p.h"
-#include "qv4value_p.h"
+#include "qv4value_inl_p.h"
 #include "qv4internalclass_p.h"
 
 QT_BEGIN_NAMESPACE
@@ -52,13 +52,8 @@ namespace QV4 {
 struct FunctionObject;
 
 struct Property {
-    union {
-        Value value;
-        struct {
-            FunctionObject *get;
-            FunctionObject *set;
-        };
-    };
+    Value value;
+    Value set;
 
     // Section 8.10
     inline void fullyPopulated(PropertyAttributes *attrs) {
@@ -67,24 +62,12 @@ struct Property {
         }
         if (attrs->type() == PropertyAttributes::Accessor) {
             attrs->clearWritable();
-            if (get == (FunctionObject *)0x1)
-                get = 0;
-            if (set == (FunctionObject *)0x1)
-                set = 0;
+            if (value.isEmpty())
+                value = Primitive::undefinedValue();
+            if (set.isEmpty())
+                set = Primitive::undefinedValue();
         }
         attrs->resolve();
-    }
-
-    static inline Property fromValue(Value v) {
-        Property pd;
-        pd.value = v;
-        return pd;
-    }
-    static inline Property fromAccessor(FunctionObject *getter, FunctionObject *setter) {
-        Property pd;
-        pd.get = getter;
-        pd.set = setter;
-        return pd;
     }
 
     static Property genericDescriptor() {
@@ -96,10 +79,27 @@ struct Property {
     inline bool isSubset(const PropertyAttributes &attrs, const Property &other, PropertyAttributes otherAttrs) const;
     inline void merge(PropertyAttributes &attrs, const Property &other, PropertyAttributes otherAttrs);
 
-    inline FunctionObject *getter() const { return get; }
-    inline FunctionObject *setter() const { return set; }
-    inline void setGetter(FunctionObject *g) { get = g; }
-    inline void setSetter(FunctionObject *s) { set = s; }
+    inline FunctionObject *getter() const { return reinterpret_cast<FunctionObject *>(value.asManaged()); }
+    inline FunctionObject *setter() const { return reinterpret_cast<FunctionObject *>(set.asManaged()); }
+    inline void setGetter(FunctionObject *g) { value = Primitive::fromManaged(reinterpret_cast<Managed *>(g)); }
+    inline void setSetter(FunctionObject *s) { set = Primitive::fromManaged(reinterpret_cast<Managed *>(s)); }
+
+    void copy(const Property &other, PropertyAttributes attrs) {
+        value = other.value;
+        if (attrs.isAccessor())
+            set = other.set;
+    }
+
+    explicit Property()  { value = Encode::undefined(); set = Encode::undefined(); }
+    explicit Property(Value v) : value(v) { set = Encode::undefined(); }
+    Property(FunctionObject *getter, FunctionObject *setter) {
+        value = Primitive::fromManaged(reinterpret_cast<Managed *>(getter));
+        set = Primitive::fromManaged(reinterpret_cast<Managed *>(setter));
+    }
+    Property &operator=(Value v) { value = v; return *this; }
+private:
+    Property(const Property &);
+    Property &operator=(const Property &);
 };
 
 inline bool Property::isSubset(const PropertyAttributes &attrs, const Property &other, PropertyAttributes otherAttrs) const
@@ -115,9 +115,9 @@ inline bool Property::isSubset(const PropertyAttributes &attrs, const Property &
     if (attrs.type() == PropertyAttributes::Data && !value.sameValue(other.value))
         return false;
     if (attrs.type() == PropertyAttributes::Accessor) {
-        if (get != other.get)
+        if (value.asManaged() != other.value.asManaged())
             return false;
-        if (set != other.set)
+        if (set.asManaged() != other.set.asManaged())
             return false;
     }
     return true;
@@ -133,10 +133,10 @@ inline void Property::merge(PropertyAttributes &attrs, const Property &other, Pr
         attrs.setWritable(otherAttrs.isWritable());
     if (otherAttrs.type() == PropertyAttributes::Accessor) {
         attrs.setType(PropertyAttributes::Accessor);
-        if (other.get)
-            get = (other.get == (FunctionObject *)0x1) ? 0 : other.get;
-        if (other.set)
-            set = (other.set == (FunctionObject *)0x1) ? 0 : other.set;
+        if (!other.value.isEmpty())
+            value = other.value;
+        if (!other.set.isEmpty())
+            set = other.set;
     } else if (otherAttrs.type() == PropertyAttributes::Data){
         attrs.setType(PropertyAttributes::Data);
         value = other.value;
@@ -144,6 +144,8 @@ inline void Property::merge(PropertyAttributes &attrs, const Property &other, Pr
 }
 
 }
+
+Q_DECLARE_TYPEINFO(QV4::Property, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

@@ -50,12 +50,12 @@ namespace QV4 {
 
 struct ArgumentsGetterFunction: FunctionObject
 {
-    Q_MANAGED
+    V4_OBJECT
     uint index;
 
     ArgumentsGetterFunction(ExecutionContext *scope, uint index)
         : FunctionObject(scope), index(index) {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
 
     static ReturnedValue call(Managed *that, CallData *d);
@@ -63,12 +63,12 @@ struct ArgumentsGetterFunction: FunctionObject
 
 struct ArgumentsSetterFunction: FunctionObject
 {
-    Q_MANAGED
+    V4_OBJECT
     uint index;
 
     ArgumentsSetterFunction(ExecutionContext *scope, uint index)
         : FunctionObject(scope), index(index) {
-        setVTable(&static_vtbl);
+        setVTable(staticVTable());
     }
 
     static ReturnedValue call(Managed *that, CallData *callData);
@@ -76,18 +76,23 @@ struct ArgumentsSetterFunction: FunctionObject
 
 
 struct ArgumentsObject: Object {
-    Q_MANAGED
+    V4_OBJECT
+    Q_MANAGED_TYPE(ArgumentsObject)
     CallContext *context;
     bool fullyCreated;
-    QVector<SafeValue> mappedArguments;
+    Members mappedArguments;
     ArgumentsObject(CallContext *context);
     ~ArgumentsObject() {}
 
+    static bool isNonStrictArgumentsObject(Managed *m) {
+        return m->internalClass->vtable->type == Type_ArgumentsObject &&
+                !static_cast<ArgumentsObject *>(m)->context->strictMode;
+    }
 
     enum {
         LengthPropertyIndex = 0,
         CalleePropertyIndex = 1,
-        CallerPropertyIndex = 2
+        CallerPropertyIndex = 3
     };
     bool defineOwnProperty(ExecutionContext *ctx, uint index, const Property &desc, PropertyAttributes attrs);
     static ReturnedValue getIndexed(Managed *m, uint index, bool *hasProperty);

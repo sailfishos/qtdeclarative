@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtQml module of the Qt Toolkit.
@@ -39,8 +39,8 @@
 **
 ****************************************************************************/
 
-#ifndef QV8PROFILERSERVICE_P_H
-#define QV8PROFILERSERVICE_P_H
+#ifndef QQMLCONFIGURABLEDEBUGSERVICE_P_H
+#define QQMLCONFIGURABLEDEBUGSERVICE_P_H
 
 //
 //  W A R N I N G
@@ -53,64 +53,26 @@
 // We mean it.
 //
 
-#include <private/qqmldebugservice_p.h>
+#include "qqmldebugservice_p.h"
+#include "qqmldebugservice_p_p.h"
+
+#include <QMutex>
 
 QT_BEGIN_NAMESPACE
 
-
-struct Q_AUTOTEST_EXPORT QV8ProfilerData
-{
-    int messageType;
-    QString filename;
-    QString functionname;
-    int lineNumber;
-    double totalTime;
-    double selfTime;
-    int treeLevel;
-
-    QByteArray toByteArray() const;
-};
-
 class QQmlEngine;
-class QV8ProfilerServicePrivate;
 
-class Q_AUTOTEST_EXPORT QV8ProfilerService : public QQmlDebugService
+class QQmlConfigurableDebugServicePrivate : public QQmlDebugServicePrivate
 {
-    Q_OBJECT
+    Q_DECLARE_PUBLIC(QQmlConfigurableDebugService)
 public:
-    enum MessageType {
-        V8Entry,
-        V8Complete,
-        V8SnapshotChunk,
-        V8SnapshotComplete,
-        V8Started,
+    QQmlConfigurableDebugServicePrivate() : configMutex(QMutex::Recursive) {}
 
-        V8MaximumMessage
-    };
-
-    QV8ProfilerService(QObject *parent = 0);
-    ~QV8ProfilerService();
-
-    static QV8ProfilerService *instance();
-    static void initialize();
-
-public Q_SLOTS:
-    void startProfiling(const QString &title);
-    void stopProfiling(const QString &title);
-    void takeSnapshot();
-    void deleteSnapshots();
-
-    void sendProfilingData();
-
-protected:
-    void stateAboutToBeChanged(State state);
-    void messageReceived(const QByteArray &);
-
-private:
-    Q_DISABLE_COPY(QV8ProfilerService)
-    Q_DECLARE_PRIVATE(QV8ProfilerService)
+    QMutex configMutex;
+    QList<QQmlEngine *> waitingEngines;
+    bool waitingForConfiguration;
 };
 
 QT_END_NAMESPACE
 
-#endif // QV8PROFILERSERVICE_P_H
+#endif // QQMLCONFIGURABLEDEBUGSERVICE_P_H

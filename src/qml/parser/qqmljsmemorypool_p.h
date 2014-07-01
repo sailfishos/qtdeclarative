@@ -110,6 +110,8 @@ public:
         _ptr = _end = 0;
     }
 
+    template <typename _Tp> _Tp *New() { return new (this->allocate(sizeof(_Tp))) _Tp(); }
+
     template <typename PoolContentType, typename Visitor>
     void visitManagedPool(Visitor &visitor)
     {

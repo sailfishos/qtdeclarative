@@ -46,9 +46,10 @@
 #include "qqmlcompiler_p.h"
 #include "qqmlexpression_p.h"
 #include "qqmlmemoryprofiler_p.h"
+#include "qqmlobjectcreator_p.h"
 
-// XXX TODO 
-//   - check that the Component.onCompleted behavior is the same as 4.8 in the synchronous and 
+// XXX TODO
+//   - check that the Component.onCompleted behavior is the same as 4.8 in the synchronous and
 //     async if nested cases
 void QQmlEnginePrivate::incubate(QQmlIncubator &i, QQmlContextData *forContext)
 {
@@ -90,14 +91,14 @@ void QQmlEnginePrivate::incubate(QQmlIncubator &i, QQmlContextData *forContext)
         p->changeStatus(QQmlIncubator::Loading);
 
         if (!watcher.hasRecursed()) {
-            QQmlVME::Interrupt i;
+            QQmlInstantiationInterrupt i;
             p->incubate(i);
         }
     } else {
         incubatorList.insert(p.data());
         incubatorCount++;
 
-        p->vmeGuard.guard(&p->vme);
+        p->vmeGuard.guard(p->creator.data());
         p->changeStatus(QQmlIncubator::Loading);
 
         if (incubationController)
@@ -106,7 +107,7 @@ void QQmlEnginePrivate::incubate(QQmlIncubator &i, QQmlContextData *forContext)
 }
 
 /*!
-Sets the engine's incubation \a controller.  The engine can only have one active controller 
+Sets the engine's incubation \a controller.  The engine can only have one active controller
 and it does not take ownership of it.
 
 \sa incubationController()
@@ -133,7 +134,7 @@ QQmlIncubationController *QQmlEngine::incubationController() const
 
 QQmlIncubatorPrivate::QQmlIncubatorPrivate(QQmlIncubator *q, QQmlIncubator::IncubationMode m)
     : q(q), status(QQmlIncubator::Null), mode(m), isAsynchronous(false), progress(Execute),
-      result(0), compiledData(0), vme(this), waitingOnMe(0)
+      result(0), compiledData(0), waitingOnMe(0)
 {
 }
 
@@ -176,8 +177,12 @@ void QQmlIncubatorPrivate::clear()
             i->clear();
     }
 
-    vme.reset();
+    bool guardOk = vmeGuard.isOK();
+
     vmeGuard.clear();
+    if (creator && guardOk)
+        creator->clear();
+    creator.reset(0);
 }
 
 /*!
@@ -190,7 +195,7 @@ the process of creating objects a QQmlIncubators must be driven only during the
 application's idle time.  QQmlIncubationController allows the application to control
 exactly when, how often and for how long this processing occurs.
 
-A QQmlIncubationController derived instance should be created and set on a 
+A QQmlIncubationController derived instance should be created and set on a
 QQmlEngine by calling the QQmlEngine::setIncubationController() method.
 Processing is then controlled by calling the QQmlIncubationController::incubateFor()
 or QQmlIncubationController::incubateWhile() methods as dictated by the application's
@@ -200,12 +205,12 @@ For example, this is an example of a incubation controller that will incubate fo
 of 5 milliseconds out of every 16 milliseconds.
 
 \code
-class PeriodicIncubationController : public QObject, 
-                                     public QQmlIncubationController 
+class PeriodicIncubationController : public QObject,
+                                     public QQmlIncubationController
 {
 public:
-    PeriodicIncubationController() { 
-        startTimer(16); 
+    PeriodicIncubationController() {
+        startTimer(16);
     }
 
 protected:
@@ -217,7 +222,7 @@ protected:
 
 Although the previous example would work, it is not optimal.  Real world incubation
 controllers should try and maximize the amount of idle time they consume - rather
-than a static amount like 5 milliseconds - while not disturbing the application.  
+than a static amount like 5 milliseconds - while not disturbing the application.
 */
 
 /*!
@@ -253,7 +258,7 @@ int QQmlIncubationController::incubatingObjectCount() const
 }
 
 /*!
-Called when the number of incubating objects changes.  \a incubatingObjectCount is the 
+Called when the number of incubating objects changes.  \a incubatingObjectCount is the
 new number of incubating objects.
 
 The default implementation does nothing.
@@ -263,7 +268,7 @@ void QQmlIncubationController::incubatingObjectCountChanged(int incubatingObject
     Q_UNUSED(incubatingObjectCount);
 }
 
-void QQmlIncubatorPrivate::forceCompletion(QQmlVME::Interrupt &i)
+void QQmlIncubatorPrivate::forceCompletion(QQmlInstantiationInterrupt &i)
 {
     while (QQmlIncubator::Loading == status) {
         while (QQmlIncubator::Loading == status && !waitingFor.isEmpty())
@@ -273,7 +278,7 @@ void QQmlIncubatorPrivate::forceCompletion(QQmlVME::Interrupt &i)
     }
 }
 
-void QQmlIncubatorPrivate::incubate(QQmlVME::Interrupt &i)
+void QQmlIncubatorPrivate::incubate(QQmlInstantiationInterrupt &i)
 {
     if (!compiledData)
         return;
@@ -302,14 +307,17 @@ void QQmlIncubatorPrivate::incubate(QQmlVME::Interrupt &i)
 
     if (progress == QQmlIncubatorPrivate::Execute) {
         enginePriv->referenceScarceResources();
-        QObject *tresult = vme.execute(&errors, i);
+        QObject *tresult = 0;
+        tresult = creator->create(subComponentToCreate, /*parent*/0, &i);
+        if (!tresult)
+            errors = creator->errors;
         enginePriv->dereferenceScarceResources();
 
         if (watcher.hasRecursed())
             return;
 
         result = tresult;
-        if (errors.isEmpty() && result == 0) 
+        if (errors.isEmpty() && result == 0)
             goto finishIncubate;
 
         if (result) {
@@ -345,7 +353,8 @@ void QQmlIncubatorPrivate::incubate(QQmlVME::Interrupt &i)
             if (watcher.hasRecursed())
                 return;
 
-            QQmlContextData *ctxt = vme.complete(i);
+            QQmlContextData *ctxt = 0;
+            ctxt = creator->finalize(i);
             if (ctxt) {
                 rootContext = ctxt;
                 progress = QQmlIncubatorPrivate::Completed;
@@ -377,7 +386,7 @@ finishIncubate:
             }
         }
     } else {
-        vmeGuard.guard(&vme);
+        vmeGuard.guard(creator.data());
     }
 }
 
@@ -389,7 +398,7 @@ void QQmlIncubationController::incubateFor(int msecs)
     if (!d || !d->incubatorCount)
         return;
 
-    QQmlVME::Interrupt i(msecs * 1000000);
+    QQmlInstantiationInterrupt i(msecs * 1000000);
     i.reset();
     do {
         static_cast<QQmlIncubatorPrivate*>(d->incubatorList.first())->incubate(i);
@@ -398,7 +407,7 @@ void QQmlIncubationController::incubateFor(int msecs)
 
 /*!
 Incubate objects while the bool pointed to by \a flag is true, or until there are no
-more objects to incubate, or up to msecs if msecs is not zero.
+more objects to incubate, or up to \a msecs if \a msecs is not zero.
 
 Generally this method is used in conjunction with a thread or a UNIX signal that sets
 the bool pointed to by \a flag to false when it wants incubation to be interrupted.
@@ -408,7 +417,7 @@ void QQmlIncubationController::incubateWhile(volatile bool *flag, int msecs)
     if (!d || !d->incubatorCount)
         return;
 
-    QQmlVME::Interrupt i(flag, msecs * 1000000);
+    QQmlInstantiationInterrupt i(flag, msecs * 1000000);
     i.reset();
     do {
         static_cast<QQmlIncubatorPrivate*>(d->incubatorList.first())->incubate(i);
@@ -426,8 +435,8 @@ application uses QQmlComponent::create() directly, the QML object instance is cr
 synchronously which, depending on the complexity of the object,  can cause noticeable pauses or
 stutters in the application.
 
-The use of QQmlIncubator gives more control over the creation of a QML object, 
-including allowing it to be created asynchronously using application idle time.  The following 
+The use of QQmlIncubator gives more control over the creation of a QML object,
+including allowing it to be created asynchronously using application idle time.  The following
 example shows a simple use of QQmlIncubator.
 
 \code
@@ -441,25 +450,25 @@ while (incubator.isReady()) {
 QObject *object = incubator.object();
 \endcode
 
-Asynchronous incubators are controlled by a QQmlIncubationController that is 
+Asynchronous incubators are controlled by a QQmlIncubationController that is
 set on the QQmlEngine, which lets the engine know when the application is idle and
 incubating objects should be processed.  If an incubation controller is not set on the
 QQmlEngine, QQmlIncubator creates objects synchronously regardless of the
-specified IncubationMode.  
+specified IncubationMode.
 
 QQmlIncubator supports three incubation modes:
 \list
 \li Synchronous The creation occurs synchronously.  That is, once the
 QQmlComponent::create() call returns, the incubator will already be in either the
 Error or Ready state.  A synchronous incubator has no real advantage compared to using
-the synchronous creation methods on QQmlComponent directly, but it may simplify an 
-application's implementation to use the same API for both synchronous and asynchronous 
+the synchronous creation methods on QQmlComponent directly, but it may simplify an
+application's implementation to use the same API for both synchronous and asynchronous
 creations.
 
 \li Asynchronous (default) The creation occurs asynchronously, assuming a
-QQmlIncubatorController is set on the QQmlEngine.  
+QQmlIncubatorController is set on the QQmlEngine.
 
-The incubator will remain in the Loading state until either the creation is complete or an error 
+The incubator will remain in the Loading state until either the creation is complete or an error
 occurs.  The statusChanged() callback can be used to be notified of status changes.
 
 Applications should use the Asynchronous incubation mode to create objects that are not needed
@@ -469,31 +478,31 @@ the object is needed immediately the QQmlIncubator::forceCompletion() method can
 to complete the creation process synchronously.
 
 \li AsynchronousIfNested The creation will occur asynchronously if part of a nested asynchronous
-creation, or synchronously if not.  
+creation, or synchronously if not.
 
 In most scenarios where a QML component wants the appearance of a synchronous
-instantiation, it should use this mode.  
+instantiation, it should use this mode.
 
 This mode is best explained with an example.  When the ListView type is first created, it needs
-to populate itself with an initial set of delegates to show.  If the ListView was 400 pixels high, 
+to populate itself with an initial set of delegates to show.  If the ListView was 400 pixels high,
 and each delegate was 100 pixels high, it would need to create four initial delegate instances.  If
 the ListView used the Asynchronous incubation mode, the ListView would always be created empty and
 then, sometime later, the four initial items would appear.
 
-Conversely, if the ListView was to use the Synchronous incubation mode it would behave correctly 
-but it may introduce stutters into the application.  As QML would have to stop and instantiate the 
-ListView's delegates synchronously, if the ListView was part of a QML component that was being 
+Conversely, if the ListView was to use the Synchronous incubation mode it would behave correctly
+but it may introduce stutters into the application.  As QML would have to stop and instantiate the
+ListView's delegates synchronously, if the ListView was part of a QML component that was being
 instantiated asynchronously this would undo much of the benefit of asynchronous instantiation.
 
 The AsynchronousIfNested mode reconciles this problem.  By using AsynchronousIfNested, the ListView
 delegates are instantiated asynchronously if the ListView itself is already part of an asynchronous
 instantiation, and synchronously otherwise.  In the case of a nested asynchronous instantiation, the
 outer asynchronous instantiation will not complete until after all the nested instantiations have also
-completed.  This ensures that by the time the outer asynchronous instantitation completes, inner 
+completed.  This ensures that by the time the outer asynchronous instantitation completes, inner
 items like ListView have already completed loading their initial delegates.
 
 It is almost always incorrect to use the Synchronous incubation mode - elements or components that
-want the appearance of synchronous instantiation, but without the downsides of introducing freezes 
+want the appearance of synchronous instantiation, but without the downsides of introducing freezes
 or stutters into the application, should use the AsynchronousIfNested incubation mode.
 \endlist
 */
@@ -521,14 +530,14 @@ QQmlIncubator::~QQmlIncubator()
 /*!
 \enum QQmlIncubator::IncubationMode
 
-Specifies the mode the incubator operates in.  Regardless of the incubation mode, a 
+Specifies the mode the incubator operates in.  Regardless of the incubation mode, a
 QQmlIncubator will behave synchronously if the QQmlEngine does not have
 a QQmlIncubationController set.
 
 \value Asynchronous The object will be created asynchronously.
 \value AsynchronousIfNested If the object is being created in a context that is already part
-of an asynchronous creation, this incubator will join that existing incubation and execute 
-asynchronously.  The existing incubation will not become Ready until both it and this 
+of an asynchronous creation, this incubator will join that existing incubation and execute
+asynchronously.  The existing incubation will not become Ready until both it and this
 incubation have completed.  Otherwise, the incubation will execute synchronously.
 \value Synchronous The object will be created synchronously.
 */
@@ -545,7 +554,7 @@ Specifies the status of the QQmlIncubator.
 */
 
 /*!
-Clears the incubator.  Any in-progress incubation is aborted.  If the incubator is in the 
+Clears the incubator.  Any in-progress incubation is aborted.  If the incubator is in the
 Ready state, the created object is \b not deleted.
 */
 void QQmlIncubator::clear()
@@ -596,7 +605,7 @@ returns, the incubator will not be in the Loading state.
 */
 void QQmlIncubator::forceCompletion()
 {
-    QQmlVME::Interrupt i;
+    QQmlInstantiationInterrupt i;
     d->forceCompletion(i);
 }
 
@@ -678,7 +687,7 @@ void QQmlIncubator::statusChanged(Status status)
 }
 
 /*!
-Called after the object is first created, but before property bindings are
+Called after the \a object is first created, but before property bindings are
 evaluated and, if applicable, QQmlParserStatus::componentComplete() is
 called.  This is equivalent to the point between QQmlComponent::beginCreate()
 and QQmlComponent::endCreate(), and can be used to assign initial values
@@ -693,7 +702,7 @@ void QQmlIncubator::setInitialState(QObject *object)
 
 void QQmlIncubatorPrivate::changeStatus(QQmlIncubator::Status s)
 {
-    if (s == status) 
+    if (s == status)
         return;
 
     status = s;
@@ -703,13 +712,13 @@ void QQmlIncubatorPrivate::changeStatus(QQmlIncubator::Status s)
 
 QQmlIncubator::Status QQmlIncubatorPrivate::calculateStatus() const
 {
-    if (!errors.isEmpty()) 
+    if (!errors.isEmpty())
         return QQmlIncubator::Error;
     else if (result && progress == QQmlIncubatorPrivate::Completed && waitingFor.isEmpty())
         return QQmlIncubator::Ready;
     else if (compiledData)
         return QQmlIncubator::Loading;
-    else 
+    else
         return QQmlIncubator::Null;
 }
 
