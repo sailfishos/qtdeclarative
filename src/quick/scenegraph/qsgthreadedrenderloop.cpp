@@ -1108,7 +1108,7 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w)
         QQuickWindowPrivate::get(window)->flushDelayedTouchEvent();
         w = windowFor(m_windows, window);
     }
-    if (!w) {
+    if (!w || !w->thread || !w->thread->window) {
         QSG_GUI_DEBUG(w->window, " - removed after event flushing..");
         killTimer(w->timerId);
         w->timerId = 0;
