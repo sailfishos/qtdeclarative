@@ -50,6 +50,7 @@
 #include <private/qfinitestack_p.h>
 #include "qqmlprofilerdefinitions_p.h"
 #include "qqmlabstractprofileradapter_p.h"
+#include <private/qsystrace_p.h>
 
 #include <QUrl>
 #include <QString>
@@ -203,6 +204,7 @@ struct QQmlProfilerHelper : public QQmlProfilerDefinitions {
 struct QQmlBindingProfiler : public QQmlProfilerHelper {
     QQmlBindingProfiler(QQmlProfiler *profiler, const QV4::FunctionObject *function) :
         QQmlProfilerHelper(profiler)
+        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlBinding::") + url + QLatin1String("::") + QString::number(line)))
     {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileBinding, profiler,
                       startBinding(function->sourceLocation()));
@@ -213,11 +215,14 @@ struct QQmlBindingProfiler : public QQmlProfilerHelper {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileBinding, profiler,
                       endRange<Binding>());
     }
+
+    QSystraceEvent m_systraceEvent;
 };
 
 struct QQmlHandlingSignalProfiler : public QQmlProfilerHelper {
     QQmlHandlingSignalProfiler(QQmlProfiler *profiler, QQmlBoundSignalExpression *expression) :
         QQmlProfilerHelper(profiler)
+        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlHandlingSignal::") + expression->sourceLocation().sourceFile + QLatin1String("::") + QString::number(expression->sourceLocation().line)))
     {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileHandlingSignal, profiler,
                       startHandlingSignal(expression->sourceLocation()));
@@ -228,11 +233,14 @@ struct QQmlHandlingSignalProfiler : public QQmlProfilerHelper {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileHandlingSignal, profiler,
                       endRange<QQmlProfiler::HandlingSignal>());
     }
+
+    QSystraceEvent m_systraceEvent;
 };
 
 struct QQmlCompilingProfiler : public QQmlProfilerHelper {
     QQmlCompilingProfiler(QQmlProfiler *profiler, const QString &name) :
         QQmlProfilerHelper(profiler)
+        , m_systraceEvent("qml", qPrintable(QLatin1String("QQmlCompiling::") + name))
     {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileCompiling, profiler, startCompiling(name));
     }
@@ -241,6 +249,8 @@ struct QQmlCompilingProfiler : public QQmlProfilerHelper {
     {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileCompiling, profiler, endRange<Compiling>());
     }
+
+    QSystraceEvent m_systraceEvent;
 };
 
 struct QQmlVmeProfiler : public QQmlProfilerDefinitions {
@@ -277,7 +287,7 @@ public:
     }
 
     QQmlProfiler *profiler;
-
+    // TODO: trace?
 private:
     QFiniteStack<Data> ranges;
 };
@@ -289,6 +299,7 @@ class QQmlObjectCreationProfiler : public QQmlVmeProfiler::Data {
 public:
 
     QQmlObjectCreationProfiler(QQmlProfiler *profiler) : profiler(profiler)
+        , m_systraceEvent("qml", "QQmlObjectCreation") // TODO: can we track what kind of object?
     {
         Q_QML_PROFILE(QQmlProfilerDefinitions::ProfileCreating, profiler, startCreating());
     }
@@ -309,12 +320,14 @@ public:
 
 private:
     QQmlProfiler *profiler;
+    QSystraceEvent m_systraceEvent;
 };
 
 class QQmlObjectCompletionProfiler {
 public:
     QQmlObjectCompletionProfiler(QQmlVmeProfiler *parent) :
         profiler(parent->profiler)
+        , m_systraceEvent("qml", "QQmlObjectCompletion") // TODO: can we track what kind of object?
     {
         Q_QML_PROFILE_IF_ENABLED(QQmlProfilerDefinitions::ProfileCreating, profiler, {
             QQmlVmeProfiler::Data data = parent->pop();
@@ -329,6 +342,7 @@ public:
     }
 private:
     QQmlProfiler *profiler;
+    QSystraceEvent m_systraceEvent;
 };
 
 QT_END_NAMESPACE
