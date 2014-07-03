@@ -52,6 +52,7 @@
 #endif
 #include <QtCore/QThread>
 #include <QtGui/QGuiApplication>
+#include <private/qsystrace_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -263,6 +264,7 @@ bool QQuickContext2DTexture::canvasDestroyed()
 void QQuickContext2DTexture::paint(QQuickContext2DCommandBuffer *ccb)
 {
     QQuickContext2D::mutex.lock();
+    QSystraceEvent systrace("graphics", "QQuickContext2DTexture::paint");
     if (canvasDestroyed()) {
         delete ccb;
         QQuickContext2D::mutex.unlock();
