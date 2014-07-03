@@ -57,6 +57,7 @@
 
 #include <private/qquickprofiler_p.h>
 #include "qsgmaterialshader_p.h"
+#include <private/qsystrace_p.h>
 
 #include <algorithm>
 
@@ -140,6 +141,9 @@ ShaderManager::Shader *ShaderManager::prepareMaterial(QSGMaterial *material)
 
     if (QSG_LOG_TIME_COMPILATION().isDebugEnabled())
         qsg_renderer_timer.start();
+
+    QSystraceEvent systrace("graphics", "ShaderManager::prepareMaterial");
+
     Q_QUICK_SG_PROFILE_START(QQuickProfiler::SceneGraphContextFrame);
 
     QSGMaterialShader *s = material->createShader();
@@ -186,6 +190,9 @@ ShaderManager::Shader *ShaderManager::prepareMaterialNoRewrite(QSGMaterial *mate
 
     if (QSG_LOG_TIME_COMPILATION().isDebugEnabled())
         qsg_renderer_timer.start();
+
+    QSystraceEvent systrace("graphics", "ShaderManager::prepareMaterialNoRewrite");
+
     Q_QUICK_SG_PROFILE_START(QQuickProfiler::SceneGraphContextFrame);
 
     QSGMaterialShader *s = static_cast<QSGMaterialShader *>(material->createShader());

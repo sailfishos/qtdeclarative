@@ -51,6 +51,7 @@
 #include <private/qqmlprofiler_p.h>
 #include <private/qqmldebugconnector_p.h>
 #include <private/qqmldebugserviceinterfaces_p.h>
+#include <private/qsystrace_p.h>
 #include "qqmlinfo.h"
 
 #include <private/qjsvalue_p.h>
@@ -352,6 +353,7 @@ void QQmlBoundSignal_callback(QQmlNotifierEndpoint *e, void **a)
     QQmlEngine *engine;
     if (s->m_expression && (engine = s->m_expression->engine())) {
         QQmlHandlingSignalProfiler prof(QQmlEnginePrivate::get(engine)->profiler, s->m_expression);
+        QSystraceEvent trace("qml", "QQmlBoundSignal::callback");
         s->m_expression->evaluate(a);
         if (s->m_expression && s->m_expression->hasError()) {
             QQmlEnginePrivate::warning(engine, s->m_expression->error(engine));
