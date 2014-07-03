@@ -68,14 +68,12 @@
 #include <QHash>
 #endif
 
+static QElapsedTimer qsg_renderer_timer;
+
 #ifndef QT_NO_DEBUG
 static bool qsg_leak_check = !qgetenv("QML_LEAK_CHECK").isEmpty();
 #endif
 
-#ifndef QSG_NO_RENDER_TIMING
-static bool qsg_render_timing = !qgetenv("QSG_RENDER_TIMING").isEmpty();
-static QElapsedTimer qsg_renderer_timer;
-#endif
 
 #ifndef GL_BGRA
 #define GL_BGRA 0x80E1
@@ -621,11 +619,9 @@ void QSGPlainTexture::bind()
 
     m_dirty_texture = false;
 
-#ifndef QSG_NO_RENDER_TIMING
-    bool profileFrames = qsg_render_timing || QQuickProfiler::enabled;
+    bool profileFrames = QSG_LOG_TIME_TEXTURE().isDebugEnabled() || QQuickProfiler::enabled;
     if (profileFrames)
         qsg_renderer_timer.start();
-#endif
 
     QSystrace::begin("graphics", "QSGPlainTexture::bind", "");
 
@@ -633,16 +629,12 @@ void QSGPlainTexture::bind()
         if (m_texture_id && m_owns_texture) {
             QSystraceEvent trace_bind("graphics", "QSGPlainTexture::delete");
             glDeleteTextures(1, &m_texture_id);
-#ifndef QSG_NO_RENDER_TIMING
-            if (qsg_render_timing) {
-                qDebug("   - texture deleted in %dms (size: %dx%d)",
-                       (int) qsg_renderer_timer.elapsed(),
-                       m_texture_size.width(),
-                       m_texture_size.height());
-            }
+            qCDebug(QSG_LOG_TIME_TEXTURE, "plain texture deleted in %dms - %dx%d",
+                    (int) qsg_renderer_timer.elapsed(),
+                    m_texture_size.width(),
+                    m_texture_size.height());
             Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphTextureDeletion, (
                     qsg_renderer_timer.nsecsElapsed()));
-#endif
         }
         m_texture_id = 0;
         m_texture_size = QSize();
@@ -660,11 +652,9 @@ void QSGPlainTexture::bind()
 
     QSystrace::end("graphics", "QSGPlainTexture::bind", "");
 
-#ifndef QSG_NO_RENDER_TIMING
     qint64 bindTime = 0;
     if (profileFrames)
         bindTime = qsg_renderer_timer.nsecsElapsed();
-#endif
 
     QSystrace::begin("graphics", "QSGPlainTexture::convert", "");
 
@@ -680,11 +670,9 @@ void QSGPlainTexture::bind()
 
     QSystrace::end("graphics", "QSGPlainTexture::convert", "");
 
-#ifndef QSG_NO_RENDER_TIMING
     qint64 convertTime = 0;
     if (profileFrames)
         convertTime = qsg_renderer_timer.nsecsElapsed();
-#endif
 
     QSystrace::begin("graphics", "QSGPlainTexture::swizzle", "");
 
@@ -726,20 +714,15 @@ void QSGPlainTexture::bind()
     QSystrace::end("graphics", "QSGPlainTexture::swizzle", "");
     QSystrace::begin("graphics", "QSGPlainTexture::upload", "");
 
-#ifndef QSG_NO_RENDER_TIMING
     qint64 swizzleTime = 0;
     if (profileFrames)
         swizzleTime = qsg_renderer_timer.nsecsElapsed();
-#endif
+
     glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, w, h, 0, externalFormat, GL_UNSIGNED_BYTE, tmp.constBits());
 
-    QSystrace::end("graphics", "QSGPlainTexture::upload", "");
-
-#ifndef QSG_NO_RENDER_TIMING
     qint64 uploadTime = 0;
     if (profileFrames)
         uploadTime = qsg_renderer_timer.nsecsElapsed();
-#endif
 
     QSystrace::begin("graphics", "QSGPlainTexture::mipmap", "");
 
@@ -749,23 +732,20 @@ void QSGPlainTexture::bind()
     }
 
     QSystrace::end("graphics", "QSGPlainTexture::mipmap", "");
-
-#ifndef QSG_NO_RENDER_TIMING
     qint64 mipmapTime = 0;
-    if (qsg_render_timing) {
+    if (profileFrames) {
         mipmapTime = qsg_renderer_timer.nsecsElapsed();
-
-        qDebug("   - plaintexture(%dx%d) bind=%d, convert=%d, swizzle=%d (%s->%s), upload=%d, mipmap=%d, total=%d",
-               m_texture_size.width(), m_texture_size.height(),
-               int(bindTime/1000000),
-               int((convertTime - bindTime)/1000000),
-               int((swizzleTime - convertTime)/1000000),
-               externalFormat == GL_BGRA ? "BGRA" : "RGBA",
-               internalFormat == GL_BGRA ? "BGRA" : "RGBA",
-               int((uploadTime - swizzleTime)/1000000),
-               int((mipmapTime - uploadTime)/1000000),
-               (int) qsg_renderer_timer.elapsed());
-
+        qCDebug(QSG_LOG_TIME_TEXTURE,
+                "plain texture uploaded in: %dms (%dx%d), bind=%d, convert=%d, swizzle=%d (%s->%s), upload=%d, mipmap=%d",
+                int(mipmapTime / 1000000),
+                m_texture_size.width(), m_texture_size.height(),
+                int(bindTime / 1000000),
+                int((convertTime - bindTime)/1000000),
+                int((swizzleTime - convertTime)/1000000),
+                (externalFormat == GL_BGRA ? "BGRA" : "RGBA"),
+                (internalFormat == GL_BGRA ? "BGRA" : "RGBA"),
+                int((uploadTime - swizzleTime)/1000000),
+                int((mipmapTime - uploadTime)/1000000));
     }
 
     Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphTexturePrepare, (
@@ -774,9 +754,6 @@ void QSGPlainTexture::bind()
             swizzleTime - convertTime,
             uploadTime - swizzleTime,
             qsg_renderer_timer.nsecsElapsed() - uploadTime));
-
-#endif
-
 
     m_texture_size = QSize(w, h);
     m_texture_rect = QRectF(0, 0, 1, 1);

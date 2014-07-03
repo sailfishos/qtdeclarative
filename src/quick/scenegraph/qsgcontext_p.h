@@ -44,6 +44,7 @@
 
 #include <QtCore/QObject>
 #include <QtCore/qabstractanimation.h>
+#include <QtCore/QLoggingCategory>
 
 #include <QtGui/QImage>
 #include <QtGui/QSurfaceFormat>
@@ -79,6 +80,14 @@ class QQuickTextureFactory;
 class QSGDistanceFieldGlyphCacheManager;
 class QSGContext;
 
+Q_DECLARE_LOGGING_CATEGORY(QSG_LOG_TIME_RENDERLOOP)
+Q_DECLARE_LOGGING_CATEGORY(QSG_LOG_TIME_COMPILATION)
+Q_DECLARE_LOGGING_CATEGORY(QSG_LOG_TIME_TEXTURE)
+Q_DECLARE_LOGGING_CATEGORY(QSG_LOG_TIME_GLYPH)
+Q_DECLARE_LOGGING_CATEGORY(QSG_LOG_TIME_RENDERER)
+
+Q_DECLARE_LOGGING_CATEGORY(QSG_LOG_INFO)
+Q_DECLARE_LOGGING_CATEGORY(QSG_LOG_RENDERLOOP)
 
 class Q_QUICK_PRIVATE_EXPORT QSGRenderContext : public QObject
 {

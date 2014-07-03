@@ -60,7 +60,6 @@
 
 QT_BEGIN_NAMESPACE
 
-DEFINE_BOOL_CONFIG_OPTION(qsg_render_timing, QSG_RENDER_TIMING)
 
 extern Q_GUI_EXPORT QImage qt_gl_read_framebuffer(const QSize &size, bool alpha_format, bool include_alpha);
 
@@ -158,14 +157,16 @@ bool QSGRenderLoop::useConsistentTiming()
 QSGRenderLoop *QSGRenderLoop::instance()
 {
     if (!s_instance) {
-        s_instance = QSGContext::createWindowManager();
 
-        bool info = qEnvironmentVariableIsSet("QSG_INFO");
+        // For compatibility with 5.3 and earlier's QSG_INFO environment variables
+        if (qEnvironmentVariableIsSet("QSG_INFO"))
+            ((QLoggingCategory &) QSG_LOG_INFO()).setEnabled(QtDebugMsg, true);
+
+        s_instance = QSGContext::createWindowManager();
 
         if (useConsistentTiming()) {
             QUnifiedTimer::instance(true)->setConsistentTiming(true);
-            if (info)
-                qDebug() << "QSG: using fixed animation steps";
+            qCDebug(QSG_LOG_INFO, "using fixed animation steps");
         }
 
         if (!s_instance) {
@@ -199,15 +200,15 @@ QSGRenderLoop *QSGRenderLoop::instance()
 
             switch (loopType) {
             case ThreadedRenderLoop:
-                if (info) qDebug() << "QSG: threaded render loop";
+                qCDebug(QSG_LOG_INFO, "threaded render loop");
                 s_instance = new QSGThreadedRenderLoop();
                 break;
             case WindowsRenderLoop:
-                if (info) qDebug() << "QSG: windows render loop";
+                qCDebug(QSG_LOG_INFO, "windows render loop");
                 s_instance = new QSGWindowsRenderLoop();
                 break;
             default:
-                if (info) qDebug() << "QSG: basic render loop";
+                qCDebug(QSG_LOG_INFO, "QSG: basic render loop");
                 s_instance = new QSGGuiThreadRenderLoop();
                 break;
             }
@@ -324,11 +325,16 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
     }
     cd->polishItems();
 
-    qint64 renderTime = 0, syncTime = 0;
     QElapsedTimer renderTimer;
-    bool profileFrames = qsg_render_timing()  || QQuickProfiler::enabled;
+    qint64 renderTime = 0, syncTime = 0, polishTime = 0;
+    bool profileFrames = QSG_LOG_TIME_RENDERLOOP().isDebugEnabled() || QQuickProfiler::enabled;
     if (profileFrames)
         renderTimer.start();
+
+    cd->polishItems();
+
+    if (profileFrames)
+        polishTime = renderTimer.nsecsElapsed();
 
     cd->syncSceneGraph();
 
@@ -338,7 +344,7 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
     cd->renderSceneGraph(window->size());
 
     if (profileFrames)
-        renderTime = renderTimer.nsecsElapsed() - syncTime;
+        renderTime = renderTimer.nsecsElapsed();
 
     if (data.grabOnly) {
         grabContent = qt_gl_read_framebuffer(window->size(), false, false);
@@ -351,23 +357,25 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
     }
 
     qint64 swapTime = 0;
-    if (profileFrames) {
-        swapTime = renderTimer.nsecsElapsed() - renderTime - syncTime;
-    }
+    if (profileFrames)
+        swapTime = renderTimer.nsecsElapsed() - renderTime;
 
-    if (qsg_render_timing()) {
+    if (QSG_LOG_TIME_RENDERLOOP().isDebugEnabled()) {
         static QTime lastFrameTime = QTime::currentTime();
-        qDebug() << "- Breakdown of frame time; sync:" << syncTime/1000000
-                 << "ms render:" << renderTime/1000000 << "ms swap:" << swapTime/1000000
-                 << "ms total:" << (swapTime + renderTime + syncTime)/1000000
-                 << "ms time since last frame:" << (lastFrameTime.msecsTo(QTime::currentTime()))
-                 << "ms";
+        qCDebug(QSG_LOG_TIME_RENDERLOOP,
+                "Frame rendered with 'basic' renderloop in %dms, polish=%d, sync=%d, render=%d, swap=%d, frameDelta=%d",
+                int(swapTime / 1000000),
+                int(polishTime / 1000000),
+                int((syncTime - polishTime) / 1000000),
+                int((renderTime - syncTime) / 1000000),
+                int((swapTime - renderTime) / 10000000),
+                int(lastFrameTime.msecsTo(QTime::currentTime())));
         lastFrameTime = QTime::currentTime();
     }
 
     Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphRenderLoopFrame, (
             syncTime,
-            renderTime,
+            renderTime - syncTime,
             swapTime));
 
     // Might have been set during syncSceneGraph()

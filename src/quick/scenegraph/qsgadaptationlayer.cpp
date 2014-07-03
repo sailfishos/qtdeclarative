@@ -44,6 +44,7 @@
 #include <qmath.h>
 #include <QtQuick/private/qsgdistancefieldutil_p.h>
 #include <QtQuick/private/qsgdistancefieldglyphnode_p.h>
+#include <QtQuick/private/qsgcontext_p.h>
 #include <private/qrawfont_p.h>
 #include <QtGui/qguiapplication.h>
 #include <qdir.h>
@@ -54,10 +55,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QSG_NO_RENDER_TIMING
-static bool qsg_render_timing = !qgetenv("QSG_RENDER_TIMING").isEmpty();
 static QElapsedTimer qsg_render_timer;
-#endif
 
 QSGDistanceFieldGlyphCache::Texture QSGDistanceFieldGlyphCache::s_emptyTexture;
 
@@ -164,11 +162,9 @@ void QSGDistanceFieldGlyphCache::update()
     if (m_pendingGlyphs.isEmpty())
         return;
 
-#ifndef QSG_NO_RENDER_TIMING
-    bool profileFrames = qsg_render_timing || QQuickProfiler::enabled;
+    bool profileFrames = QSG_LOG_TIME_GLYPH().isDebugEnabled() || QQuickProfiler::enabled;
     if (profileFrames)
         qsg_render_timer.start();
-#endif
     QSystrace::begin("graphics", "QSGDFGC::update::render", "");
 
     QList<QDistanceField> distanceFields;
@@ -178,12 +174,10 @@ void QSGDistanceFieldGlyphCache::update()
                                              m_doubleGlyphResolution));
     }
 
-#ifndef QSG_NO_RENDER_TIMING
     qint64 renderTime = 0;
     int count = m_pendingGlyphs.size();
     if (profileFrames)
         renderTime = qsg_render_timer.nsecsElapsed();
-#endif
 
     QSystrace::end("graphics", "QSGDFGC::update::render", "");
 
@@ -194,20 +188,19 @@ void QSGDistanceFieldGlyphCache::update()
     storeGlyphs(distanceFields);
     QSystrace::end("graphics", "QSGDFGC::update::store", "");
 
-#ifndef QSG_NO_RENDER_TIMING
-    if (qsg_render_timing) {
-        qDebug("   - glyphs: count=%d, render=%d, store=%d, total=%d",
-               count,
-               int(renderTime/1000000),
-               (int) qsg_render_timer.elapsed() - int(renderTime/1000000),
-               (int) qsg_render_timer.elapsed());
-
+    if (QSG_LOG_TIME_GLYPH().isDebugEnabled()) {
+        quint64 now = qsg_render_timer.elapsed();
+        qCDebug(QSG_LOG_TIME_GLYPH,
+                "distancefield: %d glyphs prepared in %dms, rendering=%d, upload=%d",
+                count,
+                (int) now,
+                int(renderTime / 1000000),
+                int((now - (renderTime / 1000000))));
     }
     Q_QUICK_SG_PROFILE1(QQuickProfiler::SceneGraphAdaptationLayerFrame, (
             count,
             renderTime,
             qsg_render_timer.nsecsElapsed() - renderTime));
-#endif
 }
 
 void QSGDistanceFieldGlyphCache::setGlyphsPosition(const QList<GlyphPosition> &glyphs)
