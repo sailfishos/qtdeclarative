@@ -724,6 +724,7 @@ void QSGPlainTexture::bind()
     if (profileFrames)
         uploadTime = qsg_renderer_timer.nsecsElapsed();
 
+    QSystrace::end("graphics",  "QSGPlainTexture::upload",  "");
     QSystrace::begin("graphics", "QSGPlainTexture::mipmap", "");
 
     if (m_has_mipmaps) {
