@@ -54,6 +54,7 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qquickwindow_p.h>
 #include <private/qguiapplication_p.h>
+#include <QRunnable>
 
 struct TouchEventData {
     QEvent::Type type;
@@ -351,6 +352,8 @@ private slots:
 #ifndef QT_NO_CURSOR
     void cursor();
 #endif
+
+    void testRenderJob();
 
 private:
     QTouchDevice *touchDevice;
@@ -1671,6 +1674,58 @@ void tst_qquickwindow::qobjectEventFilter_mouse()
 
     // clean up mouse press state for the next tests
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, point);
+}
+
+class RenderJob : public QRunnable
+{
+public:
+    RenderJob(QQuickWindow::RenderStage s, QList<QQuickWindow::RenderStage> *l) : stage(s), list(l) { }
+    ~RenderJob() { ++deleted; }
+    QQuickWindow::RenderStage stage;
+    QList<QQuickWindow::RenderStage> *list;
+    void run() {
+        list->append(stage);
+    }
+    static int deleted;
+};
+
+int RenderJob::deleted = 0;
+
+void tst_qquickwindow::testRenderJob()
+{
+    QList<QQuickWindow::RenderStage> completedJobs;
+
+    QQuickWindow window;
+
+    QQuickWindow::RenderStage stages[] = {
+        QQuickWindow::BeforeSynchronizingStage,
+        QQuickWindow::AfterSynchronizingStage,
+        QQuickWindow::BeforeRenderingStage,
+        QQuickWindow::AfterRenderingStage,
+        QQuickWindow::AfterSwapStage
+    };
+    // Schedule the jobs
+    for (int i=0; i<5; ++i)
+        window.scheduleRenderJob(new RenderJob(stages[i], &completedJobs), stages[i]);
+    window.show();
+
+    QTRY_COMPARE(completedJobs.size(), 5);
+
+    for (int i=0; i<5; ++i) {
+        QCOMPARE(completedJobs.at(i), stages[i]);
+    }
+
+    // Verify that jobs are deleted when window has not been rendered at all...
+    completedJobs.clear();
+    RenderJob::deleted = 0;
+    {
+        QQuickWindow window2;
+        for (int i=0; i<5; ++i) {
+            window2.scheduleRenderJob(new RenderJob(stages[i], &completedJobs), stages[i]);
+        }
+    }
+    QCOMPARE(completedJobs.size(), 0);
+    QCOMPARE(RenderJob::deleted, 5);
 }
 
 QTEST_MAIN(tst_qquickwindow)
