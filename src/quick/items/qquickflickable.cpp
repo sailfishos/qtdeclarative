@@ -2059,6 +2059,7 @@ bool QQuickFlickable::sendMouseEvent(QQuickItem *item, QMouseEvent *event)
             break;
         case QEvent::MouseButtonRelease:
             d->handleMouseReleaseEvent(mouseEvent.data());
+            stealThisEvent = d->stealMouse;
             break;
         default:
             break;
