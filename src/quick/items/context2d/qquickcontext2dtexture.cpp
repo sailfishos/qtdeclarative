@@ -91,6 +91,8 @@ struct GLAcquireContext {
 
 QQuickContext2DTexture::QQuickContext2DTexture()
     : m_context(0)
+    , m_gl(0)
+    , m_surface(0)
     , m_item(0)
     , m_canvasWindowChanged(false)
     , m_dirtyTexture(false)
@@ -147,8 +149,12 @@ void QQuickContext2DTexture::setAntialiasing(bool antialiasing)
 void QQuickContext2DTexture::setItem(QQuickCanvasItem* item)
 {
     m_item = item;
-    m_context = (QQuickContext2D*)item->rawContext(); // FIXME
-    m_state = m_context->state;
+    if (m_item) {
+        m_context = (QQuickContext2D*) item->rawContext(); // FIXME
+        m_state = m_context->state;
+    } else {
+        m_context = 0;
+    }
 }
 
 bool QQuickContext2DTexture::setCanvasWindow(const QRect& r)
@@ -241,12 +247,15 @@ bool QQuickContext2DTexture::canvasDestroyed()
 void QQuickContext2DTexture::paint(QQuickContext2DCommandBuffer *ccb)
 {
     QSystraceEvent systrace("graphics", "QQuickContext2DTexture::paint");
+    QQuickContext2D::mutex.lock();
     if (canvasDestroyed()) {
         delete ccb;
+        QQuickContext2D::mutex.unlock();
         return;
     }
+    QQuickContext2D::mutex.unlock();
 
-    GLAcquireContext currentContext(m_context->glContext(), m_context->surface());
+    GLAcquireContext currentContext(m_gl, m_surface);
 
     if (!m_tiledCanvas) {
         paintWithoutTiles(ccb);
@@ -437,7 +446,7 @@ QSGTexture *QQuickContext2DFBOTexture::textureForNextFrame(QSGTexture *lastTextu
         }
 
         if (m_dirtyTexture) {
-            if (!m_context->glContext()) {
+            if (!m_gl) {
                 // on a rendering thread, use the fbo directly...
                 texture->setTextureId(m_fbo->texture());
             } else {
@@ -495,18 +504,18 @@ bool QQuickContext2DFBOTexture::doMultisampling() const
 void QQuickContext2DFBOTexture::grabImage(const QRectF& rf)
 {
     Q_ASSERT(rf.isValid());
-    if (!m_fbo) {
-        m_context->setGrabbedImage(QImage());
-        return;
+    QQuickContext2D::mutex.lock();
+    if (m_context) {
+        if (!m_fbo) {
+            m_context->setGrabbedImage(QImage());
+        } else {
+            QImage grabbed;
+            GLAcquireContext ctx(m_gl, m_surface);
+            grabbed = m_fbo->toImage().mirrored().copy(rf.toRect());
+            m_context->setGrabbedImage(grabbed);
+        }
     }
-
-    QImage grabbed;
-    {
-        GLAcquireContext ctx(m_context->glContext(), m_context->surface());
-        grabbed = m_fbo->toImage().mirrored().copy(rf.toRect());
-    }
-
-    m_context->setGrabbedImage(grabbed);
+    QQuickContext2D::mutex.unlock();
 }
 
 void QQuickContext2DFBOTexture::compositeTile(QQuickContext2DTile* tile)
@@ -589,7 +598,7 @@ void QQuickContext2DFBOTexture::endPainting()
     if (m_multisampledFbo)
         QOpenGLFramebufferObject::blitFramebuffer(m_fbo, m_multisampledFbo);
 
-    if (m_context->glContext()) {
+    if (m_gl) {
         /* When rendering happens on the render thread, the fbo's texture is
          * used directly for display. If we are on the GUI thread or a
          * dedicated Canvas render thread, we need to decouple the FBO from
@@ -644,9 +653,12 @@ QQuickContext2DTile* QQuickContext2DImageTexture::createTile() const
 void QQuickContext2DImageTexture::grabImage(const QRectF& rf)
 {
     Q_ASSERT(rf.isValid());
-    Q_ASSERT(m_context);
-    QImage grabbed = m_displayImage.copy(rf.toRect());
-    m_context->setGrabbedImage(grabbed);
+    QQuickContext2D::mutex.lock();
+    if (m_context) {
+        QImage grabbed = m_displayImage.copy(rf.toRect());
+        m_context->setGrabbedImage(grabbed);
+    }
+    QQuickContext2D::mutex.unlock();
 }
 
 QSGTexture *QQuickContext2DImageTexture::textureForNextFrame(QSGTexture *last)
