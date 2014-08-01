@@ -237,6 +237,15 @@ public:
     static QObject *data_at(QQmlListProperty<QObject> *, int);
     static void data_clear(QQmlListProperty<QObject> *);
 
+    QMutex renderJobMutex;
+    QList<QRunnable *> beforeSynchronizingJobs;
+    QList<QRunnable *> afterSynchronizingJobs;
+    QList<QRunnable *> beforeRenderingJobs;
+    QList<QRunnable *> afterRenderingJobs;
+    QList<QRunnable *> afterSwapJobs;
+
+    void runAndClearJobs(QList<QRunnable *> *jobs);
+
 private:
     static void cleanupNodesOnShutdown(QQuickItem *);
 };

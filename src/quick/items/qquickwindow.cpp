@@ -65,6 +65,7 @@
 #include <QtGui/qstylehints.h>
 #include <QtCore/qvarlengtharray.h>
 #include <QtCore/qabstractanimation.h>
+#include <QtCore/QRunnable>
 #include <QtQml/qqmlincubator.h>
 
 #include <QtQuick/private/qquickpixmapcache_p.h>
@@ -331,6 +332,7 @@ void QQuickWindowPrivate::syncSceneGraph()
     animationController->beforeNodeSync();
 
     emit q->beforeSynchronizing();
+    runAndClearJobs(&beforeSynchronizingJobs);
     if (!renderer) {
         forceUpdate(contentItem);
 
@@ -351,6 +353,7 @@ void QQuickWindowPrivate::syncSceneGraph()
         mode |= QSGRenderer::ClearColorBuffer;
     renderer->setClearMode(mode);
 
+    runAndClearJobs(&afterSynchronizingJobs);
     context->endSync();
 }
 
@@ -361,6 +364,7 @@ void QQuickWindowPrivate::renderSceneGraph(const QSize &size)
     Q_Q(QQuickWindow);
     animationController->advance();
     emit q->beforeRendering();
+    runAndClearJobs(&beforeRenderingJobs);
     int fboId = 0;
     const qreal devicePixelRatio = q->devicePixelRatio();
     renderer->setDeviceRect(QRect(QPoint(0, 0), size * devicePixelRatio));
@@ -375,6 +379,7 @@ void QQuickWindowPrivate::renderSceneGraph(const QSize &size)
 
     context->renderNextFrame(renderer, fboId);
     emit q->afterRendering();
+    runAndClearJobs(&afterRenderingJobs);
 }
 
 QQuickWindowPrivate::QQuickWindowPrivate()
@@ -444,6 +449,8 @@ void QQuickWindowPrivate::init(QQuickWindow *c)
 
     QObject::connect(q, SIGNAL(focusObjectChanged(QObject*)), q, SIGNAL(activeFocusItemChanged()));
     QObject::connect(q, SIGNAL(screenChanged(QScreen*)), q, SLOT(forcePolish()));
+
+    QObject::connect(q, SIGNAL(frameSwapped()), q, SLOT(runJobsAfterSwap()), Qt::DirectConnection);
 }
 
 /*!
@@ -1062,6 +1069,19 @@ QQuickWindow::~QQuickWindow()
     delete d->dragGrabber; d->dragGrabber = 0;
 #endif
     delete d->contentItem; d->contentItem = 0;
+
+    d->renderJobMutex.lock();
+    qDeleteAll(d->beforeSynchronizingJobs);
+    d->beforeSynchronizingJobs.clear();
+    qDeleteAll(d->afterSynchronizingJobs);
+    d->afterSynchronizingJobs.clear();
+    qDeleteAll(d->beforeRenderingJobs);
+    d->beforeRenderingJobs.clear();
+    qDeleteAll(d->afterRenderingJobs);
+    d->afterRenderingJobs.clear();
+    qDeleteAll(d->afterSwapJobs);
+    d->afterSwapJobs.clear();
+    d->renderJobMutex.unlock();
 }
 
 /*!
@@ -1754,9 +1774,11 @@ void QQuickWindowPrivate::flushDelayedTouchEvent()
         delete delayedTouch;
         delayedTouch = 0;
 
-        // To flush pending meta-calls triggered from the recently flushed touch events.
-        // This is safe because flushDelayedEvent is only called from eventhandlers.
-        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        // Touch events which constantly start animations (such as a behavior tracking
+        // the mouse point) need animations to start.
+        QQmlAnimationTimer *ut = QQmlAnimationTimer::instance();
+        if (ut && ut->hasStartAnimationPending())
+            ut->startAnimations();
     }
 }
 
@@ -2710,8 +2732,13 @@ void QQuickWindow::cleanupSceneGraph()
 
     delete d->renderer->rootNode();
     delete d->renderer;
-
     d->renderer = 0;
+
+    d->runAndClearJobs(&d->beforeSynchronizingJobs);
+    d->runAndClearJobs(&d->afterSynchronizingJobs);
+    d->runAndClearJobs(&d->beforeRenderingJobs);
+    d->runAndClearJobs(&d->afterRenderingJobs);
+    d->runAndClearJobs(&d->afterSwapJobs);
 }
 
 void QQuickWindow::setTransientParent_helper(QQuickWindow *window)
@@ -2762,6 +2789,11 @@ QOpenGLContext *QQuickWindow::openglContext() const
     This signal implies that the opengl rendering context used
     has been invalidated and all user resources tied to that context
     should be released.
+
+    The OpenGL context of this window will be bound when this function
+    is called. The only exception is if the native OpenGL has been
+    destroyed outside Qt's control, for instance through
+    EGL_CONTEXT_LOST.
 
     This signal will be emitted from the scene graph rendering thread.
  */
@@ -3474,6 +3506,86 @@ void QQuickWindow::resetOpenGLState()
     In alert state, the window indicates that it demands attention, for example by
     flashing or bouncing the taskbar entry.
 */
+
+/*!
+    \enum QQuickWindow::RenderJobSchedule
+    \since 5.4
+
+    \value ScheduleBeforeSynchronizing Before synchronization.
+    \value ScheduleAfterSynchronizing After synchronization.
+    \value ScheduleBeforeRendering Before rendering.
+    \value ScheduleAfterRendering After rendering.
+    \value ScheduleAfterSwap After the frame is swapped.
+
+    \sa {Scene Graph and Rendering}
+ */
+
+/*!
+    \since 5.4
+
+    Schedule \a job to run when the rendering of this window reaches
+    the given \a stage.
+
+    This is a convenience to the equivalent signals in QQuickWindow for
+    "one shot" tasks.
+
+    The window takes ownership over \a job and will delete it when the
+    job is completed.
+
+    If rendering is shut down before \a job has a chance to run, the
+    job will be run and then deleted as part of the scene graph cleanup.
+    If the window is never shown and no rendering happens before the QQuickWindow
+    is destroyed, all pending jobs will be destroyed without their run()
+    method being called.
+
+    If the rendering is happening on a different thread, then the job
+    will happen on the rendering thread.
+
+    \note This function does not trigger rendering; the job
+    will be stored run until rendering is triggered elsewhere.
+    To force the job to run earlier, call QQuickWindow::update();
+
+    \sa beforeRendering(), afterRendering(), beforeSynchronizing(),
+    afterSynchronizing(), frameSwapped(), sceneGraphInvalidated()
+ */
+
+void QQuickWindow::scheduleRenderJob(QRunnable *job, RenderStage stage)
+{
+    Q_D(QQuickWindow);
+
+    d->renderJobMutex.lock();
+    if (stage == BeforeSynchronizingStage)
+        d->beforeSynchronizingJobs << job;
+    else if (stage == AfterSynchronizingStage)
+        d->afterSynchronizingJobs << job;
+    else if (stage == BeforeRenderingStage)
+        d->beforeRenderingJobs << job;
+    else if (stage == AfterRenderingStage)
+        d->afterRenderingJobs << job;
+    else if (stage == AfterSwapStage)
+        d->afterSwapJobs << job;
+    d->renderJobMutex.unlock();
+}
+
+void QQuickWindowPrivate::runAndClearJobs(QList<QRunnable *> *jobs)
+{
+    renderJobMutex.lock();
+    QList<QRunnable *> jobList = *jobs;
+    jobs->clear();
+    renderJobMutex.unlock();
+
+    foreach (QRunnable *r, jobList) {
+        r->run();
+        delete r;
+    }
+}
+
+void QQuickWindow::runJobsAfterSwap()
+{
+    Q_D(QQuickWindow);
+    d->runAndClearJobs(&d->afterSwapJobs);
+}
+
 
 #include "moc_qquickwindow.cpp"
 

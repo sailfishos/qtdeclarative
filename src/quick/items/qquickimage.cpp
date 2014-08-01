@@ -49,6 +49,7 @@
 
 #include <QtGui/qpainter.h>
 #include <qmath.h>
+#include <QtCore/QRunnable>
 
 QT_BEGIN_NAMESPACE
 
@@ -90,6 +91,14 @@ QQuickImagePrivate::QQuickImagePrivate()
     , provider(0)
 {
 }
+
+class QQuickImageCleanup : public QRunnable
+{
+public:
+    QQuickImageCleanup(QQuickImageTextureProvider *p) : provider(p) { }
+    void run() Q_DECL_OVERRIDE { delete provider; }
+    QQuickImageTextureProvider *provider;
+};
 
 /*!
     \qmltype Image
@@ -150,18 +159,24 @@ QQuickImagePrivate::QQuickImagePrivate()
 QQuickImage::QQuickImage(QQuickItem *parent)
     : QQuickImageBase(*(new QQuickImagePrivate), parent)
 {
+    connect(this, SIGNAL(sceneGraphInvalidated()), this, SLOT(invalidateSG()));
 }
 
 QQuickImage::QQuickImage(QQuickImagePrivate &dd, QQuickItem *parent)
     : QQuickImageBase(dd, parent)
 {
+    connect(this, SIGNAL(sceneGraphInvalidated()), this, SLOT(invalidateSG()));
 }
 
 QQuickImage::~QQuickImage()
 {
     Q_D(QQuickImage);
-    if (d->provider)
-        d->provider->deleteLater();
+    if (QQuickWindow *w = window()) {
+        w->scheduleRenderJob(new QQuickImageCleanup(d->provider), QQuickWindow::AfterSynchronizingStage);
+    } else {
+        // Should have been released already in releaseResources or in invalidateSG.
+        Q_ASSERT(!d->provider);
+    }
 }
 
 void QQuickImagePrivate::setImage(const QImage &image)
@@ -546,6 +561,22 @@ QSGTextureProvider *QQuickImage::textureProvider() const
     }
 
     return d->provider;
+}
+
+void QQuickImage::invalidateSG()
+{
+    Q_D(QQuickImage);
+    delete d->provider;
+    d->provider = 0;
+}
+
+void QQuickImage::releaseResources()
+{
+    Q_D(QQuickImage);
+    if (d->provider) {
+        window()->scheduleRenderJob(new QQuickImageCleanup(d->provider), QQuickWindow::AfterSynchronizingStage);
+        d->provider = 0;
+    }
 }
 
 QSGNode *QQuickImage::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)

@@ -52,6 +52,7 @@
 #include <QQmlEngine>
 #include "../../shared/util.h"
 #include "../shared/viewtestutil.h"
+#include <QSignalSpy>
 
 class TestItem : public QQuickItem
 {
@@ -170,6 +171,8 @@ private slots:
     void acceptedMouseButtons();
 
     void visualParentOwnership();
+
+    void testSGInitializeAndInvalidate();
 
 private:
 
@@ -1822,6 +1825,37 @@ void tst_qquickitem::visualParentOwnership()
         gc(*view.engine());
         QVERIFY(secondItem.isNull());
     }
+}
+
+void tst_qquickitem::testSGInitializeAndInvalidate()
+{
+    for (int i=0; i<2; ++i) {
+        QScopedPointer<QQuickView> view(new QQuickView());
+
+        QQuickItem *item = new QQuickItem();
+
+        int expected;
+        if (i == 0) {
+            // First iteration, item has contents and should get signals
+            expected = 1;
+            item->setFlag(QQuickItem::ItemHasContents, true);
+        } else {
+            // Second iteration, item does not have content and will not get signals
+            expected = 0;
+        }
+
+        QSignalSpy initializeSpy(item, SIGNAL(sceneGraphInitialized()));
+        QSignalSpy invalidateSpy(item, SIGNAL(sceneGraphInvalidated()));
+        item->setParentItem(view->contentItem());
+        view->show();
+
+        QVERIFY(QTest::qWaitForWindowExposed(view.data()));
+        QCOMPARE(initializeSpy.size(), expected);
+
+        delete view.take();
+        QCOMPARE(invalidateSpy.size(), expected);
+    }
+
 }
 
 QTEST_MAIN(tst_qquickitem)
