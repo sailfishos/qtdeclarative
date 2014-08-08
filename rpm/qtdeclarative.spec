@@ -377,7 +377,9 @@ cp lib/libQt5QmlDevTools.a %{buildroot}/%{_libdir}
 %{_qt5_bindir}/qmltestrunner
 %{_qt5_bindir}/qmlmin
 %{_qt5_bindir}/qmlbundle
+%if ! 0%{?qt5_release_build}
 %{_qt5_bindir}/qmljs
+%endif
 
 
 %files import-folderlistmodel
