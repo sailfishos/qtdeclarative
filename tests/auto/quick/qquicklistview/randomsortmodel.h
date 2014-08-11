@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
-** This file is part of the QtQml module of the Qt Toolkit.
+** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
@@ -39,71 +39,26 @@
 **
 ****************************************************************************/
 
-#ifndef QQMLTIMER_H
-#define QQMLTIMER_H
+#ifndef RANDOMSORTMODEL_H
+#define RANDOMSORTMODEL_H
 
-#include <qqml.h>
+#include <QAbstractListModel>
 
-#include <QtCore/qobject.h>
-
-#include <private/qtqmlglobal_p.h>
-
-QT_BEGIN_NAMESPACE
-
-class QQmlTimerPrivate;
-class Q_QML_PRIVATE_EXPORT QQmlTimer : public QObject, public QQmlParserStatus
+class RandomSortModel : public QAbstractListModel
 {
     Q_OBJECT
-    Q_DECLARE_PRIVATE(QQmlTimer)
-    Q_INTERFACES(QQmlParserStatus)
-    Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
-    Q_PROPERTY(bool running READ isRunning WRITE setRunning NOTIFY runningChanged)
-    Q_PROPERTY(bool repeat READ isRepeating WRITE setRepeating NOTIFY repeatChanged)
-    Q_PROPERTY(bool triggeredOnStart READ triggeredOnStart WRITE setTriggeredOnStart NOTIFY triggeredOnStartChanged)
-    Q_PROPERTY(QObject *parent READ parent CONSTANT)
 
 public:
-    QQmlTimer(QObject *parent=0);
+    explicit RandomSortModel(QObject* parent = 0);
+    QHash<int, QByteArray> roleNames() const;
 
-    void setInterval(int interval);
-    int interval() const;
+    QVariant data(const QModelIndex& index, int role) const;
+    int rowCount(const QModelIndex& parent = QModelIndex()) const;
 
-    bool isRunning() const;
-    void setRunning(bool running);
+    void randomize();
 
-    bool isRepeating() const;
-    void setRepeating(bool repeating);
-
-    bool triggeredOnStart() const;
-    void setTriggeredOnStart(bool triggeredOnStart);
-
-protected:
-    void classBegin();
-    void componentComplete();
-
-    bool event(QEvent *);
-
-public Q_SLOTS:
-    void start();
-    void stop();
-    void restart();
-
-Q_SIGNALS:
-    void triggered();
-    void runningChanged();
-    void intervalChanged();
-    void repeatChanged();
-    void triggeredOnStartChanged();
-
-private:
-    void update();
-
-private Q_SLOTS:
-    void ticked();
+  private:
+    QList<QPair<QString, int> > mData;
 };
 
-QT_END_NAMESPACE
-
-QML_DECLARE_TYPE(QQmlTimer)
-
-#endif
+#endif // RANDOMSORTMODEL_H
