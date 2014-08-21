@@ -216,6 +216,8 @@ private slots:
 
     void customParserBindingScopes();
 
+    void earlyIdObjectAccess();
+
 private:
     QQmlEngine engine;
     QStringList defaultImportPathList;
@@ -3545,6 +3547,110 @@ void tst_qqmllanguage::customParserBindingScopes()
     QPointer<QObject> child = qvariant_cast<QObject*>(o->property("child"));
     QVERIFY(!child.isNull());
     QCOMPARE(child->property("testProperty").toInt(), 42);
+}
+
+void tst_qqmllanguage::customParserEvaluateEnum()
+{
+    QQmlComponent component(&engine, testFile("customParserEvaluateEnum.qml"));
+    VERIFY_ERRORS(0);
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+}
+
+void tst_qqmllanguage::customParserProperties()
+{
+    QQmlComponent component(&engine, testFile("customParserProperties.qml"));
+    VERIFY_ERRORS(0);
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+    SimpleObjectWithCustomParser *testObject = qobject_cast<SimpleObjectWithCustomParser*>(o.data());
+    QVERIFY(testObject);
+    QCOMPARE(testObject->customBindingsCount(), 0);
+    QCOMPARE(testObject->intProperty(), 42);
+    QCOMPARE(testObject->property("qmlString").toString(), QStringLiteral("Hello"));
+    QVERIFY(!testObject->property("someObject").isNull());
+}
+
+void tst_qqmllanguage::preservePropertyCacheOnGroupObjects()
+{
+    QQmlComponent component(&engine, testFile("preservePropertyCacheOnGroupObjects.qml"));
+    VERIFY_ERRORS(0);
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+    QObject *subObject = qvariant_cast<QObject*>(o->property("subObject"));
+    QVERIFY(subObject);
+    QCOMPARE(subObject->property("value").toInt(), 42);
+
+    QQmlData *ddata = QQmlData::get(subObject);
+    QVERIFY(ddata);
+    QQmlPropertyCache *subCache = ddata->propertyCache;
+    QVERIFY(subCache);
+    QQmlPropertyData *pd = subCache->property(QStringLiteral("newProperty"), /*object*/0, /*context*/0);
+    QVERIFY(pd);
+    QCOMPARE(pd->propType, qMetaTypeId<int>());
+}
+
+void tst_qqmllanguage::propertyCacheInSync()
+{
+    QQmlComponent component(&engine, testFile("propertyCacheInSync.qml"));
+    VERIFY_ERRORS(0);
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+    QObject *anchors = qvariant_cast<QObject*>(o->property("anchors"));
+    QVERIFY(anchors);
+    QQmlVMEMetaObject *vmemo = QQmlVMEMetaObject::get(anchors);
+    QVERIFY(vmemo);
+    QQmlPropertyCache *vmemoCache = vmemo->propertyCache();
+    QVERIFY(vmemoCache);
+    QQmlData *ddata = QQmlData::get(anchors);
+    QVERIFY(ddata);
+    QVERIFY(ddata->propertyCache);
+    // Those always have to be in sync and correct.
+    QVERIFY(ddata->propertyCache == vmemoCache);
+    QCOMPARE(anchors->property("margins").toInt(), 50);
+}
+
+void tst_qqmllanguage::rootObjectInCreationNotForSubObjects()
+{
+    QQmlComponent component(&engine, testFile("rootObjectInCreationNotForSubObjects.qml"));
+    VERIFY_ERRORS(0);
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+
+    // QQmlComponent should have set this back to false anyway
+    QQmlData *ddata = QQmlData::get(o.data());
+    QVERIFY(!ddata->rootObjectInCreation);
+
+    QObject *subObject = qvariant_cast<QObject*>(o->property("subObject"));
+    QVERIFY(!subObject);
+
+    qmlExecuteDeferred(o.data());
+
+    subObject = qvariant_cast<QObject*>(o->property("subObject"));
+    QVERIFY(subObject);
+
+    ddata = QQmlData::get(subObject);
+    // This should never have been set in the first place as there is no
+    // QQmlComponent to set it back to false.
+    QVERIFY(!ddata->rootObjectInCreation);
+}
+
+void tst_qqmllanguage::noChildEvents()
+{
+    QQmlComponent component(&engine);
+    component.setData("import QtQml 2.0; import Test 1.0; MyQmlObject { property QtObject child: QtObject {} }", QUrl());
+    VERIFY_ERRORS(0);
+    MyQmlObject *object = qobject_cast<MyQmlObject*>(component.create());
+    QVERIFY(object != 0);
+    QCOMPARE(object->childAddedEventCount(), 0);
+}
+
+void tst_qqmllanguage::earlyIdObjectAccess()
+{
+    QQmlComponent component(&engine, testFileUrl("earlyIdObjectAccess.qml"));
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+    QVERIFY(o->property("success").toBool());
 }
 
 QTEST_MAIN(tst_qqmllanguage)
