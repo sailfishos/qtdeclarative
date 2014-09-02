@@ -235,7 +235,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void sourceItemDestroyed(QObject *item);
-    void invalidateSG();
+    void invalidateSceneGraph();
 
 protected:
     virtual void releaseResources();
