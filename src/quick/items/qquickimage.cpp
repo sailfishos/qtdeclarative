@@ -159,13 +159,11 @@ public:
 QQuickImage::QQuickImage(QQuickItem *parent)
     : QQuickImageBase(*(new QQuickImagePrivate), parent)
 {
-    connect(this, SIGNAL(sceneGraphInvalidated()), this, SLOT(invalidateSG()));
 }
 
 QQuickImage::QQuickImage(QQuickImagePrivate &dd, QQuickItem *parent)
     : QQuickImageBase(dd, parent)
 {
-    connect(this, SIGNAL(sceneGraphInvalidated()), this, SLOT(invalidateSG()));
 }
 
 QQuickImage::~QQuickImage()
@@ -563,7 +561,7 @@ QSGTextureProvider *QQuickImage::textureProvider() const
     return d->provider;
 }
 
-void QQuickImage::invalidateSG()
+void QQuickImage::invalidateSceneGraph()
 {
     Q_D(QQuickImage);
     delete d->provider;

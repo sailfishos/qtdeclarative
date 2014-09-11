@@ -172,7 +172,7 @@ private slots:
 
     void visualParentOwnership();
 
-    void testSGInitializeAndInvalidate();
+    void testSGInvalidate();
 
 private:
 
@@ -1827,30 +1827,92 @@ void tst_qquickitem::visualParentOwnership()
     }
 }
 
-void tst_qquickitem::testSGInitializeAndInvalidate()
+void tst_qquickitem::visualParentOwnershipWindow()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("visualParentOwnershipWindow.qml"));
+
+    QQuickWindow *window = qobject_cast<QQuickWindow*>(component.create());
+    QVERIFY(window);
+    QQuickItem *root = window->contentItem();
+
+    QVariant newObject;
+    {
+        QVERIFY(QMetaObject::invokeMethod(window, "createItemWithoutParent", Q_RETURN_ARG(QVariant, newObject)));
+        QPointer<QQuickItem> newItem = qvariant_cast<QQuickItem*>(newObject);
+        QVERIFY(!newItem.isNull());
+
+        QVERIFY(!newItem->parent());
+        QVERIFY(!newItem->parentItem());
+
+        newItem->setParentItem(root);
+
+        gc(engine);
+
+        QVERIFY(!newItem.isNull());
+        newItem->setParentItem(0);
+
+        gc(engine);
+        QVERIFY(newItem.isNull());
+    }
+    {
+        QVERIFY(QMetaObject::invokeMethod(window, "createItemWithoutParent", Q_RETURN_ARG(QVariant, newObject)));
+        QPointer<QQuickItem> firstItem = qvariant_cast<QQuickItem*>(newObject);
+        QVERIFY(!firstItem.isNull());
+
+        firstItem->setParentItem(root);
+
+        QVERIFY(QMetaObject::invokeMethod(window, "createItemWithoutParent", Q_RETURN_ARG(QVariant, newObject)));
+        QPointer<QQuickItem> secondItem = qvariant_cast<QQuickItem*>(newObject);
+        QVERIFY(!firstItem.isNull());
+
+        secondItem->setParentItem(firstItem);
+
+        gc(engine);
+
+        delete firstItem;
+
+        window->setProperty("keepAliveProperty", newObject);
+
+        gc(engine);
+        QVERIFY(!secondItem.isNull());
+
+        window->setProperty("keepAliveProperty", QVariant());
+
+        gc(engine);
+        QVERIFY(secondItem.isNull());
+    }
+}
+
+class InvalidatedItem : public QQuickItem {
+    Q_OBJECT
+signals:
+    void invalidated();
+public slots:
+    void invalidateSceneGraph() { emit invalidated(); }
+};
+
+void tst_qquickitem::testSGInvalidate()
 {
     for (int i=0; i<2; ++i) {
         QScopedPointer<QQuickView> view(new QQuickView());
 
-        QQuickItem *item = new QQuickItem();
+        InvalidatedItem *item = new InvalidatedItem();
 
-        int expected;
+        int expected = 0;
         if (i == 0) {
             // First iteration, item has contents and should get signals
             expected = 1;
             item->setFlag(QQuickItem::ItemHasContents, true);
         } else {
             // Second iteration, item does not have content and will not get signals
-            expected = 0;
         }
 
-        QSignalSpy initializeSpy(item, SIGNAL(sceneGraphInitialized()));
-        QSignalSpy invalidateSpy(item, SIGNAL(sceneGraphInvalidated()));
+        QSignalSpy invalidateSpy(item, SIGNAL(invalidated()));
         item->setParentItem(view->contentItem());
         view->show();
 
         QVERIFY(QTest::qWaitForWindowExposed(view.data()));
-        QCOMPARE(initializeSpy.size(), expected);
 
         delete view.take();
         QCOMPARE(invalidateSpy.size(), expected);

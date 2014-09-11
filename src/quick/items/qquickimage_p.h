@@ -98,7 +98,7 @@ Q_SIGNALS:
     void verticalAlignmentChanged(VAlignment alignment);
 
 private Q_SLOTS:
-    void invalidateSG();
+    void invalidateSceneGraph();
 
 protected:
     QQuickImage(QQuickImagePrivate &dd, QQuickItem *parent);
