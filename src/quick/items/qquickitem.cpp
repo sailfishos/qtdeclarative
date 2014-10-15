@@ -2662,7 +2662,6 @@ void QQuickItemPrivate::derefWindow()
         extra->opacityNode = 0;
         extra->clipNode = 0;
         extra->rootNode = 0;
-        extra->beforePaintNode = 0;
     }
 
     groupNode = 0;
@@ -7570,7 +7569,7 @@ QQuickItemPrivate::ExtraData::ExtraData()
   numItemsWithCursor(0),
 #endif
   effectRefCount(0), hideRefCount(0),
-  opacityNode(0), clipNode(0), rootNode(0), beforePaintNode(0),
+  opacityNode(0), clipNode(0), rootNode(0),
   acceptedMouseButtons(0), origin(QQuickItem::Center)
 {
 }

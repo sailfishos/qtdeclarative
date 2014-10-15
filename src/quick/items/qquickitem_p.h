@@ -360,7 +360,6 @@ public:
         QSGOpacityNode *opacityNode;
         QQuickDefaultClipNode *clipNode;
         QSGRootNode *rootNode;
-        QSGNode *beforePaintNode;
 
         // Although acceptedMouseButtons is inside ExtraData, we actually store
         // the LeftButton flag in the extra.flag() bit.  This is because it is
