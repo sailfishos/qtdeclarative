@@ -2664,7 +2664,6 @@ void QQuickItemPrivate::derefWindow()
         extra->rootNode = 0;
     }
 
-    groupNode = 0;
     paintNode = 0;
 
     for (int ii = 0; ii < childItems.count(); ++ii) {
@@ -2787,7 +2786,6 @@ QQuickItemPrivate::QQuickItemPrivate()
     , implicitHeight(0)
     , baselineOffset(0)
     , itemNodeInstance(0)
-    , groupNode(0)
     , paintNode(0)
 {
 }
