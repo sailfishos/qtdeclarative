@@ -718,10 +718,12 @@ public:
 private:
     void renumber()
     {
+        QVector<Stmt *> newStatements;
+
         foreach (BasicBlock *bb, _function->basicBlocks()) {
             QVector<Stmt *> statements = bb->statements();
-            QVector<Stmt *> newStatements;
             newStatements.reserve(bb->statements().size() + 7);
+            newStatements.erase(newStatements.begin(), newStatements.end());
 
             bool seenFirstNonPhiStmt = false;
             for (int i = 0, ei = statements.size(); i != ei; ++i) {
