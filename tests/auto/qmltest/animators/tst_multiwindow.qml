@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Jolla Ltd, author: <gunnar.sletta@jollamobile.com>
 ** Contact: http://www.qt-project.org/legal
 **
-** This file is part of the QtQuick module of the Qt Toolkit.
+** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
@@ -39,70 +39,65 @@
 **
 ****************************************************************************/
 
-#ifndef QSGRenderLoop_P_H
-#define QSGRenderLoop_P_H
+import QtQuick 2.2
+import QtTest 1.0
+import QtQuick.Window 2.0
 
-#include <QtGui/QImage>
-#include <private/qtquickglobal_p.h>
-#include <QtCore/QSet>
+Item {
+    id: root;
+    width: 200
+    height: 200
 
-QT_BEGIN_NAMESPACE
+    TestCase {
+        id: testCase
+        name: "animators-mixed"
+        when: countdown == 0
+        function test_endresult() {
+            verify(true, "Just making sure we didn't crash");
+        }
+    }
 
-class QQuickWindow;
-class QSGContext;
-class QSGRenderContext;
-class QAnimationDriver;
+    property int countdown: 5;
 
-class Q_QUICK_PRIVATE_EXPORT QSGRenderLoop : public QObject
-{
-    Q_OBJECT
+    Window {
+        id: window
 
-public:
-    virtual ~QSGRenderLoop();
+        width: 100
+        height: 100
 
-    virtual void show(QQuickWindow *window) = 0;
-    virtual void hide(QQuickWindow *window) = 0;
-    virtual void resize(QQuickWindow *) {};
+        ShaderEffect {
+            width: 50
+            height: 50
 
-    virtual void windowDestroyed(QQuickWindow *window) = 0;
+            property real t;
+            UniformAnimator on t { from: 0; to: 1; duration: 1000; loops: Animation.Infinite }
+            RotationAnimator on rotation { from: 0; to: 360; duration: 1000; loops: Animation.Infinite }
+            ScaleAnimator on scale { from: 0.5; to: 1.5; duration: 1000; loops: Animation.Infinite }
+            XAnimator on x { from: 0; to: 50; duration: 1000; loops: Animation.Infinite }
+            YAnimator on y { from: 0; to: 50; duration: 1000; loops: Animation.Infinite }
+            OpacityAnimator on opacity { from: 1; to: 0.5; duration: 1000; loops: Animation.Infinite }
 
-    virtual void exposureChanged(QQuickWindow *window) = 0;
-    virtual QImage grab(QQuickWindow *window) = 0;
+            fragmentShader: "
+                uniform lowp float t;
+                uniform lowp float qt_Opacity;
+                varying highp vec2 qt_TexCoord0;
+                void main() {
+                    gl_FragColor = vec4(qt_TexCoord0, t, 1) * qt_Opacity;
+                }
+                "
+        }
 
-    virtual void update(QQuickWindow *window) = 0;
-    virtual void maybeUpdate(QQuickWindow *window) = 0;
+        visible: true
+    }
 
-    virtual QAnimationDriver *animationDriver() const = 0;
-
-    virtual QSGContext *sceneGraphContext() const = 0;
-    virtual QSGRenderContext *createRenderContext(QSGContext *) const = 0;
-
-    virtual void releaseResources(QQuickWindow *window) = 0;
-
-    void addWindow(QQuickWindow *win) { m_windows.insert(win); }
-    void removeWindow(QQuickWindow *win) { m_windows.remove(win); }
-    QSet<QQuickWindow *> windows() const { return m_windows; }
-
-    // ### make this less of a singleton
-    static QSGRenderLoop *instance();
-    static void setInstance(QSGRenderLoop *instance);
-
-    virtual bool interleaveIncubation() const { return false; }
-
-    static void cleanup();
-
-Q_SIGNALS:
-    void timeToIncubate();
-
-protected:
-    void handleContextCreationFailure(QQuickWindow *window, bool isEs);
-
-private:
-    static QSGRenderLoop *s_instance;
-
-    QSet<QQuickWindow *> m_windows;
-};
-
-QT_END_NAMESPACE
-
-#endif // QSGRenderLoop_P_H
+    Timer {
+        interval: 250
+        running: true
+        repeat: true
+        onTriggered: {
+            if (window.visible)
+                --countdown
+            window.visible = !window.visible;
+        }
+    }
+}

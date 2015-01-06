@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Jolla Ltd, author: <gunnar.sletta@jollamobile.com>
 ** Contact: http://www.qt-project.org/legal
 **
-** This file is part of the QtQuick module of the Qt Toolkit.
+** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
@@ -39,70 +39,52 @@
 **
 ****************************************************************************/
 
-#ifndef QSGRenderLoop_P_H
-#define QSGRenderLoop_P_H
+import QtQuick 2.2
 
-#include <QtGui/QImage>
-#include <private/qtquickglobal_p.h>
-#include <QtCore/QSet>
+/*
+    This test verifies that when we have an update to opacity above
+    a batch root, the opacity of the batch root's children is rendered
+    correctly. The Text element has 1000 glyphs in it, which is needed
+    for contentRoot to become a batch root when the scale changes.
 
-QT_BEGIN_NAMESPACE
+    #samples: 2
+                 PixelPos     R    G    B    Error-tolerance
+    #base:        50  50     0.0  0.0  1.0       0.0
+    #final:       50  50     0.5  0.5  1.0       0.05
+*/
 
-class QQuickWindow;
-class QSGContext;
-class QSGRenderContext;
-class QAnimationDriver;
+RenderTestBase {
+    id: root
 
-class Q_QUICK_PRIVATE_EXPORT QSGRenderLoop : public QObject
-{
-    Q_OBJECT
+    Item {
+        id: failRoot;
+        property alias itemScale: contentItem.scale
 
-public:
-    virtual ~QSGRenderLoop();
+        Item {
+            id: contentItem
+            width: 100
+            height: 100
+            Rectangle {
+                width: 100
+                height: 100
+                color: "blue"
+                Text {
+                    id: input
+                    color: "black"
+                    Component.onCompleted: { for (var i = 0; i<1000; ++i) input.text += 'x' }
+                }
+            }
+        }
+    }
 
-    virtual void show(QQuickWindow *window) = 0;
-    virtual void hide(QQuickWindow *window) = 0;
-    virtual void resize(QQuickWindow *) {};
+    SequentialAnimation {
+        id: unifiedAnimation;
+        NumberAnimation { properties: "opacity,itemScale"; duration: 256; from: 1; to: 0.5; target: failRoot }
+        ScriptAction { script: root.finalStageComplete = true; }
+    }
 
-    virtual void windowDestroyed(QQuickWindow *window) = 0;
+    onEnterFinalStage: {
+        unifiedAnimation.running = true;
+    }
 
-    virtual void exposureChanged(QQuickWindow *window) = 0;
-    virtual QImage grab(QQuickWindow *window) = 0;
-
-    virtual void update(QQuickWindow *window) = 0;
-    virtual void maybeUpdate(QQuickWindow *window) = 0;
-
-    virtual QAnimationDriver *animationDriver() const = 0;
-
-    virtual QSGContext *sceneGraphContext() const = 0;
-    virtual QSGRenderContext *createRenderContext(QSGContext *) const = 0;
-
-    virtual void releaseResources(QQuickWindow *window) = 0;
-
-    void addWindow(QQuickWindow *win) { m_windows.insert(win); }
-    void removeWindow(QQuickWindow *win) { m_windows.remove(win); }
-    QSet<QQuickWindow *> windows() const { return m_windows; }
-
-    // ### make this less of a singleton
-    static QSGRenderLoop *instance();
-    static void setInstance(QSGRenderLoop *instance);
-
-    virtual bool interleaveIncubation() const { return false; }
-
-    static void cleanup();
-
-Q_SIGNALS:
-    void timeToIncubate();
-
-protected:
-    void handleContextCreationFailure(QQuickWindow *window, bool isEs);
-
-private:
-    static QSGRenderLoop *s_instance;
-
-    QSet<QQuickWindow *> m_windows;
-};
-
-QT_END_NAMESPACE
-
-#endif // QSGRenderLoop_P_H
+}

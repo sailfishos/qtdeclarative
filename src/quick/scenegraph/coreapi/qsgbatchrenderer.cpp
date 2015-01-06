@@ -404,7 +404,7 @@ void Updater::visitTransformNode(Node *n)
         // The only change in this subtree is ourselves and we are a batch root, so
         // only update subroots and return, saving tons of child-processing (flickable-panning)
 
-        if (!n->becameBatchRoot && m_added == 0 && m_force_update == 0 && dirty && (n->dirtyState & ~QSGNode::DirtyMatrix) == 0) {
+        if (!n->becameBatchRoot && m_added == 0 && m_force_update == 0 && m_opacityChange == 0 && dirty && (n->dirtyState & ~QSGNode::DirtyMatrix) == 0) {
             BatchRootInfo *info = renderer->batchRootInfo(n);
             for (QSet<Node *>::const_iterator it = info->subRoots.constBegin();
                  it != info->subRoots.constEnd(); ++it) {
@@ -593,11 +593,6 @@ void Element::computeBounds()
 
 BatchCompatibility Batch::isMaterialCompatible(Element *e) const
 {
-    // If material has changed between opaque and translucent, it is not compatible
-    QSGMaterial *m = e->node->activeMaterial();
-    if (isOpaque != ((m->flags() & QSGMaterial::Blending) == 0))
-        return BatchBreaksOnBlending;
-
     Element *n = first;
     // Skip to the first node other than e which has not been removed
     while (n && (n == e || n->removed))
@@ -608,6 +603,7 @@ BatchCompatibility Batch::isMaterialCompatible(Element *e) const
     if (!n)
         return BatchIsCompatible;
 
+    QSGMaterial *m = e->node->activeMaterial();
     QSGMaterial *nm = n->node->activeMaterial();
     return (nm->type() == m->type() && nm->compare(m) == 0)
             ? BatchIsCompatible
@@ -829,8 +825,8 @@ Renderer::~Renderer()
     for (int i=0; i<m_alphaBatches.size(); ++i) qsg_wipeBatch(m_alphaBatches.at(i), this);
     for (int i=0; i<m_batchPool.size(); ++i) qsg_wipeBatch(m_batchPool.at(i), this);
 
-    // The shadowtree
-    qDeleteAll(m_nodes.values());
+    foreach (Node *n, m_nodes.values())
+        m_nodeAllocator.release(n);
 
     // Remaining elements...
     for (int i=0; i<m_elementsToDelete.size(); ++i) {
@@ -838,7 +834,7 @@ Renderer::~Renderer()
         if (e->isRenderNode)
             delete static_cast<RenderNodeElement *>(e);
         else
-            delete e;
+            m_elementAllocator.release(e);
     }
 }
 
@@ -977,7 +973,8 @@ void Renderer::nodeWasAdded(QSGNode *node, Node *shadowParent)
     if (node->isSubtreeBlocked())
         return;
 
-    Node *snode = new Node(node);
+    Node *snode = m_nodeAllocator.allocate();
+    snode->sgNode = node;
     m_nodes.insert(node, snode);
     if (shadowParent) {
         snode->parent = shadowParent;
@@ -985,7 +982,8 @@ void Renderer::nodeWasAdded(QSGNode *node, Node *shadowParent)
     }
 
     if (node->type() == QSGNode::GeometryNodeType) {
-        snode->data = new Element(static_cast<QSGGeometryNode *>(node));
+        snode->data = m_elementAllocator.allocate();
+        snode->element()->setNode(static_cast<QSGGeometryNode *>(node));
 
     } else if (node->type() == QSGNode::ClipNodeType) {
         snode->data = new ClipBatchRootInfo;
@@ -1048,7 +1046,7 @@ void Renderer::nodeWasRemoved(Node *node)
     }
 
     Q_ASSERT(m_nodes.contains(node->sgNode));
-    delete m_nodes.take(node->sgNode);
+    m_nodeAllocator.release(m_nodes.take(node->sgNode));
 }
 
 void Renderer::turnNodeIntoBatchRoot(Node *node)
@@ -1171,11 +1169,12 @@ void Renderer::nodeChanged(QSGNode *node, QSGNode::DirtyState state)
     if (state & QSGNode::DirtyMaterial && node->type() == QSGNode::GeometryNodeType) {
         Element *e = shadowNode->element();
         if (e) {
-            if (e->batch) {
-                BatchCompatibility compat = e->batch->isMaterialCompatible(e);
-                if (compat == BatchBreaksOnBlending)
-                    m_rebuild |= Renderer::FullRebuild;
-                else if (compat == BatchBreaksOnCompare)
+            bool blended = hasMaterialWithBlending(static_cast<QSGGeometryNode *>(node));
+            if (e->isMaterialBlended != blended) {
+                m_rebuild |= Renderer::FullRebuild;
+                e->isMaterialBlended = blended;
+            } else if (e->batch) {
+                if (e->batch->isMaterialCompatible(e) == BatchBreaksOnCompare)
                     invalidateBatchAndOverlappingRenderOrders(e->batch);
             } else {
                 m_rebuild |= Renderer::BuildBatches;
@@ -1229,8 +1228,8 @@ void Renderer::buildRenderLists(QSGNode *node)
     if (node->isSubtreeBlocked())
         return;
 
-    Q_ASSERT(m_nodes.contains(node));
     Node *shadowNode = m_nodes.value(node);
+    Q_ASSERT(shadowNode);
 
     if (node->type() == QSGNode::GeometryNodeType) {
         QSGGeometryNode *gn = static_cast<QSGGeometryNode *>(node);
@@ -1251,7 +1250,7 @@ void Renderer::buildRenderLists(QSGNode *node)
 
     } else if (node->type() == QSGNode::ClipNodeType || shadowNode->isBatchRoot) {
         Q_ASSERT(m_nodes.contains(node));
-        BatchRootInfo *info = batchRootInfo(m_nodes.value(node));
+        BatchRootInfo *info = batchRootInfo(shadowNode);
         if (node == m_partialRebuildRoot) {
             m_nextRenderOrder = info->firstOrder;
             QSGNODE_TRAVERSE(node)
@@ -2001,6 +2000,8 @@ void Renderer::renderMergedBatch(const Batch *batch)
               << " root:" << batch->root;
         if (batch->drawSets.size() > 1)
             debug << "sets:" << batch->drawSets.size();
+        if (!batch->isOpaque)
+            debug << "opacity:" << e->node->inheritedOpacity();
         batch->uploadedThisFrame = false;
     }
 
@@ -2316,7 +2317,7 @@ void Renderer::deleteRemovedElements()
         if (e->isRenderNode)
             delete static_cast<RenderNodeElement *>(e);
         else
-            delete e;
+            m_elementAllocator.release(e);
     }
     m_elementsToDelete.reset();
 }

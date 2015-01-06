@@ -582,6 +582,19 @@ void QSGNode::removeAllChildNodes()
     }
 }
 
+/*!
+ * \internal
+ *
+ * Reparents all nodes of this node to \a newParent.
+ */
+void QSGNode::reparentChildNodesTo(QSGNode *newParent)
+{
+    for (QSGNode *c = firstChild(); c; c = firstChild()) {
+        removeChildNode(c);
+        newParent->appendChildNode(c);
+    }
+}
+
 
 int QSGNode::childCount() const
 {

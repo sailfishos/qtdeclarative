@@ -141,19 +141,6 @@ public:
     bool eventPending;
 };
 
-bool QSGRenderLoop::useConsistentTiming()
-{
-    bool bufferQueuing = QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::BufferQueueingOpenGL);
-    // Enable fixed animation steps...
-    QByteArray fixed = qgetenv("QSG_FIXED_ANIMATION_STEP");
-    bool fixedAnimationSteps = bufferQueuing;
-    if (fixed == "no")
-        fixedAnimationSteps = false;
-    else if (fixed.length())
-        fixedAnimationSteps = true;
-    return fixedAnimationSteps;
-}
-
 QSGRenderLoop *QSGRenderLoop::instance()
 {
     if (!s_instance) {
@@ -163,11 +150,6 @@ QSGRenderLoop *QSGRenderLoop::instance()
             ((QLoggingCategory &) QSG_LOG_INFO()).setEnabled(QtDebugMsg, true);
 
         s_instance = QSGContext::createWindowManager();
-
-        if (useConsistentTiming()) {
-            QUnifiedTimer::instance(true)->setConsistentTiming(true);
-            qCDebug(QSG_LOG_INFO, "using fixed animation steps");
-        }
 
         if (!s_instance) {
 
@@ -352,7 +334,8 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
     }
 
     if (alsoSwap && window->isVisible()) {
-        gl->swapBuffers(window);
+        if (!cd->customRenderStage || !cd->customRenderStage->swap())
+            gl->swapBuffers(window);
         cd->fireFrameSwapped();
     }
 

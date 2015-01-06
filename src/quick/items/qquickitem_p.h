@@ -350,7 +350,6 @@ public:
         mutable QQuickItemLayer *layer;
 #ifndef QT_NO_CURSOR
         QCursor cursor;
-        int numItemsWithCursor;
 #endif
         QPointF userTransformOriginPoint;
 
@@ -360,7 +359,8 @@ public:
         QSGOpacityNode *opacityNode;
         QQuickDefaultClipNode *clipNode;
         QSGRootNode *rootNode;
-        QSGNode *beforePaintNode;
+
+        QObjectList resourcesList;
 
         // Although acceptedMouseButtons is inside ExtraData, we actually store
         // the LeftButton flag in the extra.flag() bit.  This is because it is
@@ -370,7 +370,7 @@ public:
 
         QQuickItem::TransformOrigin origin:5;
 
-        QObjectList resourcesList;
+        // 26 bits padding
     };
     QLazilyAllocated<ExtraData> extra;
 
@@ -422,6 +422,7 @@ public:
     bool culled:1;
     bool hasCursor:1;
     // Bit 32
+    bool hasCursorInChild:1;
     bool activeFocusOnTab:1;
 
     enum DirtyType {
@@ -556,8 +557,7 @@ public:
          - itemNode
          - (opacityNode)
          - (clipNode)
-         - (effectNode)
-         - groupNode
+         - (rootNode) (shader effect source's root node)
      */
 
     QSGOpacityNode *opacityNode() const { return extra.isAllocated()?extra->opacityNode:0; }
@@ -565,7 +565,6 @@ public:
     QSGRootNode *rootNode() const { return extra.isAllocated()?extra->rootNode:0; }
 
     QSGTransformNode *itemNodeInstance;
-    QSGNode *groupNode;
     QSGNode *paintNode;
 
     virtual QSGTransformNode *createTransformNode();
@@ -579,7 +578,7 @@ public:
 
     virtual void mirrorChange() {}
 
-    void incrementCursorCount(int delta);
+    void setHasCursorInChild(bool hasCursor);
 
     // recursive helper to let a visual parent mark its visual children
     void markObjects(QV4::ExecutionEngine *e);
@@ -867,7 +866,7 @@ QSGTransformNode *QQuickItemPrivate::itemNode()
         itemNodeInstance->setFlag(QSGNode::OwnedByParent, false);
 #ifdef QSG_RUNTIME_DESCRIPTION
         Q_Q(QQuickItem);
-        qsgnode_set_description(itemNodeInstance, QString::fromLatin1("QQuickItem(%1)").arg(QString::fromLatin1(q->metaObject()->className())));
+        qsgnode_set_description(itemNodeInstance, QString::fromLatin1("QQuickItem(%1:%2)").arg(QString::fromLatin1(q->metaObject()->className())).arg(q->objectName()));
 #endif
     }
     return itemNodeInstance;
@@ -875,21 +874,14 @@ QSGTransformNode *QQuickItemPrivate::itemNode()
 
 QSGNode *QQuickItemPrivate::childContainerNode()
 {
-    if (!groupNode) {
-        groupNode = new QSGNode();
-        if (rootNode())
-            rootNode()->appendChildNode(groupNode);
-        else if (clipNode())
-            clipNode()->appendChildNode(groupNode);
-        else if (opacityNode())
-            opacityNode()->appendChildNode(groupNode);
-        else
-            itemNode()->appendChildNode(groupNode);
-#ifdef QSG_RUNTIME_DESCRIPTION
-        qsgnode_set_description(groupNode, QLatin1String("group"));
-#endif
-    }
-    return groupNode;
+    if (rootNode())
+        return rootNode();
+    else if (clipNode())
+        return clipNode();
+    else if (opacityNode())
+        return opacityNode();
+    else
+        return itemNode();
 }
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QQuickItemPrivate::ChangeTypes)

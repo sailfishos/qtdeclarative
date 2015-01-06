@@ -2543,8 +2543,11 @@ void QQuickItemPrivate::addChild(QQuickItem *child)
 
 #ifndef QT_NO_CURSOR
     QQuickItemPrivate *childPrivate = QQuickItemPrivate::get(child);
-    if (childPrivate->extra.isAllocated())
-        incrementCursorCount(childPrivate->extra.value().numItemsWithCursor);
+
+    // if the added child has a cursor and we do not currently have any children
+    // with cursors, bubble the notification up
+    if (childPrivate->hasCursorInChild && !hasCursorInChild)
+        setHasCursorInChild(true);
 #endif
 
     markSortedChildrenDirty(child);
@@ -2566,8 +2569,10 @@ void QQuickItemPrivate::removeChild(QQuickItem *child)
 
 #ifndef QT_NO_CURSOR
     QQuickItemPrivate *childPrivate = QQuickItemPrivate::get(child);
-    if (childPrivate->extra.isAllocated())
-        incrementCursorCount(-childPrivate->extra.value().numItemsWithCursor);
+
+    // turn it off, if nothing else is using it
+    if (childPrivate->hasCursorInChild && hasCursorInChild)
+        setHasCursorInChild(false);
 #endif
 
     markSortedChildrenDirty(child);
@@ -2662,10 +2667,8 @@ void QQuickItemPrivate::derefWindow()
         extra->opacityNode = 0;
         extra->clipNode = 0;
         extra->rootNode = 0;
-        extra->beforePaintNode = 0;
     }
 
-    groupNode = 0;
     paintNode = 0;
 
     for (int ii = 0; ii < childItems.count(); ++ii) {
@@ -2771,6 +2774,7 @@ QQuickItemPrivate::QQuickItemPrivate()
     , isAccessible(false)
     , culled(false)
     , hasCursor(false)
+    , hasCursorInChild(false)
     , activeFocusOnTab(false)
     , dirtyAttributes(0)
     , nextDirtyItem(0)
@@ -2788,7 +2792,6 @@ QQuickItemPrivate::QQuickItemPrivate()
     , implicitHeight(0)
     , baselineOffset(0)
     , itemNodeInstance(0)
-    , groupNode(0)
     , paintNode(0)
 {
 }
@@ -6501,15 +6504,27 @@ void QQuickItem::setAcceptHoverEvents(bool enabled)
     d->hoverEnabled = enabled;
 }
 
-void QQuickItemPrivate::incrementCursorCount(int delta)
+void QQuickItemPrivate::setHasCursorInChild(bool hasCursor)
 {
 #ifndef QT_NO_CURSOR
     Q_Q(QQuickItem);
-    extra.value().numItemsWithCursor += delta;
+
+    // if we're asked to turn it off (because of an unsetcursor call, or a node
+    // removal) then we should check our children and make sure it's really ok
+    // to turn it off.
+    if (!hasCursor && hasCursorInChild) {
+        foreach (QQuickItem *otherChild, childItems) {
+            QQuickItemPrivate *otherChildPrivate = QQuickItemPrivate::get(otherChild);
+            if (otherChildPrivate->hasCursorInChild)
+                return; // nope! sorry, something else wants it kept on.
+        }
+    }
+
+    hasCursorInChild = hasCursor;
     QQuickItem *parent = q->parentItem();
     if (parent) {
         QQuickItemPrivate *parentPrivate = QQuickItemPrivate::get(parent);
-        parentPrivate->incrementCursorCount(delta);
+        parentPrivate->setHasCursorInChild(hasCursor);
     }
 #endif
 }
@@ -6571,7 +6586,7 @@ void QQuickItem::setCursor(const QCursor &cursor)
     }
 
     if (!d->hasCursor) {
-        d->incrementCursorCount(+1);
+        d->setHasCursorInChild(true);
         d->hasCursor = true;
         if (d->window) {
             QPointF pos = d->window->mapFromGlobal(QGuiApplicationPrivate::lastCursorPosition.toPoint());
@@ -6592,7 +6607,7 @@ void QQuickItem::unsetCursor()
     Q_D(QQuickItem);
     if (!d->hasCursor)
         return;
-    d->incrementCursorCount(-1);
+    d->setHasCursorInChild(false);
     d->hasCursor = false;
     if (d->extra.isAllocated())
         d->extra->cursor = QCursor();
@@ -7566,11 +7581,8 @@ QQuickItemPrivate::ExtraData::ExtraData()
 : z(0), scale(1), rotation(0), opacity(1),
   contents(0), screenAttached(0), layoutDirectionAttached(0),
   keyHandler(0), layer(0),
-#ifndef QT_NO_CURSOR
-  numItemsWithCursor(0),
-#endif
   effectRefCount(0), hideRefCount(0),
-  opacityNode(0), clipNode(0), rootNode(0), beforePaintNode(0),
+  opacityNode(0), clipNode(0), rootNode(0),
   acceptedMouseButtons(0), origin(QQuickItem::Center)
 {
 }

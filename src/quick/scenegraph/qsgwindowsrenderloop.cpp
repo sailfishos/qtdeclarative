@@ -420,7 +420,8 @@ void QSGWindowsRenderLoop::renderWindow(QQuickWindow *window)
     QSG_RENDER_TIMING_SAMPLE(time_rendered);
 
     RLDEBUG(" - swapping");
-    m_gl->swapBuffers(window);
+    if (!d->customRenderStage || !d->customRenderStage->swap())
+        m_gl->swapBuffers(window);
     QSG_RENDER_TIMING_SAMPLE(time_swapped);
 
     RLDEBUG(" - frameDone");
