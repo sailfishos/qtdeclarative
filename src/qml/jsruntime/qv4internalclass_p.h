@@ -202,6 +202,7 @@ struct InternalClassTransition
         Object *prototype;
         const ManagedVTable *vtable;
     };
+    InternalClass *lookup;
     int flags;
     enum {
         // range 0-0xff is reserved for attribute changes
@@ -211,8 +212,10 @@ struct InternalClassTransition
 
     bool operator==(const InternalClassTransition &other) const
     { return id == other.id && flags == other.flags; }
+
+    bool operator<(const InternalClassTransition &other) const
+    { return id < other.id; }
 };
-uint qHash(const QV4::InternalClassTransition &t, uint = 0);
 
 struct InternalClass : public QQmlJS::Managed {
     ExecutionEngine *engine;
@@ -224,7 +227,8 @@ struct InternalClass : public QQmlJS::Managed {
     SharedInternalClassData<PropertyAttributes> propertyData;
 
     typedef InternalClassTransition Transition;
-    QHash<Transition, InternalClass *> transitions; // id to next class, positive means add, negative delete
+    std::vector<Transition> transitions;
+    InternalClassTransition &lookupOrInsertTransition(const InternalClassTransition &t);
 
     InternalClass *m_sealed;
     InternalClass *m_frozen;
