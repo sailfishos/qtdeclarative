@@ -215,10 +215,9 @@ inline Temp *unescapableTemp(Expr *e, IR::Function *f)
 
 class BasicBlockSet
 {
-    typedef std::vector<int> Numbers;
     typedef std::vector<bool> Flags;
 
-    Numbers *blockNumbers;
+    QVarLengthArray<int, 8> *blockNumbers;
     Flags *blockFlags;
     IR::Function *function;
     enum { MaxVectorCapacity = 8 };
@@ -230,7 +229,7 @@ public:
     {
         const BasicBlockSet &set;
         // ### These two members could go into a union, but clang won't compile (https://codereview.qt-project.org/#change,74259)
-        Numbers::const_iterator numberIt;
+        QVarLengthArray<int, 8>::const_iterator numberIt;
         size_t flagIt;
 
         friend class BasicBlockSet;
@@ -238,12 +237,12 @@ public:
             : set(set)
         {
             if (end) {
-                if (set.blockNumbers)
+                if (!set.blockFlags)
                     numberIt = set.blockNumbers->end();
                 else
                     flagIt = set.blockFlags->size();
             } else {
-                if (set.blockNumbers)
+                if (!set.blockFlags)
                     numberIt = set.blockNumbers->begin();
                 else
                     findNextWithFlags(0);
@@ -274,7 +273,7 @@ public:
     public:
         BasicBlock *operator*() const
         {
-            if (set.blockNumbers) {
+            if (!set.blockFlags) {
                 return set.function->basicBlock(*numberIt);
             } else {
                 Q_ASSERT(flagIt <= INT_MAX);
@@ -286,7 +285,7 @@ public:
         {
             if (&set != &other.set)
                 return false;
-            if (set.blockNumbers)
+            if (!set.blockFlags)
                 return numberIt == other.numberIt;
             else
                 return flagIt == other.flagIt;
@@ -297,7 +296,7 @@ public:
 
         const_iterator &operator++()
         {
-            if (set.blockNumbers)
+            if (!set.blockFlags)
                 ++numberIt;
             else
                 findNextWithFlags(flagIt + 1);
@@ -309,9 +308,9 @@ public:
     friend class const_iterator;
 
 public:
-    BasicBlockSet(): blockNumbers(0), blockFlags(0), function(0) {}
+    BasicBlockSet(): blockFlags(0), function(0) {}
 #ifdef Q_COMPILER_RVALUE_REFS
-    BasicBlockSet(BasicBlockSet &&other): blockNumbers(0), blockFlags(0)
+    BasicBlockSet(BasicBlockSet &&other): blockFlags(0)
     {
         std::swap(blockNumbers, other.blockNumbers);
         std::swap(blockFlags, other.blockFlags);
@@ -319,15 +318,16 @@ public:
     }
 
 #endif // Q_COMPILER_RVALUE_REFS
-    ~BasicBlockSet() { delete blockNumbers; delete blockFlags; }
+    ~BasicBlockSet()
+    {
+        delete blockFlags;
+    }
 
     void init(IR::Function *f)
     {
         Q_ASSERT(!function);
         Q_ASSERT(f);
         function = f;
-        blockNumbers = new Numbers;
-        blockNumbers->reserve(MaxVectorCapacity);
     }
 
     void insert(BasicBlock *bb)
@@ -337,21 +337,20 @@ public:
             return;
         }
 
-        for (std::vector<int>::const_iterator i = blockNumbers->begin(), ei = blockNumbers->end();
-             i != ei; ++i)
-            if (*i == bb->index())
+        for (int i = 0; i < blockNumbers.size(); ++i) {
+            if (blockNumbers[i] == bb->index())
                 return;
+        }
 
-        if (blockNumbers->size() == MaxVectorCapacity) {
+        if (blockNumbers.size() == MaxVectorCapacity) {
             blockFlags = new Flags(function->basicBlockCount(), false);
-            for (std::vector<int>::const_iterator i = blockNumbers->begin(), ei = blockNumbers->end();
-                 i != ei; ++i)
-                blockFlags->operator[](*i) = true;
-            delete blockNumbers;
-            blockNumbers = 0;
+            for (int i = 0; i < blockNumbers.size(); ++i) {
+                blockFlags->operator[](blockNumbers[i]) = true;
+            }
+            blockNumbers.clear();
             blockFlags->operator[](bb->index()) = true;
         } else {
-            blockNumbers->push_back(bb->index());
+            blockNumbers.append(bb->index());
         }
     }
 
