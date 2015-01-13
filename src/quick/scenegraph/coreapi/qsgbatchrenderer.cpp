@@ -293,6 +293,9 @@ void Updater::updateStates(QSGNode *n)
             qDebug() << " - forceupdate";
     }
 
+    if (Q_UNLIKELY(renderer->m_visualizeMode == Renderer::VisualizeChanges))
+        renderer->visualizeChangesPrepare(sn);
+
     visitNode(sn);
 }
 
@@ -751,7 +754,12 @@ Renderer::Renderer(QSGRenderContext *ctx)
     , m_currentShader(0)
     , m_currentClip(0)
     , m_currentClipType(NoClip)
+    , m_vertexUploadPool(256)
+#ifdef QSG_SEPARATE_INDEX_BUFFER
+    , m_indexUploadPool(64)
+#endif
     , m_vao(0)
+    , m_visualizeMode(VisualizeNothing)
 {
     setNodeUpdater(new Updater(this));
 
@@ -806,6 +814,11 @@ Renderer::Renderer(QSGRenderContext *ctx)
 static void qsg_wipeBuffer(Buffer *buffer, QOpenGLFunctions *funcs)
 {
     funcs->glDeleteBuffers(1, &buffer->id);
+    // The free here is ok because we're in one of two situations.
+    // 1. We're using the upload pool in which case unmap will have set the
+    //    data pointer to 0 and calling free on 0 is ok.
+    // 2. We're using dedicated buffers because of visualization or IBO workaround
+    //    and the data something we malloced and must be freed.
     free(buffer->data);
 }
 
@@ -857,14 +870,26 @@ void Renderer::invalidateAndRecycleBatch(Batch *b)
  *
  * ref: http://www.opengl.org/wiki/Buffer_Object
  */
-void Renderer::map(Buffer *buffer, int byteSize)
+void Renderer::map(Buffer *buffer, int byteSize, bool isIndexBuf)
 {
-    if (buffer->size != byteSize) {
-        if (buffer->data)
-            free(buffer->data);
+    if (!m_context->hasBrokenIndexBufferObjects() && m_visualizeMode == VisualizeNothing) {
+        // Common case, use a shared memory pool for uploading vertex data to avoid
+        // excessive reevaluation
+        QDataBuffer<char> &pool =
+#ifdef QSG_SEPARATE_INDEX_BUFFER
+                isIndexBuf ? m_indexUploadPool : m_vertexUploadPool;
+#else
+                m_vertexUploadPool;
+        Q_UNUSED(isIndexBuf);
+#endif
+        if (byteSize > pool.size())
+            pool.resize(byteSize);
+        buffer->data = pool.data();
+    } else {
         buffer->data = (char *) malloc(byteSize);
-        buffer->size = byteSize;
     }
+    buffer->size = byteSize;
+
 }
 
 void Renderer::unmap(Buffer *buffer, bool isIndexBuf)
@@ -874,6 +899,10 @@ void Renderer::unmap(Buffer *buffer, bool isIndexBuf)
     GLenum target = isIndexBuf ? GL_ELEMENT_ARRAY_BUFFER : GL_ARRAY_BUFFER;
     glBindBuffer(target, buffer->id);
     glBufferData(target, buffer->size, buffer->data, m_bufferStrategy);
+
+    if (!m_context->hasBrokenIndexBufferObjects() && m_visualizeMode == VisualizeNothing) {
+        buffer->data = 0;
+    }
 }
 
 BatchRootInfo *Renderer::batchRootInfo(Node *node)
@@ -1770,7 +1799,7 @@ void Renderer::uploadBatch(Batch *b)
         }
 
 #ifdef QSG_SEPARATE_INDEX_BUFFER
-        map(&b->ibo, ibufferSize);
+        map(&b->ibo, ibufferSize, true);
 #else
         bufferSize += ibufferSize;
 #endif
@@ -2429,20 +2458,46 @@ void Renderer::render()
         m_zRange = 1.0 / (m_nextRenderOrder);
     }
 
+    int largestVBO = 0;
+#ifdef QSG_SEPARATE_INDEX_BUFFER
+    int largestIBO = 0;
+#endif
 
     if (Q_UNLIKELY(debug_upload)) qDebug() << "Uploading Opaque Batches:";
-    for (int i=0; i<m_opaqueBatches.size(); ++i)
-        uploadBatch(m_opaqueBatches.at(i));
+    for (int i=0; i<m_opaqueBatches.size(); ++i) {
+        Batch *b = m_opaqueBatches.at(i);
+        largestVBO = qMax(b->vbo.size, largestVBO);
+#ifdef QSG_SEPARATE_INDEX_BUFFER
+        largestIBO = qMax(b->ibo.size, largestIBO);
+#endif
+        uploadBatch(b);
+    }
 
     if (Q_UNLIKELY(debug_upload)) qDebug() << "Uploading Alpha Batches:";
-    for (int i=0; i<m_alphaBatches.size(); ++i)
-        uploadBatch(m_alphaBatches.at(i));
+    for (int i=0; i<m_alphaBatches.size(); ++i) {
+        Batch *b = m_alphaBatches.at(i);
+        uploadBatch(b);
+        largestVBO = qMax(b->vbo.size, largestVBO);
+#ifdef QSG_SEPARATE_INDEX_BUFFER
+        largestIBO = qMax(b->ibo.size, largestIBO);
+#endif
+    }
+
+    if (largestVBO * 2 < m_vertexUploadPool.size())
+        m_vertexUploadPool.resize(largestVBO * 2);
+#ifdef QSG_SEPARATE_INDEX_BUFFER
+    if (largestIBO * 2 < m_indexUploadPool.size())
+        m_indexUploadPool.resize(largestIBO * 2);
+#endif
 
     renderBatches();
 
     m_rebuild = 0;
     m_renderOrderRebuildLower = -1;
     m_renderOrderRebuildUpper = -1;
+
+    if (m_visualizeMode != VisualizeNothing)
+        visualize();
 
     if (m_vao)
         m_vao->release();
@@ -2546,6 +2601,308 @@ void Renderer::renderRenderNode(Batch *batch)
         glDisable(GL_CULL_FACE);
     }
 
+}
+
+class VisualizeShader : public QOpenGLShaderProgram
+{
+public:
+    int color;
+    int matrix;
+    int rotation;
+    int pattern;
+    int projection;
+};
+
+void Renderer::visualizeDrawGeometry(const QSGGeometry *g)
+{
+    if (g->attributeCount() < 1)
+        return;
+    const QSGGeometry::Attribute *a = g->attributes();
+    glVertexAttribPointer(0, a->tupleSize, a->type, false, g->sizeOfVertex(), g->vertexData());
+    if (g->indexCount())
+        glDrawElements(g->drawingMode(), g->indexCount(), g->indexType(), g->indexData());
+    else
+        glDrawArrays(g->drawingMode(), 0, g->vertexCount());
+
+}
+
+void Renderer::visualizeBatch(Batch *b)
+{
+    VisualizeShader *shader = static_cast<VisualizeShader *>(m_shaderManager->visualizeProgram);
+
+    if (b->positionAttribute != 0)
+        return;
+
+    QSGGeometryNode *gn = b->first->node;
+    QSGGeometry *g = gn->geometry();
+    const QSGGeometry::Attribute &a = g->attributes()[b->positionAttribute];
+
+    glBindBuffer(GL_ARRAY_BUFFER, b->vbo.id);
+
+    QMatrix4x4 matrix(m_current_projection_matrix);
+    if (b->root)
+        matrix = matrix * qsg_matrixForRoot(b->root);
+
+    shader->setUniformValue(shader->pattern, float(b->merged ? 0 : 1));
+
+    QColor color = QColor::fromHsvF((rand() & 1023) / 1023.0, 1.0, 1.0);
+    float cr = color.redF();
+    float cg = color.greenF();
+    float cb = color.blueF();
+    shader->setUniformValue(shader->color, cr, cg, cb, 1.0);
+
+    if (b->merged) {
+        shader->setUniformValue(shader->matrix, matrix);
+        for (int ds=0; ds<b->drawSets.size(); ++ds) {
+            const DrawSet &set = b->drawSets.at(ds);
+            glVertexAttribPointer(a.position, 2, a.type, false, g->sizeOfVertex(), (void *) (qintptr) (set.vertices));
+            glDrawElements(g->drawingMode(), set.indexCount, GL_UNSIGNED_SHORT, (void *) (qintptr) (b->vbo.data + set.indices));
+        }
+    } else {
+        Element *e = b->first;
+        int offset = 0;
+        while (e) {
+            gn = e->node;
+            g = gn->geometry();
+            shader->setUniformValue(shader->matrix, matrix * *gn->matrix());
+            glVertexAttribPointer(a.position, a.tupleSize, a.type, false, g->sizeOfVertex(), (void *) (qintptr) offset);
+            glDrawElements(g->drawingMode(), g->indexCount(), g->indexType(), g->indexData());
+            offset += g->sizeOfVertex() * g->vertexCount();
+            e = e->nextInBatch;
+        }
+    }
+}
+
+
+
+
+void Renderer::visualizeClipping(QSGNode *node)
+{
+    if (node->type() == QSGNode::ClipNodeType) {
+        VisualizeShader *shader = static_cast<VisualizeShader *>(m_shaderManager->visualizeProgram);
+        QSGClipNode *clipNode = static_cast<QSGClipNode *>(node);
+        QMatrix4x4 matrix = m_current_projection_matrix;
+        if (clipNode->matrix())
+            matrix = matrix * *clipNode->matrix();
+        shader->setUniformValue(shader->matrix, matrix);
+        visualizeDrawGeometry(clipNode->geometry());
+    }
+
+    QSGNODE_TRAVERSE(node) {
+        visualizeClipping(child);
+    }
+}
+
+#define QSGNODE_DIRTY_PARENT (QSGNode::DirtyNodeAdded \
+                              | QSGNode::DirtyOpacity \
+                              | QSGNode::DirtyMatrix \
+                              | QSGNode::DirtyNodeRemoved)
+
+void Renderer::visualizeChangesPrepare(Node *n, uint parentChanges)
+{
+    uint childDirty = (parentChanges | n->dirtyState) & QSGNODE_DIRTY_PARENT;
+    uint selfDirty = n->dirtyState | parentChanges;
+    if (n->type() == QSGNode::GeometryNodeType && selfDirty != 0)
+        m_visualizeChanceSet.insert(n, selfDirty);
+    SHADOWNODE_TRAVERSE(n) {
+        visualizeChangesPrepare(*child, childDirty);
+    }
+}
+
+void Renderer::visualizeChanges(Node *n)
+{
+
+    if (n->type() == QSGNode::GeometryNodeType && m_visualizeChanceSet.contains(n)) {
+        uint dirty = m_visualizeChanceSet.value(n);
+        bool tinted = (dirty & QSGNODE_DIRTY_PARENT) != 0;
+
+        VisualizeShader *shader = static_cast<VisualizeShader *>(m_shaderManager->visualizeProgram);
+        QColor color = QColor::fromHsvF((rand() & 1023) / 1023.0, 0.3, 1.0);
+        float ca = 0.5;
+        float cr = color.redF() * ca;
+        float cg = color.greenF() * ca;
+        float cb = color.blueF() * ca;
+        shader->setUniformValue(shader->color, cr, cg, cb, ca);
+        shader->setUniformValue(shader->pattern, float(tinted ? 0.5 : 0));
+
+        QSGGeometryNode *gn = static_cast<QSGGeometryNode *>(n->sgNode);
+
+        QMatrix4x4 matrix = m_current_projection_matrix;
+        if (n->element()->batch->root)
+            matrix = matrix * qsg_matrixForRoot(n->element()->batch->root);
+        matrix = matrix * *gn->matrix();
+        shader->setUniformValue(shader->matrix, matrix);
+        visualizeDrawGeometry(gn->geometry());
+
+        // This is because many changes don't propegate their dirty state to the
+        // parent so the node updater will not unset these states. They are
+        // not used for anything so, unsetting it should have no side effects.
+        n->dirtyState = 0;
+    }
+
+    SHADOWNODE_TRAVERSE(n) {
+        visualizeChanges(*child);
+    }
+}
+
+void Renderer::visualizeOverdraw_helper(Node *node)
+{
+    if (node->type() == QSGNode::GeometryNodeType) {
+        VisualizeShader *shader = static_cast<VisualizeShader *>(m_shaderManager->visualizeProgram);
+        QSGGeometryNode *gn = static_cast<QSGGeometryNode *>(node->sgNode);
+
+        QMatrix4x4 matrix = m_current_projection_matrix;
+        matrix(2, 2) = m_zRange;
+        matrix(2, 3) = 1.0f - node->element()->order * m_zRange;
+
+        if (node->element()->batch->root)
+            matrix = matrix * qsg_matrixForRoot(node->element()->batch->root);
+        matrix = matrix * *gn->matrix();
+        shader->setUniformValue(shader->matrix, matrix);
+
+        QColor color = node->element()->batch->isOpaque ? QColor::fromRgbF(0.3, 1.0, 0.3) : QColor::fromRgbF(1.0, 0.3, 0.3);
+        float ca = 0.33;
+        shader->setUniformValue(shader->color, color.redF() * ca, color.greenF() * ca, color.blueF() * ca, ca);
+
+        visualizeDrawGeometry(gn->geometry());
+    }
+
+    SHADOWNODE_TRAVERSE(node) {
+        visualizeOverdraw_helper(*child);
+    }
+}
+
+void Renderer::visualizeOverdraw()
+{
+    VisualizeShader *shader = static_cast<VisualizeShader *>(m_shaderManager->visualizeProgram);
+    shader->setUniformValue(shader->color, 0.5f, 0.5f, 1.0f, 1.0f);
+    shader->setUniformValue(shader->projection, 1);
+
+    glBlendFunc(GL_ONE, GL_ONE);
+
+    static float step = 0;
+    step += M_PI * 2 / 1000.;
+    if (step > M_PI * 2)
+        step = 0;
+    float angle = 80.0 * sin(step);
+
+    QMatrix4x4 xrot; xrot.rotate(20, 1, 0, 0);
+    QMatrix4x4 zrot; zrot.rotate(angle, 0, 0, 1);
+    QMatrix4x4 tx; tx.translate(0, 0, 1);
+
+    QMatrix4x4 m;
+
+//    m.rotate(180, 0, 1, 0);
+
+    m.translate(0, 0.5, 4);
+    m.scale(2, 2, 1);
+
+    m.rotate(-30, 1, 0, 0);
+    m.rotate(angle, 0, 1, 0);
+    m.translate(0, 0, -1);
+
+    shader->setUniformValue(shader->rotation, m);
+
+    float box[] = {
+        // lower
+        -1, 1, 0,   1, 1, 0,
+        -1, 1, 0,   -1, -1, 0,
+        1, 1, 0,    1, -1, 0,
+        -1, -1, 0,  1, -1, 0,
+
+        // upper
+        -1, 1, 1,   1, 1, 1,
+        -1, 1, 1,   -1, -1, 1,
+        1, 1, 1,    1, -1, 1,
+        -1, -1, 1,  1, -1, 1,
+
+        // sides
+        -1, -1, 0,  -1, -1, 1,
+        1, -1, 0,   1, -1, 1,
+        -1, 1, 0,   -1, 1, 1,
+        1, 1, 0,    1, 1, 1
+    };
+    glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, box);
+    glLineWidth(2);
+    glDrawArrays(GL_LINES, 0, 24);
+
+    visualizeOverdraw_helper(m_nodes.value(rootNode()));
+
+    // Animate the view...
+    QSurface *surface = QOpenGLContext::currentContext()->surface();
+    if (surface->surfaceClass() == QSurface::Window)
+        if (QQuickWindow *window = qobject_cast<QQuickWindow *>(static_cast<QWindow *>(surface)))
+            window->update();
+}
+
+void Renderer::setCustomRenderMode(const QByteArray &mode)
+{
+    if (mode.isEmpty()) m_visualizeMode = VisualizeNothing;
+    else if (mode == "clip") m_visualizeMode = VisualizeClipping;
+    else if (mode == "overdraw") m_visualizeMode = VisualizeOverdraw;
+    else if (mode == "batches") m_visualizeMode = VisualizeBatches;
+    else if (mode == "changes") m_visualizeMode = VisualizeChanges;
+}
+
+void Renderer::visualize()
+{
+    if (!m_shaderManager->visualizeProgram) {
+        VisualizeShader *prog = new VisualizeShader();
+        QSGShaderSourceBuilder::initializeProgramFromFiles(
+            prog,
+            QStringLiteral(":/scenegraph/shaders/visualization.vert"),
+            QStringLiteral(":/scenegraph/shaders/visualization.frag"));
+        prog->bindAttributeLocation("v", 0);
+        prog->link();
+        prog->bind();
+        prog->color = prog->uniformLocation("color");
+        prog->pattern = prog->uniformLocation("pattern");
+        prog->projection = prog->uniformLocation("projection");
+        prog->matrix = prog->uniformLocation("matrix");
+        prog->rotation = prog->uniformLocation("rotation");
+        m_shaderManager->visualizeProgram = prog;
+    } else {
+        m_shaderManager->visualizeProgram->bind();
+    }
+    VisualizeShader *shader = static_cast<VisualizeShader *>(m_shaderManager->visualizeProgram);
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glEnableVertexAttribArray(0);
+
+    // Blacken out the actual rendered content...
+    float bgOpacity = 0.8;
+    if (m_visualizeMode == VisualizeBatches)
+        bgOpacity = 1.0;
+    float v[] = { -1, 1,   1, 1,   -1, -1,   1, -1 };
+    shader->setUniformValue(shader->color, 0.0f, 0.0f, 0.0f, bgOpacity);
+    shader->setUniformValue(shader->matrix, QMatrix4x4());
+    shader->setUniformValue(shader->rotation, QMatrix4x4());
+    shader->setUniformValue(shader->pattern, 0.0f);
+    shader->setUniformValue(shader->projection, false);
+    glVertexAttribPointer(0, 2, GL_FLOAT, false, 0, v);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    if (m_visualizeMode == VisualizeBatches) {
+        srand(0); // To force random colors to be roughly the same every time..
+        for (int i=0; i<m_opaqueBatches.size(); ++i) visualizeBatch(m_opaqueBatches.at(i));
+        for (int i=0; i<m_alphaBatches.size(); ++i) visualizeBatch(m_alphaBatches.at(i));
+    } else if (m_visualizeMode == VisualizeClipping) {
+        shader->setUniformValue(shader->pattern, 0.5f);
+        shader->setUniformValue(shader->color, 0.2f, 0.0f, 0.0f, 0.2f);
+        visualizeClipping(rootNode());
+    } else if (m_visualizeMode == VisualizeChanges) {
+        visualizeChanges(m_nodes.value(rootNode()));
+        m_visualizeChanceSet.clear();
+    } else if (m_visualizeMode == VisualizeOverdraw) {
+        visualizeOverdraw();
+    }
+
+    // Reset state back to defaults..
+    glDisable(GL_BLEND);
+    glDisableVertexAttribArray(0);
+    shader->release();
 }
 
 QT_END_NAMESPACE

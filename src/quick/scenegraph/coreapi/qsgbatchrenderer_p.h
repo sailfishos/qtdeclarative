@@ -263,6 +263,8 @@ inline QDebug operator << (QDebug d, const Rect &r) {
 struct Buffer {
     GLuint id;
     int size;
+    // Data is only valid while preparing the upload. Exception is if we are using the
+    // broken IBO workaround or we are using a visualization mode.
     char *data;
 };
 
@@ -499,7 +501,7 @@ public:
         float lastOpacity;
     };
 
-    ShaderManager(QSGRenderContext *ctx) : blitProgram(0), context(ctx) { }
+    ShaderManager(QSGRenderContext *ctx) : blitProgram(0), visualizeProgram(0), context(ctx) { }
     ~ShaderManager() {
         qDeleteAll(rewrittenShaders.values());
         qDeleteAll(stockShaders.values());
@@ -516,6 +518,7 @@ public:
     QHash<QSGMaterialType *, Shader *> stockShaders;
 
     QOpenGLShaderProgram *blitProgram;
+    QOpenGLShaderProgram *visualizeProgram;
     QSGRenderContext *context;
 };
 
@@ -524,6 +527,14 @@ class Q_QUICK_PRIVATE_EXPORT Renderer : public QSGRenderer
 public:
     Renderer(QSGRenderContext *);
     ~Renderer();
+
+    enum VisualizeMode {
+        VisualizeNothing,
+        VisualizeBatches,
+        VisualizeClipping,
+        VisualizeChanges,
+        VisualizeOverdraw
+    };
 
 protected:
     void nodeChanged(QSGNode *node, QSGNode::DirtyState state);
@@ -540,7 +551,7 @@ private:
 
     friend class Updater;
 
-    void map(Buffer *buffer, int size);
+    void map(Buffer *buffer, int size, bool isIndexBuf = false);
     void unmap(Buffer *buffer, bool isIndexBuf = false);
 
     void buildRenderListsFromScratch();
@@ -579,6 +590,16 @@ private:
     inline Batch *newBatch();
     void invalidateAndRecycleBatch(Batch *b);
 
+    void visualize();
+    void visualizeBatch(Batch *b);
+    void visualizeClipping(QSGNode *node);
+    void visualizeChangesPrepare(Node *n, uint parentChanges = 0);
+    void visualizeChanges(Node *n);
+    void visualizeOverdraw();
+    void visualizeOverdraw_helper(Node *node);
+    void visualizeDrawGeometry(const QSGGeometry *g);
+    void setCustomRenderMode(const QByteArray &mode);
+
     QSet<Node *> m_taggedRoots;
     QDataBuffer<Element *> m_opaqueRenderList;
     QDataBuffer<Element *> m_alphaRenderList;
@@ -615,11 +636,18 @@ private:
     const QSGClipNode *m_currentClip;
     ClipType m_currentClipType;
 
+    QDataBuffer<char> m_vertexUploadPool;
+#ifdef QSG_SEPARATE_INDEX_BUFFER
+    QDataBuffer<char> m_indexUploadPool;
+#endif
     // For minimal OpenGL core profile support
     QOpenGLVertexArrayObject *m_vao;
-    
+
     Allocator<Node, 256> m_nodeAllocator;
     Allocator<Element, 64> m_elementAllocator;
+
+    QHash<Node *, uint> m_visualizeChanceSet;
+    VisualizeMode m_visualizeMode;
 };
 
 Batch *Renderer::newBatch()
