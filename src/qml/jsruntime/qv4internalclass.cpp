@@ -200,6 +200,7 @@ InternalClass *InternalClass::changeMember(String *string, PropertyAttributes da
     }
 
     t.lookup = newClass;
+    Q_ASSERT(t.lookup);
     return newClass;
 }
 
@@ -240,6 +241,7 @@ InternalClass *InternalClass::changePrototype(Object *proto)
     }
 
     t.lookup = newClass;
+    Q_ASSERT(t.lookup);
     return newClass;
 }
 
@@ -272,6 +274,7 @@ InternalClass *InternalClass::changeVTable(const ManagedVTable *vt)
     }
 
     t.lookup = newClass;
+    Q_ASSERT(t.lookup);
     return newClass;
 }
 
@@ -346,6 +349,7 @@ InternalClass *InternalClass::addMemberImpl(String *string, PropertyAttributes d
     }
 
     t.lookup = newClass;
+    Q_ASSERT(t.lookup);
     return newClass;
 }
 
@@ -355,8 +359,8 @@ void InternalClass::removeMember(Object *object, Identifier *id)
     uint propIdx = oldClass->propertyTable.lookup(id);
     Q_ASSERT(propIdx < oldClass->size);
 
-    Transition t = { { id }, 0, -1 };
-    t = oldClass->lookupOrInsertTransition(t); // take a copy
+    Transition temp = { { id }, 0, -1 };
+    Transition &t = oldClass->lookupOrInsertTransition(temp);
 
     if (t.lookup) {
         object->internalClass = t.lookup;
@@ -377,7 +381,7 @@ void InternalClass::removeMember(Object *object, Identifier *id)
     memmove(object->memberData.data() + propIdx, object->memberData.data() + propIdx + 1, (object->internalClass->size - propIdx)*sizeof(Value));
 
     t.lookup = object->internalClass;
-    oldClass->lookupOrInsertTransition(t);
+    Q_ASSERT(t.lookup);
 }
 
 uint InternalClass::find(const StringRef string)
@@ -457,11 +461,12 @@ void InternalClass::destroy()
         if (next->m_frozen)
             destroyStack.append(next->m_frozen);
 
-        for (size_t i = 0; i < transitions.size(); ++i) {
+        for (size_t i = 0; i < next->transitions.size(); ++i) {
+            Q_ASSERT(next->transitions.at(i).lookup);
             destroyStack.append(next->transitions.at(i).lookup);
         }
 
-        next->transitions.clear();
+        next->transitions.~vector<Transition>();
     }
 }
 

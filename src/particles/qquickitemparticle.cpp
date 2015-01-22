@@ -157,7 +157,7 @@ void QQuickItemParticle::tick(int time)
         QQuickItemParticleAttached* mpa;
         if ((mpa = qobject_cast<QQuickItemParticleAttached*>(qmlAttachedPropertiesObject<QQuickItemParticle>(item))))
             mpa->detach();//reparent as well?
-        //TODO: Delete iff we created it
+        delete item;
         m_activeCount--;
     }
     m_deletables.clear();
