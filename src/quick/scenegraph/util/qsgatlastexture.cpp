@@ -380,12 +380,14 @@ void Atlas::bind(QSGTexture::Filtering filtering)
         if (profileFrames)
             qsg_renderer_timer.start();
 
+        Texture *t = m_pending_uploads.at(i);
         if (m_externalFormat == GL_BGRA &&
                 !m_use_bgra_fallback) {
-            uploadBgra(m_pending_uploads.at(i));
+            uploadBgra(t);
         } else {
-            upload(m_pending_uploads.at(i));
+            upload(t);
         }
+        t->releaseImage();
 
         QSystrace::end("graphics", "Atlas::bind", "");
         qCDebug(QSG_LOG_TIME_TEXTURE).nospace() << "atlastexture uploaded in: " << qsg_renderer_timer.elapsed()
@@ -422,15 +424,15 @@ Texture::Texture(Atlas *atlas, const QRect &textureRect, const QImage &image)
     , m_image(image)
     , m_atlas(atlas)
     , m_nonatlas_texture(0)
+    , m_has_alpha(image.hasAlphaChannel())
 {
-    m_allocated_rect_without_padding = m_allocated_rect.adjusted(1, 1, -1, -1);
     float w = atlas->size().width();
     float h = atlas->size().height();
-
-    m_texture_coords_rect = QRectF(m_allocated_rect_without_padding.x() / w,
-                                   m_allocated_rect_without_padding.y() / h,
-                                   m_allocated_rect_without_padding.width() / w,
-                                   m_allocated_rect_without_padding.height() / h);
+    QRect nopad = atlasSubRectWithoutPadding();
+    m_texture_coords_rect = QRectF(nopad.x() / w,
+                                   nopad.y() / h,
+                                   nopad.width() / w,
+                                   nopad.height() / h);
 }
 
 Texture::~Texture()
@@ -447,11 +449,53 @@ void Texture::bind()
 
 QSGTexture *Texture::removedFromAtlas() const
 {
-    if (!m_nonatlas_texture) {
+    if (m_nonatlas_texture) {
+        m_nonatlas_texture->setMipmapFiltering(mipmapFiltering());
+        m_nonatlas_texture->setFiltering(filtering());
+        return m_nonatlas_texture;
+    }
+
+    if (!m_image.isNull()) {
         m_nonatlas_texture = new QSGPlainTexture();
         m_nonatlas_texture->setImage(m_image);
         m_nonatlas_texture->setFiltering(filtering());
+
+    } else {
+        // bind the atlas texture as an fbo and extract the texture..
+
+        // First extract the currently bound fbo so we can restore it later.
+        GLint currentFbo;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFbo);
+
+        // Create an FBO and bind the atlas texture into it.
+        GLuint fbo;
+        glGenFramebuffers(1, &fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_atlas->textureId(), 0);
+
+        // Create the target texture, QSGPlainTexture below will deal with the texparams, so we don't
+        // need to worry about those here.
+        GLuint texture;
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        QRect r = atlasSubRectWithoutPadding();
+        // and copy atlas into our texture.
+        glCopyTexImage2D(GL_TEXTURE_2D, 0, m_atlas->internalFormat(), r.x(), r.y(), r.width(), r.height(), 0);
+
+        m_nonatlas_texture = new QSGPlainTexture();
+        m_nonatlas_texture->setTextureId(texture);
+        m_nonatlas_texture->setOwnsTexture(true);
+        m_nonatlas_texture->setHasAlphaChannel(m_has_alpha);
+        m_nonatlas_texture->setTextureSize(r.size());
+
+        // cleanup: unbind our atlas from the fbo, rebind the old default and delete the fbo.
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, (GLuint) currentFbo);
+        glDeleteFramebuffers(1, &fbo);
     }
+
+    m_nonatlas_texture->setMipmapFiltering(mipmapFiltering());
+    m_nonatlas_texture->setFiltering(filtering());
     return m_nonatlas_texture;
 }
 
