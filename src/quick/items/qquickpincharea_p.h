@@ -290,7 +290,9 @@ protected:
 
 private:
     void clearPinch();
+    void cancelPinch();
     void updatePinch();
+    void updatePinchTarget();
     void handlePress();
     void handleRelease();
 
