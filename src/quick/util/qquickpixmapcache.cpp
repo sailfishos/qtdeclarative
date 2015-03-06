@@ -54,6 +54,7 @@
 #include <QtQuick/private/qsgtexture_p.h>
 #include <QtQuick/private/qsgcontext_p.h>
 
+#include <QQuickWindow>
 #include <QCoreApplication>
 #include <QImageReader>
 #include <QHash>
@@ -108,13 +109,16 @@ QQuickDefaultTextureFactory::QQuickDefaultTextureFactory(const QImage &image)
     } else {
         im = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     }
+    size = im.size();
 }
 
 
-QSGTexture *QQuickDefaultTextureFactory::createTexture(QQuickWindow *) const
+QSGTexture *QQuickDefaultTextureFactory::createTexture(QQuickWindow *window) const
 {
-    QSGPlainTexture *t = new QSGPlainTexture();
-    t->setImage(im);
+    QSGTexture *t = window->createTextureFromImage(im, QQuickWindow::TextureCanUseAtlas);
+    static bool transient = qEnvironmentVariableIsSet("QSG_TRANSIENT_IMAGES");
+    if (transient)
+        const_cast<QQuickDefaultTextureFactory *>(this)->im = QImage();
     return t;
 }
 
