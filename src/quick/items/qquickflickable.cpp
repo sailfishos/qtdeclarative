@@ -1021,7 +1021,7 @@ void QQuickFlickablePrivate::handleMouseMoveEvent(QMouseEvent *event)
                 }
                 if (fuzzyLessThanOrEqualTo(minY, newY)) {
                     newY = minY;
-                    rejectY = vData.pressPos == minY && vData.move.value() == minY && dy > 0;
+                    rejectY |= vData.pressPos == minY && vData.move.value() == minY && dy > 0;
                 }
             } else {
                 if (newY > minY)
@@ -1055,7 +1055,7 @@ void QQuickFlickablePrivate::handleMouseMoveEvent(QMouseEvent *event)
                 }
                 if (fuzzyLessThanOrEqualTo(minX, newX)) {
                     newX = minX;
-                    rejectX = hData.pressPos == minX && hData.move.value() == minX && dx > 0;
+                    rejectX |= hData.pressPos == minX && hData.move.value() == minX && dx > 0;
                 }
             } else {
                 if (newX > minX)
@@ -1410,13 +1410,13 @@ qreal QQuickFlickable::minXExtent() const
 qreal QQuickFlickable::maxXExtent() const
 {
     Q_D(const QQuickFlickable);
-    return width() - vWidth() - d->hData.endMargin;
+    return qMin<qreal>(0, width() - vWidth() - d->hData.endMargin);
 }
 /* returns -ve */
 qreal QQuickFlickable::maxYExtent() const
 {
     Q_D(const QQuickFlickable);
-    return height() - vHeight() - d->vData.endMargin;
+    return qMin<qreal>(0, height() - vHeight() - d->vData.endMargin);
 }
 
 void QQuickFlickable::componentComplete()
