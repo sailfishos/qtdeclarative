@@ -1021,6 +1021,9 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
         stealX = stealY = scrollingPhase;
     }
 
+    bool keepY = q->yflick();
+    bool keepX = q->xflick();
+
     bool prevHMoved = hMoved;
     bool prevVMoved = vMoved;
 
