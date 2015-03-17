@@ -1071,6 +1071,9 @@ void Renderer::nodeWasRemoved(Node *node)
         if (e) {
             e->removed = true;
             m_elementsToDelete.add(e);
+
+            if (m_renderNodeElements.isEmpty())
+                m_useDepthBuffer = context()->openglContext()->format().depthBufferSize() > 0;
         }
     }
 
