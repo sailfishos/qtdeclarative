@@ -998,6 +998,9 @@ void QQuickFlickablePrivate::handleMouseMoveEvent(QMouseEvent *event)
     bool stealY = stealMouse;
     bool stealX = stealMouse;
 
+    bool keepY = q->yflick();
+    bool keepX = q->xflick();
+
     bool prevHMoved = hMoved;
     bool prevVMoved = vMoved;
 
@@ -1021,7 +1024,7 @@ void QQuickFlickablePrivate::handleMouseMoveEvent(QMouseEvent *event)
                 }
                 if (fuzzyLessThanOrEqualTo(minY, newY)) {
                     newY = minY;
-                    rejectY = vData.pressPos == minY && vData.move.value() == minY && dy > 0;
+                    rejectY |= vData.pressPos == minY && vData.move.value() == minY && dy > 0;
                 }
             } else {
                 if (newY > minY)
@@ -1036,6 +1039,11 @@ void QQuickFlickablePrivate::handleMouseMoveEvent(QMouseEvent *event)
             }
             if (!rejectY && overThreshold)
                 stealY = true;
+
+            if ((newY >= minY && vData.pressPos == minY && vData.move.value() == minY && dy > 0)
+                        || (newY <= maxY && vData.pressPos == maxY && vData.move.value() == maxY && dy < 0)) {
+                keepY = false;
+            }
         }
     }
 
@@ -1055,7 +1063,7 @@ void QQuickFlickablePrivate::handleMouseMoveEvent(QMouseEvent *event)
                 }
                 if (fuzzyLessThanOrEqualTo(minX, newX)) {
                     newX = minX;
-                    rejectX = hData.pressPos == minX && hData.move.value() == minX && dx > 0;
+                    rejectX |= hData.pressPos == minX && hData.move.value() == minX && dx > 0;
                 }
             } else {
                 if (newX > minX)
@@ -1072,12 +1080,18 @@ void QQuickFlickablePrivate::handleMouseMoveEvent(QMouseEvent *event)
 
             if (!rejectX && overThreshold)
                 stealX = true;
+
+            if ((newX >= minX && vData.pressPos == minX && vData.move.value() == minX && dx > 0)
+                        || (newX <= maxX && vData.pressPos == maxX && vData.move.value() == maxX && dx < 0)) {
+                keepX = false;
+            }
         }
     }
 
     stealMouse = stealX || stealY;
     if (stealMouse) {
-        q->setKeepMouseGrab(true);
+        if ((stealX && keepX) || (stealY && keepY))
+            q->setKeepMouseGrab(true);
         clearDelayedPress();
     }
 
@@ -1410,13 +1424,13 @@ qreal QQuickFlickable::minXExtent() const
 qreal QQuickFlickable::maxXExtent() const
 {
     Q_D(const QQuickFlickable);
-    return width() - vWidth() - d->hData.endMargin;
+    return qMin<qreal>(0, width() - vWidth() - d->hData.endMargin);
 }
 /* returns -ve */
 qreal QQuickFlickable::maxYExtent() const
 {
     Q_D(const QQuickFlickable);
-    return height() - vHeight() - d->vData.endMargin;
+    return qMin<qreal>(0, height() - vHeight() - d->vData.endMargin);
 }
 
 void QQuickFlickable::componentComplete()
