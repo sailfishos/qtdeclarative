@@ -68,8 +68,6 @@ public:
 
     void update(QQuickWindow *window);
     void maybeUpdate(QQuickWindow *window);
-    void handleUpdateRequest(QQuickWindow *window);
-
     QSGContext *sceneGraphContext() const;
     QSGRenderContext *createRenderContext(QSGContext *) const;
 
@@ -90,6 +88,7 @@ private:
         QQuickWindow *window;
         QSGRenderThread *thread;
         QSurfaceFormat actualWindowFormat;
+        int timerId;
         uint updateDuringSync : 1;
         uint forceRenderPass : 1;
     };
@@ -98,6 +97,7 @@ private:
 
     void releaseResources(Window *window, bool inDestructor);
     bool checkAndResetForceUpdate(QQuickWindow *window);
+    Window *windowForTimer(int timerId) const;
 
     bool anyoneShowing() const;
     void initialize();
@@ -117,6 +117,7 @@ private:
     QList<Window> m_windows;
 
     int m_animation_timer;
+    int m_exhaust_delay;
 
     bool m_lockedForSync;
 };
