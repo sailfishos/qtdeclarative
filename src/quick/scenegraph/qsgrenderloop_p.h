@@ -71,7 +71,6 @@ public:
 
     virtual void update(QQuickWindow *window) = 0;
     virtual void maybeUpdate(QQuickWindow *window) = 0;
-    virtual void handleUpdateRequest(QQuickWindow *) { }
 
     virtual QAnimationDriver *animationDriver() const = 0;
 

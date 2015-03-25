@@ -114,6 +114,16 @@ QT_BEGIN_NAMESPACE
 
 #define QSG_RT_PAD "                    (RT)"
 
+static int get_env_int(const char *name, int defaultValue)
+{
+    QByteArray content = qgetenv(name);
+
+    bool ok = false;
+    int value = content.toInt(&ok);
+    return ok ? value : defaultValue;
+}
+
+
 static inline int qsgrl_animation_interval() {
     qreal refreshRate = QGuiApplication::primaryScreen()->refreshRate();
     // To work around that some platforms wrongfully return 0 or something
@@ -701,6 +711,8 @@ QSGThreadedRenderLoop::QSGThreadedRenderLoop()
 
     m_animation_driver = sg->createAnimationDriver(this);
 
+    m_exhaust_delay = get_env_int("QML_EXHAUST_DELAY", 5);
+
     connect(m_animation_driver, SIGNAL(started()), this, SLOT(animationStarted()));
     connect(m_animation_driver, SIGNAL(stopped()), this, SLOT(animationStopped()));
 
@@ -714,7 +726,10 @@ QSGRenderContext *QSGThreadedRenderLoop::createRenderContext(QSGContext *sg) con
 
 void QSGThreadedRenderLoop::maybePostPolishRequest(Window *w)
 {
-    w->window->requestUpdate();
+    if (w->timerId == 0) {
+        qCDebug(QSG_LOG_RENDERLOOP) << "- posting update";
+        w->timerId = startTimer(m_exhaust_delay, Qt::PreciseTimer);
+    }
 }
 
 QAnimationDriver *QSGThreadedRenderLoop::animationDriver() const
@@ -864,6 +879,7 @@ void QSGThreadedRenderLoop::handleExposure(QQuickWindow *window)
         win.window = window;
         win.actualWindowFormat = window->format();
         win.thread = new QSGRenderThread(this, QQuickWindowPrivate::get(window)->context);
+        win.timerId = 0;
         win.updateDuringSync = false;
         win.forceRenderPass = true; // also covered by polishAndSync(inExpose=true), but doesn't hurt
         m_windows << win;
@@ -947,14 +963,6 @@ void QSGThreadedRenderLoop::handleObscurity(Window *w)
     startOrStopAnimationTimer();
 }
 
-
-void QSGThreadedRenderLoop::handleUpdateRequest(QQuickWindow *window)
-{
-    qCDebug(QSG_LOG_RENDERLOOP) << "- polish and sync update request";
-    foreach (const Window &w, m_windows)
-        if (w.window == window)
-            polishAndSync(const_cast<Window *>(&w));
-}
 
 void QSGThreadedRenderLoop::maybeUpdate(QQuickWindow *window)
 {
@@ -1083,6 +1091,8 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w, bool inExpose)
     QQuickWindow *window = w->window;
     if (!w->thread || !w->thread->window) {
         qCDebug(QSG_LOG_RENDERLOOP) << "- not exposed, abort";
+        killTimer(w->timerId);
+        w->timerId = 0;
         return;
     }
 
@@ -1092,6 +1102,8 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w, bool inExpose)
     w = windowFor(m_windows, window);
     if (!w || !w->thread || !w->thread->window) {
         qCDebug(QSG_LOG_RENDERLOOP) << "- removed after event flushing, abort";
+        killTimer(w->timerId);
+        w->timerId = 0;
         return;
     }
 
@@ -1129,6 +1141,9 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w, bool inExpose)
     if (profileFrames)
         syncTime = timer.nsecsElapsed();
 
+    killTimer(w->timerId);
+    w->timerId = 0;
+
     if (m_animation_timer == 0 && m_animation_driver->isRunning()) {
         qCDebug(QSG_LOG_RENDERLOOP) << "- advancing animations";
         m_animation_driver->advance();
@@ -1155,6 +1170,17 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w, bool inExpose)
             timer.nsecsElapsed() - syncTime));
 }
 
+QSGThreadedRenderLoop::Window *QSGThreadedRenderLoop::windowForTimer(int timerId) const
+{
+    for (int i=0; i<m_windows.size(); ++i) {
+        if (m_windows.at(i).timerId == timerId) {
+            return const_cast<Window *>(&m_windows.at(i));
+            break;
+        }
+    }
+    return 0;
+}
+
 bool QSGThreadedRenderLoop::event(QEvent *e)
 {
     switch ((int) e->type()) {
@@ -1165,8 +1191,15 @@ bool QSGThreadedRenderLoop::event(QEvent *e)
             qCDebug(QSG_LOG_RENDERLOOP) << "- ticking non-visual timer";
             m_animation_driver->advance();
             emit timeToIncubate();
-            return true;
+        } else {
+            qCDebug(QSG_LOG_RENDERLOOP) << "- polish and sync timer";
+            Window *w = windowForTimer(te->timerId());
+            if (w)
+                polishAndSync(w);
+            else
+                killTimer(te->timerId());
         }
+        return true;
     }
 
     default:
