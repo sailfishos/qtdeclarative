@@ -429,16 +429,8 @@ QSGImageNode *QSGContext::createImageNode()
 */
 QSGGlyphNode *QSGContext::createNativeGlyphNode(QSGRenderContext *rc)
 {
-#if defined(QT_OPENGL_ES) && !defined(QT_OPENGL_ES_2_ANGLE)
-    Q_D(QSGContext);
-    if (d->distanceFieldDisabled)
-        return new QSGDefaultGlyphNode;
-    else
-        return createGlyphNode(rc);
-#else
     Q_UNUSED(rc);
     return new QSGDefaultGlyphNode;
-#endif
 }
 
 /*!
