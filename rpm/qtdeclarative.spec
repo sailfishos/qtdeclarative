@@ -7,7 +7,7 @@ License:    LGPLv2.1 with exception or GPLv3
 URL:        http://qt.nokia.com
 Source0:    %{name}-%{version}.tar.bz2
 BuildRequires:  qt5-qtcore-devel
-BuildRequires:  qt5-qtgui-devel
+BuildRequires:  qt5-qtgui-devel >= 5.2.1+git24
 BuildRequires:  qt5-qtnetwork-devel
 BuildRequires:  qt5-qtsql-devel
 BuildRequires:  qt5-qttest-devel
