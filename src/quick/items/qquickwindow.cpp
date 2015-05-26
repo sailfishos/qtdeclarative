@@ -501,6 +501,7 @@ static QMouseEvent *touchToMouseEvent(QEvent::Type type, const QTouchEvent::Touc
         transformedVelocity = transformMatrix.mapVector(p.velocity()).toVector2D();
     }
     QGuiApplicationPrivate::setMouseEventCapsAndVelocity(me, event->device()->capabilities(), transformedVelocity);
+    QGuiApplicationPrivate::setMouseEventSource(me, Qt::MouseEventSynthesizedByQt);
     return me;
 }
 
@@ -1386,6 +1387,7 @@ QMouseEvent *QQuickWindowPrivate::cloneMouseEvent(QMouseEvent *event, QPointF *t
                                       event->windowPos(), event->screenPos(),
                                       event->button(), event->buttons(), event->modifiers());
     QGuiApplicationPrivate::setMouseEventCapsAndVelocity(me, caps, velocity);
+    QGuiApplicationPrivate::setMouseEventSource(me, QGuiApplicationPrivate::mouseEventSource(event));
     me->setTimestamp(event->timestamp());
     return me;
 }
@@ -1462,6 +1464,12 @@ bool QQuickWindowPrivate::deliverMouseEvent(QMouseEvent *event)
 void QQuickWindow::mousePressEvent(QMouseEvent *event)
 {
     Q_D(QQuickWindow);
+
+    if (event->source() == Qt::MouseEventSynthesizedBySystem) {
+        event->accept();
+        return;
+    }
+
 #ifdef MOUSE_DEBUG
     qWarning() << "QQuickWindow::mousePressEvent()" << event->localPos() << event->button() << event->buttons();
 #endif
@@ -1473,6 +1481,12 @@ void QQuickWindow::mousePressEvent(QMouseEvent *event)
 void QQuickWindow::mouseReleaseEvent(QMouseEvent *event)
 {
     Q_D(QQuickWindow);
+
+    if (event->source() == Qt::MouseEventSynthesizedBySystem) {
+        event->accept();
+        return;
+    }
+
 #ifdef MOUSE_DEBUG
     qWarning() << "QQuickWindow::mouseReleaseEvent()" << event->localPos() << event->button() << event->buttons();
 #endif
@@ -1491,6 +1505,12 @@ void QQuickWindow::mouseReleaseEvent(QMouseEvent *event)
 void QQuickWindow::mouseDoubleClickEvent(QMouseEvent *event)
 {
     Q_D(QQuickWindow);
+
+    if (event->source() == Qt::MouseEventSynthesizedBySystem) {
+        event->accept();
+        return;
+    }
+
 #ifdef MOUSE_DEBUG
     qWarning() << "QQuickWindow::mouseDoubleClickEvent()" << event->localPos() << event->button() << event->buttons();
 #endif
@@ -1526,6 +1546,12 @@ bool QQuickWindowPrivate::sendHoverEvent(QEvent::Type type, QQuickItem *item,
 void QQuickWindow::mouseMoveEvent(QMouseEvent *event)
 {
     Q_D(QQuickWindow);
+
+    if (event->source() == Qt::MouseEventSynthesizedBySystem) {
+        event->accept();
+        return;
+    }
+
 #ifdef MOUSE_DEBUG
     qWarning() << "QQuickWindow::mouseMoveEvent()" << event->localPos() << event->button() << event->buttons();
 #endif
