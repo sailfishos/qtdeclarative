@@ -380,16 +380,16 @@ Assembler::Jump Assembler::genTryDoubleConversion(IR::Expr *src, Assembler::FPRe
     return isNoDbl;
 }
 
-#if !defined(QT_NO_DEBUG) || defined(QT_FORCE_ASSERTS)
 namespace {
 inline bool isPregOrConst(IR::Expr *e)
 {
+#if !defined(QT_NO_DEBUG) || defined(QT_FORCE_ASSERTS)
     if (IR::Temp *t = e->asTemp())
         return t->kind == IR::Temp::PhysicalRegister;
     return e->asConst() != 0;
+#endif
 }
 } // anonymous namespace
-#endif
 
 Assembler::Jump Assembler::branchDouble(bool invertCondition, IR::AluOp op,
                                                    IR::Expr *left, IR::Expr *right)
