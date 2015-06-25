@@ -351,6 +351,8 @@ bool QSGRenderThread::event(QEvent *e)
         mutex.lock();
         if (window) {
             qCDebug(QSG_LOG_RENDERLOOP) << QSG_RT_PAD << "- window removed";
+            gl->makeCurrent(window);
+            QQuickWindowPrivate::get(window)->fireAboutToStop();
             gl->doneCurrent();
             window = 0;
         }

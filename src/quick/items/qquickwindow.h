@@ -148,6 +148,7 @@ Q_SIGNALS:
     void beforeSynchronizing();
     void beforeRendering();
     void afterRendering();
+    void sceneGraphAboutToStop();
     Q_REVISION(1) void closing(QQuickCloseEvent *close);
     void colorChanged(const QColor &);
     Q_REVISION(1) void activeFocusItemChanged();
