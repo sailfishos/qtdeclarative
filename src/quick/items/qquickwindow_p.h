@@ -208,6 +208,7 @@ public:
     void updateDirtyNode(QQuickItem *);
 
     void fireFrameSwapped() { Q_EMIT q_func()->frameSwapped(); }
+    void fireAboutToStop() { Q_EMIT q_func()->sceneGraphAboutToStop(); }
 
     QSGRenderContext *context;
     QSGRenderer *renderer;

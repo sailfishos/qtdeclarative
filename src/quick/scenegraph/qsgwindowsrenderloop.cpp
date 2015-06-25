@@ -209,6 +209,7 @@ void QSGWindowsRenderLoop::hide(QQuickWindow *window)
     QQuickWindowPrivate *cd = QQuickWindowPrivate::get(window);
     m_gl->makeCurrent(window);
     cd->cleanupNodesOnShutdown();
+    cd->fireAboutToStop();
 
     // If this is the last tracked window, check for persistent SG and GL and
     // potentially clean up.

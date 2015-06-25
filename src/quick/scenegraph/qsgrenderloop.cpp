@@ -240,6 +240,7 @@ void QSGGuiThreadRenderLoop::hide(QQuickWindow *window)
     QQuickWindowPrivate *cd = QQuickWindowPrivate::get(window);
     if (gl)
         gl->makeCurrent(window);
+    cd->fireAboutToStop();
     cd->cleanupNodesOnShutdown();
 
     if (m_windows.size() == 0) {
