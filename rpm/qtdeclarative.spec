@@ -13,6 +13,7 @@ BuildRequires:  qt5-qtsql-devel
 BuildRequires:  qt5-qttest-devel
 BuildRequires:  qt5-qtxmlpatterns-devel
 BuildRequires:  qt5-qmake
+BuildRequires:  qt5-qttools-qthelp-devel
 BuildRequires:  fdupes
 BuildRequires:  python
 BuildRequires:  gdb
