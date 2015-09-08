@@ -480,7 +480,11 @@ QSGTexture *Texture::removedFromAtlas() const
         glBindTexture(GL_TEXTURE_2D, texture);
         QRect r = atlasSubRectWithoutPadding();
         // and copy atlas into our texture.
+        while (glGetError() != GL_NO_ERROR) ;
         glCopyTexImage2D(GL_TEXTURE_2D, 0, m_atlas->internalFormat(), r.x(), r.y(), r.width(), r.height(), 0);
+        // BGRA may have been rejected by some GLES implementations
+        if (glGetError() != GL_NO_ERROR)
+            glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, r.x(), r.y(), r.width(), r.height(), 0);
 
         m_nonatlas_texture = new QSGPlainTexture();
         m_nonatlas_texture->setTextureId(texture);
