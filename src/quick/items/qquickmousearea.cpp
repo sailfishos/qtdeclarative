@@ -867,6 +867,7 @@ bool QQuickMouseArea::sendMouseEvent(QMouseEvent *event)
             break;
         case QEvent::MouseButtonRelease:
             mouseReleaseEvent(&mouseEvent);
+            stealThisEvent = d->stealMouse;
             break;
         default:
             break;
