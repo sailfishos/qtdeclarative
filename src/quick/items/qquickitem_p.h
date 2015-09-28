@@ -425,6 +425,7 @@ public:
     // Bit 32
     bool hasCursorInChild:1;
     bool activeFocusOnTab:1;
+    bool replayingPressEvent:1;
 
     enum DirtyType {
         TransformOrigin         = 0x00000001,
