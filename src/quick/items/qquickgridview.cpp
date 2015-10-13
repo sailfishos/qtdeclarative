@@ -49,6 +49,7 @@
 #include <QtGui/qevent.h>
 #include <QtCore/qmath.h>
 #include <QtCore/qcoreapplication.h>
+#include <QtCore/qsettings.h>
 #include <math.h>
 #include "qplatformdefs.h"
 
@@ -59,6 +60,19 @@ QT_BEGIN_NAMESPACE
 #endif
 
 //#define DEBUG_DELEGATE_LIFECYCLE
+
+extern const QSettings &quickSettings();
+
+namespace {
+
+int getFlickSnapOneThreshold()
+{
+    return quickSettings().value(QStringLiteral("QuickGridView/FlickSnapOneThreshold"), QML_FLICK_SNAPONETHRESHOLD).toInt();
+}
+
+const int FlickSnapOneThreshold(getFlickSnapOneThreshold());
+
+}
 
 //----------------------------------------------------------------------------
 
@@ -934,9 +948,9 @@ void QQuickGridViewPrivate::fixup(AxisData &data, qreal minExtent, qreal maxExte
             // if we've been dragged < rowSize()/2 then bias towards the next row
             qreal dist = data.move.value() - (data.pressPos - data.dragStartOffset);
             qreal bias = 0;
-            if (data.velocity > 0 && dist > QML_FLICK_SNAPONETHRESHOLD && dist < rowSize()/2)
+            if (data.velocity > 0 && dist > FlickSnapOneThreshold && dist < rowSize()/2)
                 bias = rowSize()/2;
-            else if (data.velocity < 0 && dist < -QML_FLICK_SNAPONETHRESHOLD && dist > -rowSize()/2)
+            else if (data.velocity < 0 && dist < -FlickSnapOneThreshold && dist > -rowSize()/2)
                 bias = -rowSize()/2;
             if (isContentFlowReversed())
                 bias = -bias;
