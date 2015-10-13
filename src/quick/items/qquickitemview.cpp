@@ -34,6 +34,7 @@
 #include "qquickitemview_p_p.h"
 #include <QtQuick/private/qquicktransition_p.h>
 #include <QtQml/QQmlInfo>
+#include <QtCore/QSettings>
 #include "qplatformdefs.h"
 
 QT_BEGIN_NAMESPACE
@@ -44,6 +45,26 @@ Q_LOGGING_CATEGORY(lcItemViewDelegateLifecycle, "qt.quick.itemview.lifecycle")
 #ifndef QML_VIEW_DEFAULTCACHEBUFFER
 #define QML_VIEW_DEFAULTCACHEBUFFER 320
 #endif
+
+extern const QSettings &quickSettings();
+
+namespace {
+
+int getDefaultCacheBuffer()
+{
+    return quickSettings().value(QStringLiteral("QuickItemView/DefaultCacheBuffer"), QML_VIEW_DEFAULTCACHEBUFFER).toInt();
+}
+
+int getDefaultHighlightMoveDuration()
+{
+    return quickSettings().value(QStringLiteral("QuickItemView/DefaultHighlightMoveDuration"), 150).toInt();
+}
+
+const int DefaultCacheBuffer(getDefaultCacheBuffer());
+
+const int DefaultHighlightMoveDuration(getDefaultHighlightMoveDuration());
+
+}
 
 FxViewItem::FxViewItem(QQuickItem *i, QQuickItemView *v, bool own, QQuickItemViewAttached *attached)
     : item(i)
@@ -1511,7 +1532,7 @@ void QQuickItemView::componentComplete()
 
 QQuickItemViewPrivate::QQuickItemViewPrivate()
     : itemCount(0)
-    , buffer(QML_VIEW_DEFAULTCACHEBUFFER), bufferMode(BufferBefore | BufferAfter)
+    , buffer(DefaultCacheBuffer), bufferMode(BufferBefore | BufferAfter)
     , displayMarginBeginning(0), displayMarginEnd(0)
     , layoutDirection(Qt::LeftToRight), verticalLayoutDirection(QQuickItemView::TopToBottom)
     , moveReason(Other)
@@ -1521,7 +1542,7 @@ QQuickItemViewPrivate::QQuickItemViewPrivate()
     , highlightComponent(0), highlight(0)
     , highlightRange(QQuickItemView::NoHighlightRange)
     , highlightRangeStart(0), highlightRangeEnd(0)
-    , highlightMoveDuration(150)
+    , highlightMoveDuration(DefaultHighlightMoveDuration)
     , headerComponent(0), header(0), footerComponent(0), footer(0)
     , transitioner(0)
     , minExtent(0), maxExtent(0)
