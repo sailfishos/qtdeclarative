@@ -42,12 +42,26 @@
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/qevent.h>
 #include <QtGui/qstylehints.h>
+#include <QtCore/qsettings.h>
 
 #include <float.h>
 
 QT_BEGIN_NAMESPACE
 
 DEFINE_BOOL_CONFIG_OPTION(qmlVisualTouchDebugging, QML_VISUAL_TOUCH_DEBUGGING)
+
+extern const QSettings &quickSettings();
+
+namespace {
+
+int getPressAndHoldDelay()
+{
+    return quickSettings().value(QStringLiteral("QuickMouseArea/PressAndHoldDelay"), 800).toInt();
+}
+
+const int PressAndHoldDelay(getPressAndHoldDelay());
+
+}
 
 QQuickMouseAreaPrivate::QQuickMouseAreaPrivate()
 : enabled(true), scrollGestureEnabled(true), hovered(false), longPress(false),
