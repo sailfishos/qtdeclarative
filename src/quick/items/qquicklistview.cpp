@@ -49,6 +49,7 @@
 #include <QtGui/qevent.h>
 #include <QtCore/qmath.h>
 #include <QtCore/qcoreapplication.h>
+#include <QtCore/qsettings.h>
 
 #include <private/qquicksmoothedanimation_p_p.h>
 #include "qplatformdefs.h"
@@ -60,6 +61,33 @@ QT_BEGIN_NAMESPACE
 #endif
 
 //#define DEBUG_DELEGATE_LIFECYCLE
+
+extern const QSettings &quickSettings();
+
+namespace {
+
+int getFlickSnapOneThreshold()
+{
+    return quickSettings().value(QStringLiteral("QuickListView/FlickSnapOneThreshold"), QML_FLICK_SNAPONETHRESHOLD).toInt();
+}
+
+qreal getDefaultHighlightMoveVelocity()
+{
+    return quickSettings().value(QStringLiteral("QuickListView/DefaultHighlightMoveVelocity"), 400.0).toReal();
+}
+
+qreal getDefaultHighlightResizeVelocity()
+{
+    return quickSettings().value(QStringLiteral("QuickListView/DefaultHighlightResizeVelocity"), 400.0).toReal();
+}
+
+const int FlickSnapOneThreshold(getFlickSnapOneThreshold());
+
+const qreal DefaultHighlightMoveVelocity(getDefaultHighlightMoveVelocity());
+
+const qreal DefaultHighlightResizeVelocity(getDefaultHighlightResizeVelocity());
+
+}
 
 class FxListItemSG;
 
@@ -171,7 +199,7 @@ public:
         , averageSize(100.0), spacing(0.0)
         , snapMode(QQuickListView::NoSnap)
         , highlightPosAnimator(0), highlightWidthAnimator(0), highlightHeightAnimator(0)
-        , highlightMoveVelocity(400), highlightResizeVelocity(400), highlightResizeDuration(-1)
+        , highlightMoveVelocity(DefaultHighlightMoveVelocity), highlightResizeVelocity(DefaultHighlightResizeVelocity), highlightResizeDuration(-1)
         , sectionCriteria(0), currentSectionItem(0), nextSectionItem(0)
         , overshootDist(0.0), correctFlick(false), inFlickCorrection(false)
     {
@@ -1439,9 +1467,9 @@ void QQuickListViewPrivate::fixup(AxisData &data, qreal minExtent, qreal maxExte
             // if we've been dragged < averageSize/2 then bias towards the next item
             qreal dist = data.move.value() - (data.pressPos - data.dragStartOffset);
             qreal bias = 0;
-            if (data.velocity > 0 && dist > QML_FLICK_SNAPONETHRESHOLD && dist < averageSize/2)
+            if (data.velocity > 0 && dist > FlickSnapOneThreshold && dist < averageSize/2)
                 bias = averageSize/2;
-            else if (data.velocity < 0 && dist < -QML_FLICK_SNAPONETHRESHOLD && dist > -averageSize/2)
+            else if (data.velocity < 0 && dist < -FlickSnapOneThreshold && dist > -averageSize/2)
                 bias = -averageSize/2;
             if (isContentFlowReversed())
                 bias = -bias;

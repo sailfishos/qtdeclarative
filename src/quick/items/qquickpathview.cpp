@@ -55,12 +55,45 @@
 #include <QtGui/qguiapplication.h>
 #include <QtGui/qstylehints.h>
 #include <QtCore/qmath.h>
+#include <QtCore/qsettings.h>
 #include <math.h>
 
 
 QT_BEGIN_NAMESPACE
 
-const qreal MinimumFlickVelocity = 75.0;
+extern const QSettings &quickSettings();
+
+namespace {
+
+qreal getFlickDefaultMaxVelocity()
+{
+    return quickSettings().value(QStringLiteral("QuickFlickable/FlickDefaultMaxVelocity"), QML_FLICK_DEFAULTMAXVELOCITY).toReal();
+}
+
+qreal getFlickDefaultDeceleration()
+{
+    return quickSettings().value(QStringLiteral("QuickPathView/FlickDefaultDeceleration"), 100.0).toReal();
+}
+
+qreal getMinimumFlickVelocity()
+{
+    return quickSettings().value(QStringLiteral("QuickPathView/MinimumFlickVelocity"), 75.0).toReal();
+}
+
+int getDefaultHighlightMoveDuration()
+{
+    return quickSettings().value(QStringLiteral("QuickPathView/DefaultHighlightMoveDuration"), 300).toInt();
+}
+
+const qreal FlickDefaultMaxVelocity(getFlickDefaultMaxVelocity());
+
+const qreal FlickDefaultDeceleration(getFlickDefaultDeceleration());
+
+const qreal MinimumFlickVelocity(getMinimumFlickVelocity());
+
+const int DefaultHighlightMoveDuration(getDefaultHighlightMoveDuration());
+
+}
 
 inline qreal qmlMod(qreal x, qreal y)
 {
@@ -104,7 +137,7 @@ QQuickPathViewPrivate::QQuickPathViewPrivate()
     , stealMouse(false), ownModel(false), interactive(true), haveHighlightRange(true)
     , autoHighlight(true), highlightUp(false), layoutScheduled(false)
     , moving(false), flicking(false), dragging(false), inRequest(false), delegateValidated(false)
-    , dragMargin(0), deceleration(100), maximumFlickVelocity(QML_FLICK_DEFAULTMAXVELOCITY)
+    , dragMargin(0), deceleration(FlickDefaultDeceleration), maximumFlickVelocity(FlickDefaultMaxVelocity)
     , moveOffset(this, &QQuickPathViewPrivate::setAdjustedOffset), flickDuration(0)
     , firstIndex(-1), pathItems(-1), requestedIndex(-1), cacheSize(0), requestedZ(0)
     , moveReason(Other), moveDirection(Shortest), attType(0), highlightComponent(0), highlightItem(0)
@@ -112,7 +145,7 @@ QQuickPathViewPrivate::QQuickPathViewPrivate()
     , highlightPosition(0)
     , highlightRangeStart(0), highlightRangeEnd(0)
     , highlightRangeMode(QQuickPathView::StrictlyEnforceRange)
-    , highlightMoveDuration(300), modelCount(0), snapMode(QQuickPathView::NoSnap)
+    , highlightMoveDuration(DefaultHighlightMoveDuration), modelCount(0), snapMode(QQuickPathView::NoSnap)
 {
 }
 

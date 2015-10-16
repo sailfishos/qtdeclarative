@@ -54,10 +54,17 @@
 #include <QtQuick/private/qquickstate_p.h>
 #include <qqmlproperty.h>
 #include <QtCore/QPointer>
+#include <QtCore/QSettings>
 
 static void initResources()
 {
     Q_INIT_RESOURCE(scenegraph);
+}
+
+const QSettings &quickSettings()
+{
+    static const QSettings settings(QSettings::SystemScope, QStringLiteral("QtProject"), QStringLiteral("QtQuick2"));
+    return settings;
 }
 
 QT_BEGIN_NAMESPACE
