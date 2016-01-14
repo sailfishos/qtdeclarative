@@ -259,7 +259,6 @@ void Assembler::enterStandardStackFrame(const RegisterInformation &regularRegist
 {
     platformEnterStandardStackFrame(this);
 
-    push(StackFrameRegister);
     move(StackPointerRegister, StackFrameRegister);
 
     const int frameSize = _stackLayout->calculateStackFrameSize();
@@ -307,7 +306,6 @@ void Assembler::leaveStandardStackFrame(const RegisterInformation &regularRegist
     addPtr(TrustedImm32(frameSize), StackPointerRegister);
 #endif
 
-    pop(StackFrameRegister);
     platformLeaveStandardStackFrame(this);
 }
 
