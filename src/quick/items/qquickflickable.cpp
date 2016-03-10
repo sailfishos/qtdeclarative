@@ -2371,7 +2371,7 @@ void QQuickFlickable::mouseUngrabEvent()
 void QQuickFlickablePrivate::cancelInteraction()
 {
     Q_Q(QQuickFlickable);
-    if (pressed) {
+    if (pressed && !replayingPressEvent) {
         clearDelayedPress();
         pressed = false;
         draggingEnding();
