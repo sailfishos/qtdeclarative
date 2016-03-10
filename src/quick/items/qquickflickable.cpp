@@ -1605,11 +1605,11 @@ void QQuickFlickablePrivate::replayDelayedPress()
 
         // If we have the grab, release before delivering the event
         if (QQuickWindow *w = q->window()) {
+            replayingPressEvent = true;
             if (w->mouseGrabberItem() == q)
                 q->ungrabMouse();
 
             // Use the event handler that will take care of finding the proper item to propagate the event
-            replayingPressEvent = true;
             QCoreApplication::sendEvent(w, mouseEvent.data());
             replayingPressEvent = false;
         }
@@ -2267,7 +2267,7 @@ void QQuickFlickable::mouseUngrabEvent()
 void QQuickFlickablePrivate::cancelInteraction()
 {
     Q_Q(QQuickFlickable);
-    if (pressed) {
+    if (pressed && !replayingPressEvent) {
         clearDelayedPress();
         pressed = false;
         draggingEnding();
