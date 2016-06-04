@@ -394,9 +394,11 @@ inline bool isPregOrConst(IR::Expr *e)
 Assembler::Jump Assembler::branchDouble(bool invertCondition, IR::AluOp op,
                                                    IR::Expr *left, IR::Expr *right)
 {
+#if !defined(QT_NO_DEBUG) || defined(QT_FORCE_ASSERTS)
     Q_ASSERT(isPregOrConst(left));
     Q_ASSERT(isPregOrConst(right));
     Q_ASSERT(left->asConst() == 0 || right->asConst() == 0);
+#endif
 
     Assembler::DoubleCondition cond;
     switch (op) {

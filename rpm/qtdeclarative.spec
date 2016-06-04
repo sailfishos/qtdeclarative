@@ -1,13 +1,13 @@
 Name:       qt5-qtdeclarative
 Summary:    Qt Declarative library
-Version:    5.0.2
+Version:    5.2.1
 Release:    1%{?dist}
 Group:      Qt/Qt
 License:    LGPLv2.1 with exception or GPLv3
 URL:        http://qt.nokia.com
 Source0:    %{name}-%{version}.tar.bz2
-BuildRequires:  qt5-qtcore-devel
-BuildRequires:  qt5-qtgui-devel >= 5.2.1+git24
+BuildRequires:  qt5-qtcore-devel >= 5.6.0
+BuildRequires:  qt5-qtgui-devel >= 5.6.0
 BuildRequires:  qt5-qtnetwork-devel
 BuildRequires:  qt5-qtsql-devel
 BuildRequires:  qt5-qttest-devel
@@ -286,9 +286,9 @@ touch .git
 
 make %{?_smp_mflags}
 
-%if 0%{?qt5_release_build}
-make docs
-%endif
+#%if 0%{?qt5_release_build}
+#make docs
+#%endif
 
 
 %install
@@ -315,12 +315,12 @@ cp lib/libQt5QmlDevTools.a %{buildroot}/%{_libdir}
 # Copy docs
 mkdir -p %{buildroot}/%{_docdir}/qt5/qtqml
 mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
-%if 0%{?qt5_release_build}
-cp -R doc/qtqml %{buildroot}/%{_docdir}/qt5
-cp -R doc/qtqml.qch %{buildroot}/%{_docdir}/qt5
-cp -R doc/qtquick %{buildroot}/%{_docdir}/qt5
-cp -R doc/qtquick.qch %{buildroot}/%{_docdir}/qt5
-%endif
+#%if 0%{?qt5_release_build}
+#cp -R doc/qtqml %{buildroot}/%{_docdir}/qt5
+#cp -R doc/qtqml.qch %{buildroot}/%{_docdir}/qt5
+#cp -R doc/qtquick %{buildroot}/%{_docdir}/qt5
+#cp -R doc/qtquick.qch %{buildroot}/%{_docdir}/qt5
+#%endif
 
 
 #### Pre/Post section
@@ -413,9 +413,9 @@ cp -R doc/qtquick.qch %{buildroot}/%{_docdir}/qt5
 %{_qt5_bindir}/qmltestrunner
 %{_qt5_bindir}/qmlmin
 %{_qt5_bindir}/qmlbundle
-%if ! 0%{?qt5_release_build}
-%{_qt5_bindir}/qmljs
-%endif
+#%if ! 0%{?qt5_release_build}
+#%{_qt5_bindir}/qmljs
+#%endif
 
 
 %files import-folderlistmodel
@@ -481,20 +481,20 @@ cp -R doc/qtquick.qch %{buildroot}/%{_docdir}/qt5
 %files qtquickparticles
 %defattr(-,root,root,-)
 %{_libdir}/libQt5QuickParticles.so.5
-%{_libdir}/libQt5QuickParticles.so.5.*
+%{_libdir}/libQt5QuickParticles.so.5.*
 
 %files qtquickparticles-devel
 %defattr(-,root,root,-)
 %{_includedir}/qt5/QtQuickParticles/
 %{_libdir}/libQt5QuickParticles.so
 %{_libdir}/libQt5QuickParticles.prl
-%{_libdir}/pkgconfig/Qt5QuickParticles.pc
+#%{_libdir}/pkgconfig/Qt5QuickParticles.pc
 %{_datadir}/qt5/mkspecs/modules/qt_lib_quickparticles_private.pri
 
 %files qtdeclarativetools-devel
 %defattr(-,root,root,-)
 %{_libdir}/libQt5QmlDevTools.a
 %{_libdir}/libQt5QmlDevTools.prl
-%{_libdir}/pkgconfig/Qt5QmlDevTools.pc
+#%{_libdir}/pkgconfig/Qt5QmlDevTools.pc
 %{_datadir}/qt5/mkspecs/modules/qt_lib_qmldevtools_private.pri
 
