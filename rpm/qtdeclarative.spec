@@ -380,7 +380,10 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_includedir}/qt5/QtQml/
 %{_datadir}/qt5/mkspecs/modules/qt_lib_qml.pri
 %{_datadir}/qt5/mkspecs/modules/qt_lib_qml_private.pri
-%{_libdir}/cmake/
+%{_libdir}/cmake/Qt5Qml/Qt5QmlConfig.cmake
+%{_libdir}/cmake/Qt5Qml/Qt5QmlConfigExtras.cmake
+%{_libdir}/cmake/Qt5Qml/Qt5QmlConfigVersion.cmake
+
 
 %files doc
 %{_docdir}/qt5/qtqml*
@@ -398,6 +401,8 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_includedir}/qt5/QtQuick/
 %{_datadir}/qt5/mkspecs/modules/qt_lib_quick.pri
 %{_datadir}/qt5/mkspecs/modules/qt_lib_quick_private.pri
+%{_libdir}/cmake/Qt5Quick/Qt5QuickConfig.cmake
+%{_libdir}/cmake/Qt5Quick/Qt5QuickConfigVersion.cmake
 
 %files qtquick-doc
 %{_docdir}/qt5/qtquick*
@@ -445,6 +450,14 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %files plugin-qmlinspector
 %defattr(-,root,root,-)
 %{_libdir}/qt5/plugins/qmltooling/*
+%{_libdir}/cmake/Qt5Qml/Qt5Qml_QLocalClientConnectionFactory.cmake
+%{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlInspectorServiceFactory.cmake
+%{_libdir}/cmake/Qt5Qml/Qt5Qml_QTcpServerConnectionFactory.cmake
+%{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlDebugServerFactory.cmake
+%{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlNativeDebugConnectorFactory.cmake
+%{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlDebuggerServiceFactory.cmake
+%{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlProfilerServiceFactory.cmake
+
 
 #%files plugin-accessible
 #%defattr(-,root,root,-)
@@ -489,6 +502,8 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_libdir}/pkgconfig/Qt5QuickTest.pc
 %{_datadir}/qt5/mkspecs/modules/qt_lib_qmltest.pri
 %{_datadir}/qt5/mkspecs/modules/qt_lib_qmltest_private.pri
+%{_libdir}/cmake/Qt5QuickTest/Qt5QuickTestConfig.cmake
+%{_libdir}/cmake/Qt5QuickTest/Qt5QuickTestConfigVersion.cmake
 
 %files qtquickparticles
 %defattr(-,root,root,-)
