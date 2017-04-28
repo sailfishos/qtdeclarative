@@ -1620,6 +1620,7 @@ void QQuickPathView::mousePressEvent(QMouseEvent *event)
 
 void QQuickPathViewPrivate::handleMousePressEvent(QMouseEvent *event)
 {
+    Q_Q(QQuickPathView);
     if (!interactive || !items.count() || !model || !modelCount)
         return;
     velocityBuffer.clear();
@@ -1645,6 +1646,7 @@ void QQuickPathViewPrivate::handleMousePressEvent(QMouseEvent *event)
         stealMouse = true; // If we've been flicked then steal the click.
     else
         stealMouse = false;
+    q->setKeepMouseGrab(stealMouse);
 
     timer.start();
     lastPosTime = computeCurrentTime(event);
