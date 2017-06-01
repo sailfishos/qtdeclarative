@@ -552,7 +552,9 @@ void QQuickFlickablePrivate::fixup(AxisData &data, qreal minExtent, qreal maxExt
         }
     } else if (data.move.value() <= maxExtent) {
         resetTimeline(data);
-        adjustContentPos(data, maxExtent);
+        if (data.move.value() != maxExtent) {
+            adjustContentPos(data, maxExtent);
+        }
     } else if (-Round(-data.move.value()) != data.move.value()) {
         // We could animate, but since it is less than 0.5 pixel it's probably not worthwhile.
         resetTimeline(data);
