@@ -17,6 +17,7 @@ BuildRequires:  qt5-qmake
 BuildRequires:  fdupes
 BuildRequires:  python
 BuildRequires:  gdb
+BuildRequires:  qml-rpm-macros
 Obsoletes: qt5-qtjsbackend <= 5.1.0+git4
 Provides: qt5-qtjsbackend > 5.1.0+git4
 
@@ -34,6 +35,7 @@ Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   qt5-qtsql-devel
 Requires:   qt5-qtnetwork-devel
+Requires:   qml-rpm-macros
 
 %description devel
 Qt is a cross-platform application and UI framework. Using Qt, you can
