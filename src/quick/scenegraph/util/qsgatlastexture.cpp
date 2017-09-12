@@ -149,7 +149,7 @@ Atlas::Atlas(const QSize &size)
                                                         || deviceName->compare(QLatin1String("samsung SM-T210"), Qt::CaseInsensitive) == 0
                                                         || deviceName->compare(QLatin1String("samsung SM-T215"), Qt::CaseInsensitive) == 0);
 #else
-    static bool wrongfullyReportsBgra8888Support = false;
+    static bool wrongfullyReportsBgra8888Support = qEnvironmentVariableIsSet("QT_OPENGL_NO_BGRA");
     // The Raspberry Pi (both 1 and 2) GPU refuses framebuffers with BGRA color attachments.
     const GLubyte *renderer = QOpenGLContext::currentContext()->functions()->glGetString(GL_RENDERER);
     if (renderer && strstr((const char *) renderer, "VideoCore IV"))
