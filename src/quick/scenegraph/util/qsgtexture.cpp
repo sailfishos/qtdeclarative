@@ -644,17 +644,6 @@ QSGPlainTexture::~QSGPlainTexture()
 #endif
 }
 
-void qsg_swizzleBGRAToRGBA(QImage *image)
-{
-    const int width = image->width();
-    const int height = image->height();
-    for (int i = 0; i < height; ++i) {
-        uint *p = (uint *) image->scanLine(i);
-        for (int x = 0; x < width; ++x)
-            p[x] = ((p[x] << 16) & 0xff0000) | ((p[x] >> 16) & 0xff) | (p[x] & 0xff00ff00);
-    }
-}
-
 void QSGPlainTexture::setImage(const QImage &image)
 {
     m_image = image;
@@ -758,9 +747,65 @@ void QSGPlainTexture::bind()
 
     // ### TODO: check for out-of-memory situations...
 
-    QImage tmp = (m_image.format() == QImage::Format_RGB32 || m_image.format() == QImage::Format_ARGB32_Premultiplied)
-                 ? m_image
-                 : m_image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    QString *deviceName =
+            static_cast<QString *>(QGuiApplication::platformNativeInterface()->nativeResourceForIntegration("AndroidDeviceName"));
+    static bool wrongfullyReportsBgra8888Support = deviceName != 0
+                                                    && (deviceName->compare(QStringLiteral("samsung SM-T211"), Qt::CaseInsensitive) == 0
+                                                        || deviceName->compare(QStringLiteral("samsung SM-T210"), Qt::CaseInsensitive) == 0
+                                                        || deviceName->compare(QStringLiteral("samsung SM-T215"), Qt::CaseInsensitive) == 0);
+#else
+    static bool wrongfullyReportsBgra8888Support = qEnvironmentVariableIsSet("QT_OPENGL_NO_BGRA");
+#endif
+
+    QImage::Format conversionFormat = QImage::Format_RGBA8888_Premultiplied;
+    GLenum externalFormat = GL_RGBA;
+    GLenum internalFormat = GL_RGBA;
+
+    switch (m_image.format()) {
+    case QImage::Format_RGBX8888:
+    case QImage::Format_RGBA8888_Premultiplied:
+        // The RGB*88888 formats are ordered the same as the GL_RGB* formats. No conversion is necessary.
+        conversionFormat = m_image.format();
+        break;
+    case QImage::Format_RGB32:
+    case QImage::Format_ARGB32_Premultiplied:
+        // The RGB*32 formats are ordered the same as the GL_BGR* formats.  Don't convert if the platform supports GL_BGRA.
+        if (context->hasExtension(QByteArrayLiteral("GL_EXT_bgra"))) {
+            externalFormat = GL_BGRA;
+    #ifdef QT_OPENGL_ES
+            internalFormat = GL_BGRA;
+    #else
+            if (context->isOpenGLES())
+                internalFormat = GL_BGRA;
+            conversionFormat = m_image.format();
+    #endif // QT_OPENGL_ES
+        } else if (!wrongfullyReportsBgra8888Support
+                   && (context->hasExtension(QByteArrayLiteral("GL_EXT_texture_format_BGRA8888"))
+                       || context->hasExtension(QByteArrayLiteral("GL_IMG_texture_format_BGRA8888")))) {
+            externalFormat = GL_BGRA;
+            internalFormat = GL_BGRA;
+            conversionFormat = m_image.format();
+#ifdef Q_OS_IOS
+        } else if (context->hasExtension(QByteArrayLiteral("GL_APPLE_texture_format_BGRA8888"))) {
+            externalFormat = GL_BGRA;
+            internalFormat = GL_RGBA;
+            conversionFormat = m_image.format();
+#endif
+        } else {
+            conversionFormat = m_image.format() == QImage::Format_RGB32
+                    ? QImage::Format_RGBX8888
+                    : QImage::Format_RGBA8888_Premultiplied;
+        }
+        break;
+    default:
+        // Some form of conversion is required, favor GL_RGBA
+        break;
+    }
+
+    QImage tmp = m_image.format() != conversionFormat
+            ? m_image.convertToFormat(conversionFormat)
+            : m_image;
 
     // Downscale the texture to fit inside the max texture limit if it is too big.
     // It would be better if the image was already downscaled to the right size,
@@ -800,54 +845,9 @@ void QSGPlainTexture::bind()
     Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphTexturePrepare,
                               QQuickProfiler::SceneGraphTexturePrepareConvert);
 
-    QSystrace::begin("graphics", "QSGPlainTexture::swizzle", "");
-
     updateBindOptions(m_dirty_bind_options);
 
-    GLenum externalFormat = GL_RGBA;
-    GLenum internalFormat = GL_RGBA;
-
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
-    QString *deviceName =
-            static_cast<QString *>(QGuiApplication::platformNativeInterface()->nativeResourceForIntegration("AndroidDeviceName"));
-    static bool wrongfullyReportsBgra8888Support = deviceName != 0
-                                                    && (deviceName->compare(QLatin1String("samsung SM-T211"), Qt::CaseInsensitive) == 0
-                                                        || deviceName->compare(QLatin1String("samsung SM-T210"), Qt::CaseInsensitive) == 0
-                                                        || deviceName->compare(QLatin1String("samsung SM-T215"), Qt::CaseInsensitive) == 0);
-#else
-    static bool wrongfullyReportsBgra8888Support = false;
-#endif
-
-    if (context->hasExtension(QByteArrayLiteral("GL_EXT_bgra"))) {
-        externalFormat = GL_BGRA;
-#ifdef QT_OPENGL_ES
-        internalFormat = GL_BGRA;
-#else
-        if (context->isOpenGLES())
-            internalFormat = GL_BGRA;
-#endif // QT_OPENGL_ES
-    } else if (!wrongfullyReportsBgra8888Support
-               && (context->hasExtension(QByteArrayLiteral("GL_EXT_texture_format_BGRA8888"))
-                   || context->hasExtension(QByteArrayLiteral("GL_IMG_texture_format_BGRA8888")))) {
-        externalFormat = GL_BGRA;
-        internalFormat = GL_BGRA;
-#if defined(Q_OS_DARWIN) && !defined(Q_OS_OSX)
-    } else if (context->hasExtension(QByteArrayLiteral("GL_APPLE_texture_format_BGRA8888"))) {
-        externalFormat = GL_BGRA;
-        internalFormat = GL_RGBA;
-#endif
-    } else {
-        qsg_swizzleBGRAToRGBA(&tmp);
-    }
-
-    QSystrace::end("graphics", "QSGPlainTexture::swizzle", "");
     QSystrace::begin("graphics", "QSGPlainTexture::upload", "");
-
-    qint64 swizzleTime = 0;
-    if (profileFrames)
-        swizzleTime = qsg_renderer_timer.nsecsElapsed();
-    Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphTexturePrepare,
-                              QQuickProfiler::SceneGraphTexturePrepareSwizzle);
 
     funcs->glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_texture_size.width(), m_texture_size.height(), 0, externalFormat, GL_UNSIGNED_BYTE, tmp.constBits());
 
@@ -870,15 +870,14 @@ void QSGPlainTexture::bind()
     if (profileFrames) {
         mipmapTime = qsg_renderer_timer.nsecsElapsed();
         qCDebug(QSG_LOG_TIME_TEXTURE,
-                "plain texture uploaded in: %dms (%dx%d), bind=%d, convert=%d, swizzle=%d (%s->%s), upload=%d, mipmap=%d%s",
+                "plain texture uploaded in: %dms (%dx%d), bind=%d, convert=%d (%s->%s), upload=%d, mipmap=%d%s",
                 int(mipmapTime / 1000000),
                 m_texture_size.width(), m_texture_size.height(),
                 int(bindTime / 1000000),
                 int((convertTime - bindTime)/1000000),
-                int((swizzleTime - convertTime)/1000000),
                 (externalFormat == GL_BGRA ? "BGRA" : "RGBA"),
                 (internalFormat == GL_BGRA ? "BGRA" : "RGBA"),
-                int((uploadTime - swizzleTime)/1000000),
+                int((uploadTime - convertTime)/1000000),
                 int((mipmapTime - uploadTime)/1000000),
                 m_texture_size != m_image.size() ? " (scaled to GL_MAX_TEXTURE_SIZE)" : "");
     }
