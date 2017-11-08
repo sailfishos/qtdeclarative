@@ -648,8 +648,7 @@ void QQmlDataBlob::notifyComplete(QQmlDataBlob *blob)
 {
     Q_ASSERT(m_waitingFor.contains(blob));
     Q_ASSERT(blob->status() == Error || blob->status() == Complete);
-    QQmlCompilingProfiler prof(QQmlEnginePrivate::get(typeLoader()->engine())->profiler,
-                               blob->url());
+    QQmlCompilingProfiler prof(typeLoader()->profiler(), blob->url());
 
     m_inCallback = true;
 
@@ -901,6 +900,14 @@ void QQmlTypeLoader::invalidate()
         (*iter)->release();
     m_networkReplies.clear();
 }
+
+#ifndef QT_NO_QML_DEBUGGER
+void QQmlTypeLoader::enableProfiler()
+{
+    Q_ASSERT(!m_profiler);
+    m_profiler = new QQmlProfiler;
+}
+#endif // QT_NO_QML_DEBUGGER
 
 void QQmlTypeLoader::lock()
 {
@@ -1217,7 +1224,7 @@ void QQmlTypeLoader::setData(QQmlDataBlob *blob, QQmlFile *file)
 void QQmlTypeLoader::setData(QQmlDataBlob *blob, const QQmlDataBlob::Data &d)
 {
     QML_MEMORY_SCOPE_URL(blob->url());
-    QQmlCompilingProfiler prof(QQmlEnginePrivate::get(engine())->profiler, blob->url());
+    QQmlCompilingProfiler prof(profiler(), blob->url());
 
     blob->m_inCallback = true;
 
@@ -1237,7 +1244,7 @@ void QQmlTypeLoader::setData(QQmlDataBlob *blob, const QQmlDataBlob::Data &d)
 void QQmlTypeLoader::setCachedUnit(QQmlDataBlob *blob, const QQmlPrivate::CachedQmlUnit *unit)
 {
     QML_MEMORY_SCOPE_URL(blob->url());
-    QQmlCompilingProfiler prof(QQmlEnginePrivate::get(engine())->profiler, blob->url());
+    QQmlCompilingProfiler prof(profiler(), blob->url());
 
     blob->m_inCallback = true;
 
@@ -1595,6 +1602,9 @@ Constructs a new type loader that uses the given \a engine.
 */
 QQmlTypeLoader::QQmlTypeLoader(QQmlEngine *engine)
     : m_engine(engine), m_thread(new QQmlTypeLoaderThread(this)),
+#ifndef QT_NO_QML_DEBUGGER
+      m_profiler(0),
+#endif
       m_typeCacheTrimThreshold(TYPELOADER_MINIMUM_TRIM_THRESHOLD)
 {
 }
@@ -1611,6 +1621,10 @@ QQmlTypeLoader::~QQmlTypeLoader()
     clearCache();
 
     invalidate();
+
+#ifndef QT_NO_QML_DEBUGGER
+    delete m_profiler;
+#endif
 }
 
 QQmlImportDatabase *QQmlTypeLoader::importDatabase()
