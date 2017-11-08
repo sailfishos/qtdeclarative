@@ -1,13 +1,13 @@
 Name:       qt5-qtdeclarative
 Summary:    Qt Declarative library
-Version:    5.6.2
+Version:    5.6.3
 Release:    1%{?dist}
 Group:      Qt/Qt
 License:    LGPLv2.1 with exception or GPLv3
 URL:        http://qt.nokia.com
 Source0:    %{name}-%{version}.tar.bz2
-BuildRequires:  qt5-qtcore-devel >= 5.6.0
-BuildRequires:  qt5-qtgui-devel >= 5.6.0
+BuildRequires:  qt5-qtcore-devel >= 5.6.3
+BuildRequires:  qt5-qtgui-devel >= 5.6.3
 BuildRequires:  qt5-qtnetwork-devel
 BuildRequires:  qt5-qtsql-devel
 BuildRequires:  qt5-qttest-devel
