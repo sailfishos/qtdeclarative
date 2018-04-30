@@ -1247,6 +1247,13 @@ void QQmlDelegateModel::_q_itemsInserted(int index, int count)
     d->emitChanges();
 }
 
+//### This method should be split in two. It will remove delegates, and it will re-render the list.
+// When e.g. QQmlListModel::remove is called, the removal of the delegates should be done on
+// QAbstractItemModel::rowsAboutToBeRemoved, and the re-rendering on
+// QAbstractItemModel::rowsRemoved. Currently both are done on the latter signal. The problem is
+// that the destruction of an item will emit a changed signal that ends up at the delegate, which
+// in turn will try to load the data from the model (which should have already freed it), resulting
+// in a use-after-free. See QTBUG-59256.
 void QQmlDelegateModelPrivate::itemsRemoved(
         const QVector<Compositor::Remove> &removes,
         QVarLengthArray<QVector<QQmlChangeSet::Change>, Compositor::MaximumGroupCount> *translatedRemoves,
@@ -1567,29 +1574,6 @@ bool QQmlDelegateModel::isDescendantOf(const QPersistentModelIndex& desc, const 
     return false;
 }
 
-void QQmlDelegateModel::_q_layoutAboutToBeChanged(const QList<QPersistentModelIndex> &parents, QAbstractItemModel::LayoutChangeHint hint)
-{
-    Q_D(QQmlDelegateModel);
-    if (!d->m_complete)
-        return;
-
-    if (hint == QAbstractItemModel::VerticalSortHint) {
-        d->m_storedPersistentIndexes.clear();
-        if (!parents.isEmpty() && d->m_adaptorModel.rootIndex.isValid() &&  !isDescendantOf(d->m_adaptorModel.rootIndex, parents)) {
-            return;
-        }
-
-        for (int i = 0; i < d->m_count; ++i) {
-            const QModelIndex index = d->m_adaptorModel.aim()->index(i, 0, d->m_adaptorModel.rootIndex);
-            d->m_storedPersistentIndexes.append(index);
-        }
-    } else if (hint == QAbstractItemModel::HorizontalSortHint) {
-        // Ignored
-    } else {
-        // Triggers model reset, no preparations for that are needed
-    }
-}
-
 void QQmlDelegateModel::_q_layoutChanged(const QList<QPersistentModelIndex> &parents, QAbstractItemModel::LayoutChangeHint hint)
 {
     Q_D(QQmlDelegateModel);
@@ -1601,19 +1585,7 @@ void QQmlDelegateModel::_q_layoutChanged(const QList<QPersistentModelIndex> &par
             return;
         }
 
-        for (int i = 0, c = d->m_storedPersistentIndexes.count(); i < c; ++i) {
-            const QPersistentModelIndex &index = d->m_storedPersistentIndexes.at(i);
-            if (i == index.row())
-                continue;
-
-            _q_itemsMoved(i, index.row(), 1);
-        }
-
-        d->m_storedPersistentIndexes.clear();
-
-        // layoutUpdate does not necessarily have any move changes, but it can
-        // also mean data changes. We can't detect what exactly has changed, so
-        // just emit it for all items
+        // mark all items as changed
         _q_itemsChanged(0, d->m_count, QVector<int>());
 
     } else if (hint == QAbstractItemModel::HorizontalSortHint) {
