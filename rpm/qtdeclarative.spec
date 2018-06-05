@@ -127,14 +127,6 @@ Requires:   qt5-qtdeclarative-devel = %{version}-%{release}
 %description qtdeclarativetools-devel
 This package contains the development headers for QtQmlDevTools
 
-%package qtpacketprotocol
-Summary:    Qt Declarative - QtPacketProtocol library
-Group:      Qt/Qt
-Requires:   %{name} = %{version}-%{release}
-
-%description qtpacketprotocol
-This package contains the QtPacketProtocol QML support library
-
 %package qtpacketprotocol-devel
 Summary:    Qt Declarative - QtQuick packet protocol development files
 Group:      Qt/Qt
@@ -445,25 +437,19 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_libdir}/cmake/Qt5Quick/Qt5QuickConfig.cmake
 %{_libdir}/cmake/Qt5Quick/Qt5QuickConfigVersion.cmake
 
-
-%files qtpacketprotocol
-%defattr(-,root,root,-)
-%{_libdir}/libQt5PacketProtocol.so.5
-%{_libdir}/libQt5PacketProtocol.so.5.*
-
 %files qtpacketprotocol-devel
 %defattr(-,root,root,-)
-%{_libdir}/libQt5PacketProtocol.so
-%{_libdir}/libQt5PacketProtocol.prl
-%{_includedir}/qt5/QtPacketProtocol/
-%{_datadir}/qt5/mkspecs/modules/qt_lib_quick_private.pri
+#%{_libdir}/libQt5PacketProtocol.a
+#%{_libdir}/libQt5PacketProtocol.prl
+#%{_includedir}/qt5/QtPacketProtocol/
+#%{_datadir}/qt5/mkspecs/modules/qt_lib_packetprotocol_private.pri
 
 %files qtqmldebug-devel
 %defattr(-,root,root,-)
 %{_libdir}/libQt5QmlDebug.a
 %{_libdir}/libQt5QmlDebug.prl
 %{_includedir}/qt5/QtQmlDebug/
-%{_datadir}/qt5/mkspecs/modules/qt_lib_quick_private.pri
+%{_datadir}/qt5/mkspecs/modules/qt_lib_qmldebug_private.pri
 
 %files qtquick-doc
 %{_docdir}/qt5/qtquick*
@@ -488,7 +474,7 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %files tool-qmlcachegen
 %defattr(-,root,root,-)
 %{_qt5_bindir}/qmlcachegen
-%{_datadir}/qt5/mkspecs/features/qmlcache.pri
+%{_datadir}/qt5/mkspecs/features/qmlcache.prf
 
 %files devel-tools
 %defattr(-,root,root,-)
@@ -521,7 +507,7 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlInspectorServiceFactory.cmake
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QTcpServerConnectionFactory.cmake
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlDebugServerFactory.cmake
-%{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlMessageServiceFactory.cmake
+%{_libdir}/cmake/Qt5Qml/Qt5Qml_QDebugMessageServiceFactory.cmake
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlNativeDebugConnectorFactory.cmake
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlNativeDebugServiceFactory.cmake
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlDebuggerServiceFactory.cmake
