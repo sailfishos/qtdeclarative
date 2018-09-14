@@ -589,6 +589,11 @@ void QQuickImage::releaseResources()
     }
 }
 
+QSGImageNode *QQuickImagePrivate::createImageNode()
+{
+    return sceneGraphContext()->createImageNode();
+}
+
 QSGNode *QQuickImage::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
     Q_D(QQuickImage);
@@ -610,7 +615,7 @@ QSGNode *QQuickImage::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     QSGImageNode *node = static_cast<QSGImageNode *>(oldNode);
     if (!node) {
         d->pixmapChanged = true;
-        node = d->sceneGraphContext()->createImageNode();
+        node = d->createImageNode();
     }
 
     QRectF targetRect;
