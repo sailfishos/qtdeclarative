@@ -32,6 +32,8 @@
 **
 ****************************************************************************/
 
+#include "../items/qquickflickablebehavior_p.h"
+
 #include <private/qquickvaluetypes_p.h>
 #include <private/qquickapplication_p.h>
 #include <private/qqmlglobal_p.h>
@@ -41,6 +43,10 @@
 #include <QtGui/qdesktopservices.h>
 #include <QtGui/qfontdatabase.h>
 #include <QtGui/qstylehints.h>
+#include <QtGui/QScreen>
+#include <QtCore/QString>
+#include <QtCore/QVariant>
+#include <QtCore/QSettings>
 
 #include <private/qv4engine_p.h>
 #include <private/qv4object_p.h>
@@ -50,7 +56,244 @@
 #  pragma warning( disable : 4189 )
 #endif
 
+namespace {
+int s_flickThreshold = 15;
+int s_flickOvershoot = QML_FLICK_OVERSHOOT;
+qreal s_flickOvershootFriction = QML_FLICK_OVERSHOOTFRICTION;
+qreal s_flickDefaultMaxVelocity = QML_FLICK_DEFAULTMAXVELOCITY;
+qreal s_flickDefaultDeceleration = QML_FLICK_DEFAULTDECELERATION;
+int s_flickMultiflickThreshold = QML_FLICK_MULTIFLICK_THRESHOLD;
+qreal s_flickMultiflickRatio = QML_FLICK_MULTIFLICK_RATIO;
+double s_flickMultiflickMaxBoost = QML_FLICK_MULTIFLICK_MAXBOOST;
+int s_flickMultiflickDuration = 600;
+int s_flickMultiflickRapidDuration = 300;
+int s_flickRetainGrabVelocity = 100;
+
+int s_gridViewSnapOneThreshold = 30; // QML_FLICK_SNAPONETHRESHOLD;
+
+int s_itemViewDefaultCacheBuffer = 320; // QML_VIEW_DEFAULTCACHEBUFFER;
+int s_itemViewDefaultHighlightMoveDuration = 150;
+
+int s_listViewSnapOneThreshold = 30; // QML_FLICK_SNAPONETHRESHOLD
+qreal s_listViewDefaultHighlightMoveVelocity = 400.0;
+qreal s_listViewDefaultHighlightResizeVelocity = 400.0;
+
+qreal s_pathViewFlickDefaultDeceleration = 100.0;
+qreal s_pathViewMinimumFlickVelocity = 75.0;
+int s_pathViewDefaultHighlightMoveDuration = 300.0;
+
+class SettingsLoader {
+public:
+    SettingsLoader(int targetDpi)
+        : m_settings(QSettings::SystemScope, QStringLiteral("QtProject"), QStringLiteral("QtQuick2"))
+        , m_scalingRatio(1.0)
+    {
+        qreal baseDpi = m_settings.value(QLatin1String("BaseDPI"), 0).toReal();  // note: available under General/BaseDPI
+        if (targetDpi > 0 && baseDpi > 0) {
+            m_scalingRatio = targetDpi / baseDpi;
+        }
+    }
+
+    ~SettingsLoader() {}
+
+    int scaledValue(const QString &key, int defaultValue) const
+    {
+        QVariant scaledValue = m_settings.value(key + QStringLiteral("Scaled"));
+        if (scaledValue.isValid()) {
+            bool ok = false;
+            int resultValue = scaledValue.toInt(&ok) * m_scalingRatio;
+            if (ok)
+                return resultValue;
+        }
+
+        return m_settings.value(key, defaultValue).toInt();
+    }
+
+    qreal scaledValue(const QString &key, qreal defaultValue) const
+    {
+        QVariant scaledValue = m_settings.value(key + QStringLiteral("Scaled"));
+        if (scaledValue.isValid()) {
+            bool ok;
+            qreal resultValue = scaledValue.toReal(&ok) * m_scalingRatio;
+            if (ok)
+                return resultValue;
+        }
+
+        return m_settings.value(key, defaultValue).toReal();
+    }
+
+private:
+    QSettings m_settings;
+    qreal m_scalingRatio;
+};
+
+void initConfig()
+{
+    static bool initialized = false;
+    if (!initialized) {
+        QScreen *screen = QGuiApplication::primaryScreen();
+        if (screen) {
+            qreal currentDpi = screen->physicalDotsPerInch();
+            SettingsLoader settings(currentDpi);
+
+            s_flickThreshold = settings.scaledValue(QLatin1String("QuickFlickable/FlickThreshold"), s_flickThreshold);
+            s_flickOvershoot = settings.scaledValue(QLatin1String("QuickFlickable/FlickOvershoot"), s_flickOvershoot);
+            s_flickOvershootFriction = settings.scaledValue(QLatin1String("QuickFlickable/FlickOvershootFriction"), s_flickOvershootFriction);
+            s_flickDefaultMaxVelocity = settings.scaledValue(QLatin1String("QuickFlickable/FlickDefaultMaxVelocity"), s_flickDefaultMaxVelocity);
+            s_flickDefaultDeceleration = settings.scaledValue(QLatin1String("QuickFlickable/FlickDefaultDeceleration"), s_flickDefaultDeceleration);
+            s_flickMultiflickThreshold = settings.scaledValue(QLatin1String("QuickFlickable/FlickMultiflickThreshold"), s_flickMultiflickThreshold);
+            s_flickMultiflickRatio = settings.scaledValue(QLatin1String("QuickFlickable/FlickMultiflickRatio"), s_flickMultiflickRatio);
+            s_flickMultiflickMaxBoost = settings.scaledValue(QLatin1String("QuickFlickable/FlickMultiflickMaxBoost"), static_cast<qreal>(s_flickMultiflickMaxBoost));
+            s_flickMultiflickDuration = settings.scaledValue(QLatin1String("QuickFlickable/FlickMultiflickDuration"), s_flickMultiflickDuration);
+            s_flickMultiflickRapidDuration = settings.scaledValue(QLatin1String("QuickFlickable/FlickMultiflickRapidDuration"), s_flickMultiflickRapidDuration);
+            s_flickRetainGrabVelocity = settings.scaledValue(QLatin1String("QuickFlickable/RetainGrabVelocity"), s_flickRetainGrabVelocity);
+
+            s_gridViewSnapOneThreshold = settings.scaledValue(QLatin1String("QuickGridView/FlickSnapOneThreshold"), s_gridViewSnapOneThreshold);
+
+            s_itemViewDefaultCacheBuffer = settings.scaledValue(QLatin1String("QuickItemView/DefaultCacheBuffer"), s_itemViewDefaultCacheBuffer);
+            s_itemViewDefaultHighlightMoveDuration = settings.scaledValue(QLatin1String("QuickItemView/DefaultHighlightMoveDuration"), s_itemViewDefaultHighlightMoveDuration);
+
+            s_listViewDefaultHighlightMoveVelocity = settings.scaledValue(QLatin1String("QuickListView/DefaultHighlightMoveVelocity"), s_listViewDefaultHighlightMoveVelocity);
+            s_listViewDefaultHighlightResizeVelocity = settings.scaledValue(QLatin1String("QuickListView/DefaultHighlightResizeVelocity"), s_listViewDefaultHighlightResizeVelocity);
+            s_listViewSnapOneThreshold = settings.scaledValue(QLatin1String("QuickListView/FlickSnapOneThreshold"), s_listViewSnapOneThreshold);
+
+            s_pathViewFlickDefaultDeceleration = settings.scaledValue(QLatin1String("QuickPathView/FlickDefaultDeceleration"), s_pathViewFlickDefaultDeceleration);
+            s_pathViewMinimumFlickVelocity = settings.scaledValue(QLatin1String("QuickPathView/MinimumFlickVelocity"), s_pathViewMinimumFlickVelocity);
+            s_pathViewDefaultHighlightMoveDuration = settings.scaledValue(QLatin1String("QuickPathView/DefaultHighlightMoveDuration"), s_pathViewDefaultHighlightMoveDuration);
+
+            initialized = true;
+        } else {
+            // shouldn't happen by the time config is used. print out a warning and try again the next time this is attempted
+            qWarning() << "Not screen available for base DPI. Using default QtQuick parameters";
+        }
+    }
+}
+}
+
 QT_BEGIN_NAMESPACE
+
+namespace QuickConf {
+qreal flickDefaultDeceleration()
+{
+    initConfig();
+    return s_flickDefaultDeceleration;
+}
+
+qreal flickDefaultMaxVelocity()
+{
+    initConfig();
+    return s_flickDefaultMaxVelocity;
+}
+
+int flickThreshold()
+{
+    initConfig();
+    return s_flickThreshold;
+}
+
+int flickMultiflickThreshold()
+{
+    initConfig();
+    return s_flickMultiflickThreshold;
+}
+
+int flickOvershoot()
+{
+    initConfig();
+    return s_flickOvershoot;
+}
+
+qreal flickOvershootFriction()
+{
+    initConfig();
+    return s_flickOvershootFriction;
+}
+
+qreal flickMultiflickRatio()
+{
+    initConfig();
+    return s_flickMultiflickRatio;
+}
+
+double flickMultiflickMaxBoost()
+{
+    initConfig();
+    return s_flickMultiflickMaxBoost;
+}
+
+int flickMultiflickDuration()
+{
+    initConfig();
+    return s_flickMultiflickDuration;
+}
+
+int flickMultiflickRapidDuration()
+{
+    initConfig();
+    return s_flickMultiflickRapidDuration;
+}
+
+int flickRetainGrabVelocity()
+{
+    initConfig();
+    return s_flickRetainGrabVelocity;
+}
+
+int gridViewSnapOneThreshold()
+{
+    initConfig();
+    return s_gridViewSnapOneThreshold;
+}
+
+int itemViewDefaultCacheBuffer()
+{
+    initConfig();
+    return s_itemViewDefaultCacheBuffer;
+}
+
+int itemViewDefaultHighlightMoveDuration()
+{
+    initConfig();
+    return s_itemViewDefaultHighlightMoveDuration;
+}
+
+int listViewSnapOneThreshold()
+{
+    initConfig();
+    return s_listViewSnapOneThreshold;
+}
+
+int listViewDefaultHighlightMoveVelocity()
+{
+    initConfig();
+    return s_listViewDefaultHighlightMoveVelocity;
+}
+
+qreal listViewDefaultHighlightResizeVelocity()
+{
+    initConfig();
+    return s_listViewDefaultHighlightResizeVelocity;
+}
+
+qreal pathViewFlickDefaultDeceleration()
+{
+    initConfig();
+    return s_pathViewFlickDefaultDeceleration;
+}
+
+qreal pathViewMinimumFlickVelocity()
+{
+    initConfig();
+    return s_pathViewMinimumFlickVelocity;
+}
+
+int pathViewDefaultHighlightMoveDuration()
+{
+    initConfig();
+    return s_pathViewDefaultHighlightMoveDuration;
+}
+
+}
 
 class QQuickColorProvider : public QQmlColorProvider
 {
