@@ -1470,6 +1470,14 @@ bool QQuickWindow::event(QEvent *e)
         emit closing(&qev);
         e->setAccepted(qev.isAccepted());
         } break;
+    case QEvent::PlatformSurface:
+        if ((static_cast<QPlatformSurfaceEvent *>(e))->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
+            // Ensure that the rendering thread is notified before
+            // the QPlatformWindow is destroyed.
+            if (d->windowManager)
+                d->windowManager->hide(this);
+        }
+        break;
     case QEvent::FocusAboutToChange:
 #ifndef QT_NO_IM
         if (d->activeFocusItem)
