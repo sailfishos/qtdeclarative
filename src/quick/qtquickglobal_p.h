@@ -61,6 +61,33 @@ Q_DECLARE_LOGGING_CATEGORY(DBG_MOUSE)
 Q_DECLARE_LOGGING_CATEGORY(DBG_FOCUS)
 Q_DECLARE_LOGGING_CATEGORY(DBG_DIRTY)
 
+namespace QuickConf {
+qreal flickDefaultDeceleration();
+qreal flickDefaultMaxVelocity();
+int flickThreshold();
+int flickMultiflickThreshold();
+int flickOvershoot();
+qreal flickOvershootFriction();
+qreal flickMultiflickRatio();
+double flickMultiflickMaxBoost();
+int flickMultiflickDuration();
+int flickMultiflickRapidDuration();
+int flickRetainGrabVelocity();
+
+int gridViewSnapOneThreshold();
+
+int itemViewDefaultCacheBuffer();
+int itemViewDefaultHighlightMoveDuration();
+
+int listViewSnapOneThreshold();
+int listViewDefaultHighlightMoveVelocity();
+qreal listViewDefaultHighlightResizeVelocity();
+
+qreal pathViewFlickDefaultDeceleration();
+qreal pathViewMinimumFlickVelocity();
+int pathViewDefaultHighlightMoveDuration();
+}
+
 QT_END_NAMESPACE
 
 #endif // QTQUICKGLOBAL_P_H
