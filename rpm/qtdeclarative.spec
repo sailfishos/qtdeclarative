@@ -1,6 +1,6 @@
 Name:       qt5-qtdeclarative
 Summary:    Qt Declarative library
-Version:    5.6.3+git
+Version:    5.6.3+git9
 Release:    1%{?dist}
 Group:      Qt/Qt
 License:    LGPLv2.1 with exception or GPLv3
