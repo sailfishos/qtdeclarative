@@ -239,18 +239,12 @@ Requires:   %{name} = %{version}-%{release}
 %description tool-qml
 This package contains the %{summary} tool
 
-%package tool-qmlimportscanner
-Summary:    QML runtime binary
-Group:      Qt/Qt
-Requires:   %{name} = %{version}-%{release}
-
-%description tool-qmlimportscanner
-This package contains the %{summary} tool
-
 %package devel-tools
 Summary:    QML development tools
 Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
+Provides:   %{name}-tool-qmlimportscanner
+Conflicts:  %{name}-tool-qmlimportscanner < 5.6.3+git10
 
 %description devel-tools
 This package contains QML debugging and development tools
@@ -421,12 +415,9 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %defattr(-,root,root,-)
 %{_qt5_bindir}/qml
 
-%files tool-qmlimportscanner
-%defattr(-,root,root,-)
-%{_qt5_bindir}/qmlimportscanner
-
 %files devel-tools
 %defattr(-,root,root,-)
+%{_qt5_bindir}/qmlimportscanner
 %{_qt5_bindir}/qmlplugindump
 %{_qt5_bindir}/qmlprofiler
 %{_qt5_bindir}/qmltestrunner
