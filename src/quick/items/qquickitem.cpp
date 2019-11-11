@@ -7676,7 +7676,13 @@ void QQuickItemLayer::classBegin()
 
 void QQuickItemLayer::componentComplete()
 {
-    Q_ASSERT(!m_componentComplete);
+    // There is a window in QQuickItem::completeCreate() between where componentComplete in the
+    // item is set to true and componentComplete() is called on a layer in which arbitrary code
+    // may execute due to anchor evaluations and create a layer on which classBegin() was not called.
+    // If that happens componentComplete() should be ignored or activate() will be called twice.
+    if (m_componentComplete)
+        return;
+
     m_componentComplete = true;
     if (m_enabled)
         activate();
