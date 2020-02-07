@@ -1197,6 +1197,14 @@ int main(int argc, char *argv[])
             importCode += QString("\nimport \".\" %2\n").arg(pluginImportVersion).toLatin1();
         }
 
+        // collect QMetaObjects that are reachable through dependencies but only become registered
+        // after the specified modules is imported
+        QSet<const QMetaObject *> defaultReachableNotExported;
+        foreach (const QMetaObject *mo, defaultReachable) {
+            if (!QQmlMetaType::qmlType(mo))
+                defaultReachableNotExported.insert(mo);
+        }
+
         // create a component with these imports to make sure the imports are valid
         // and to populate the declarative meta type system
         {
@@ -1212,6 +1220,24 @@ int main(int argc, char *argv[])
                 return EXIT_IMPORTERROR;
             }
         }
+
+        // only keep those that really became registered (exported)
+        for (auto i = defaultReachableNotExported.begin(); i != defaultReachableNotExported.end(); ) {
+            QQmlType *ty = QQmlMetaType::qmlType(*i);
+            if (!ty || ty->module().isEmpty())
+                i = defaultReachableNotExported.erase(i);
+            else
+                ++i;
+        }
+
+        if (verbose && !defaultReachableNotExported.isEmpty()) {
+            std::cerr << "Objects reachable through dependencies, but only exported by "
+                << qPrintable( pluginImportUri ) << ":" << std::endl;
+            foreach (const QMetaObject *mo, defaultReachableNotExported)
+                std::cerr << "    " << qPrintable( mo->className() ) << std::endl;
+        }
+
+        defaultReachable.subtract(defaultReachableNotExported);
 
         QSet<const QMetaObject *> candidates = collectReachableMetaObjects(&engine, uncreatableMetas, singletonMetas, defaultTypes);
         candidates.subtract(defaultReachable);
