@@ -378,7 +378,12 @@ void Updater::visitOpacityNode(Node *n)
 {
     QSGOpacityNode *on = static_cast<QSGOpacityNode *>(n->sgNode);
 
-    qreal combined = m_opacity_stack.last() * on->opacity();
+    qreal combined = (on->flags() & QSGNode::IgnoreParentOpacity)
+            ? on->opacity()
+            : m_opacity_stack.last() * on->opacity();
+    if (on->flags() & QSGNode::IgnoreParentOpacity) {
+        qDebug() << "Opacity node wan't to ignore parent opacity" << combined;
+    }
     on->setCombinedOpacity(combined);
     m_opacity_stack.add(combined);
 
@@ -1282,6 +1287,9 @@ void Renderer::buildRenderLists(QSGNode *node)
         Q_ASSERT(e);
 
         bool opaque = gn->inheritedOpacity() > OPAQUE_LIMIT && !(gn->activeMaterial()->flags() & QSGMaterial::Blending);
+        if (opaque) {
+            qDebug() << "Have an opaque node";
+        }
         if (opaque && m_useDepthBuffer)
             m_opaqueRenderList << e;
         else
