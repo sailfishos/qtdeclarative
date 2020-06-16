@@ -89,6 +89,9 @@ public:
         OwnsMaterial                = 0x00020000,
         OwnsOpaqueMaterial          = 0x00040000,
 
+        // QSGOpacityNode
+        IgnoreParentOpacity         = OwnsGeometry,
+
         // Uppermost 8 bits are reserved for internal use.
 #ifndef qdoc
         IsVisitableNode             = 0x01000000
