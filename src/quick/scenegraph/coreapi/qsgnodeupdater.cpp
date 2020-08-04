@@ -185,7 +185,9 @@ void QSGNodeUpdater::leaveRenderNode(QSGRenderNode *r)
 
 void QSGNodeUpdater::enterOpacityNode(QSGOpacityNode *o)
 {
-    qreal opacity = m_opacity_stack.last() * o->opacity();
+    qreal opacity = (o->flags() & QSGNode::IgnoreParentOpacity)
+            ? o->opacity()
+            : m_opacity_stack.last() * o->opacity();
     o->setCombinedOpacity(opacity);
     m_opacity_stack.add(opacity);
 
