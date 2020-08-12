@@ -381,9 +381,6 @@ void Updater::visitOpacityNode(Node *n)
     qreal combined = (on->flags() & QSGNode::IgnoreParentOpacity)
             ? on->opacity()
             : m_opacity_stack.last() * on->opacity();
-    if (on->flags() & QSGNode::IgnoreParentOpacity) {
-        qDebug() << "Opacity node wan't to ignore parent opacity" << combined;
-    }
     on->setCombinedOpacity(combined);
     m_opacity_stack.add(combined);
 
