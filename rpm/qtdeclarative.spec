@@ -13,7 +13,7 @@ BuildRequires:  qt5-qttest-devel
 BuildRequires:  qt5-qtxmlpatterns-devel
 BuildRequires:  qt5-qmake
 BuildRequires:  fdupes
-BuildRequires:  python
+BuildRequires:  python3-base
 BuildRequires:  gdb
 BuildRequires:  qml-rpm-macros
 Obsoletes: qt5-qtjsbackend <= 5.1.0+git4
