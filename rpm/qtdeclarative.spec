@@ -2,9 +2,8 @@ Name:       qt5-qtdeclarative
 Summary:    Qt Declarative library
 Version:    5.6.3+git9
 Release:    1%{?dist}
-Group:      Qt/Qt
 License:    LGPLv2.1 with exception or GPLv3
-URL:        http://qt.nokia.com
+URL:        https://www.qt.io/
 Source0:    %{name}-%{version}.tar.bz2
 BuildRequires:  qt5-qtcore-devel >= 5.6.3
 BuildRequires:  qt5-qtgui-devel >= 5.6.3
@@ -13,7 +12,6 @@ BuildRequires:  qt5-qtsql-devel
 BuildRequires:  qt5-qttest-devel
 BuildRequires:  qt5-qtxmlpatterns-devel
 BuildRequires:  qt5-qmake
-#BuildRequires:  qt5-qttools-qthelp-devel
 BuildRequires:  fdupes
 BuildRequires:  python
 BuildRequires:  gdb
@@ -31,7 +29,6 @@ This package contains the Declarative library
 
 %package devel
 Summary:    Qt Declarative - development files
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   qt5-qtsql-devel
 Requires:   qt5-qtnetwork-devel
@@ -46,7 +43,6 @@ This package contains the Declarative library development files
 
 %package doc
 Summary:    Qt Declarative - documentation
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description doc
@@ -54,7 +50,6 @@ This package contains the Qt Declarative documentation
 
 %package qtquicktest
 Summary:    Qt Declarative QtQuickTest library
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires(post):     /sbin/ldconfig
 Requires(postun):   /sbin/ldconfig
@@ -64,7 +59,6 @@ This package contains the QtQuickTest library for QtDeclarative module
 
 %package qtquicktest-devel
 Summary:    Qt Declarative QtQuickTest - development files
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   %{name}-devel = %{version}-%{release}
 Requires:   qt5-qtdeclarative-qtquicktest = %{version}-%{release}
@@ -74,7 +68,6 @@ This package contains the development headers for QtQuickTest library
 
 %package qtquick
 Summary:    Qt Declarative - QtQuick library
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Obsoletes: qt5-qtdeclarative-plugin-accessible
 
@@ -83,7 +76,6 @@ This package contains the QtQuick QML support library
 
 %package qtquick-devel
 Summary:    Qt Declarative - QtQuick development files
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   qt5-qtdeclarative-qtquick = %{version}-%{release}
 
@@ -93,7 +85,6 @@ QML support library
 
 %package qtquick-doc
 Summary:    Qt Declarative - QtQuick documentation
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   qt5-qtdeclarative-qtquick = %{version}-%{release}
 
@@ -102,7 +93,6 @@ This package contains the Qt Declarative QtQuick documentation
 
 %package qtquickparticles
 Summary:    Qt Declarative - QtQuick Particles library
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description qtquickparticles
@@ -110,7 +100,6 @@ This package contains the QtQuick Particles support library
 
 %package qtquickparticles-devel
 Summary:    Qt Declarative - QtQuick Particles development files
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   qt5-qtdeclarative-qtquickparticles = %{version}-%{release}
 
@@ -118,10 +107,8 @@ Requires:   qt5-qtdeclarative-qtquickparticles = %{version}-%{release}
 This package contains the development headers for QtQuickParticles
 QML support library
 
-
 %package qtdeclarativetools-devel
 Summary:    Qt Declarative QtQmlDevTools - development files
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Requires:   %{name}-devel = %{version}-%{release}
 Requires:   qt5-qtdeclarative-devel = %{version}-%{release}
@@ -135,7 +122,6 @@ This package contains the development headers for QtQmlDevTools
 
 %package import-folderlistmodel
 Summary:    Qt Declarative folderlistmodel plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description import-folderlistmodel
@@ -143,7 +129,6 @@ This package provides the QtQml folderlistmodel plugin
 
 %package import-settings
 Summary:    Qt Declarative settings plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description import-settings
@@ -158,24 +143,13 @@ This package provided the Qt LocalStorage plugin
 
 %package plugin-qmlinspector
 Summary:    Qt Declarative QML inspector plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description plugin-qmlinspector
 This package provides the QML inspector plugin
 
-#%package plugin-accessible
-#Summary:    Qt Declarative accessible plugin
-#Group:      Qt/Qt
-#Requires:   %{name} = %{version}-%{release}
-
-#%description plugin-accessible
-#This package provides the QML accessible plugin
-
-
 %package import-qtquick2plugin
 Summary:    Qt Declarative QtQuick 2 support plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description import-qtquick2plugin
@@ -183,7 +157,6 @@ This package provides the QtQuick 2 support plugin
 
 %package import-qttest
 Summary:    Qt Declarative QtTest plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description import-qttest
@@ -191,7 +164,6 @@ This package provides the QtQml QtTest plugin
 
 %package import-particles2
 Summary:    Qt Declarative Particles plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description import-particles2
@@ -199,7 +171,6 @@ This package provides the QtQml Particles.2 plugin
 
 %package import-window2
 Summary:    Qt Declarative Window plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description import-window2
@@ -207,7 +178,6 @@ This package provides the QtQml Window.2 plugin
 
 %package import-models2
 Summary:    Qt Declarative models plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description import-models2
@@ -215,17 +185,13 @@ This package provides the QtDeclarative models plugin for QtQuick 2.0
 
 %package import-xmllistmodel
 Summary:    Qt Declarative XmlListModel plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
-
-
 
 %description import-xmllistmodel
 This package provides the QtDeclarative XmlListModel plugin for QtQuick 2.0
 
 %package qmlscene
 Summary:    QML scene viewer
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description qmlscene
@@ -233,7 +199,6 @@ This package contains the QML viewer for QtQuick 2.0 files.
 
 %package tool-qml
 Summary:    QML runtime binary
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description tool-qml
@@ -241,7 +206,6 @@ This package contains the %{summary} tool
 
 %package devel-tools
 Summary:    QML development tools
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 Provides:   %{name}-tool-qmlimportscanner
 Conflicts:  %{name}-tool-qmlimportscanner < 5.6.3+git10
@@ -251,7 +215,6 @@ This package contains QML debugging and development tools
 
 %package plugin-qmlstatemachine
 Summary:    Qt Declarative QML State Machine plugin
-Group:      Qt/Qt
 Requires:   %{name} = %{version}-%{release}
 
 %description plugin-qmlstatemachine
@@ -260,7 +223,7 @@ This package provides the QML State Machine plugin
 
 
 %prep
-%setup -q -n %{name}-%{version}
+%autosetup -n %{name}-%{version}
 
 %build
 export QTDIR=/usr/share/qt5
@@ -289,15 +252,9 @@ touch .git
 %qmake5 QT.widgets.name= DEFINES+=QT_NO_WIDGETS
 %endif
 
-make %{?_smp_mflags}
-
-#%if 0%{?qt5_release_build}
-#make docs
-#%endif
-
+%make_build
 
 %install
-rm -rf %{buildroot}
 %qmake5_install
 # Fix wrong path in pkgconfig files
 find %{buildroot}%{_libdir}/pkgconfig -type f -name '*.pc' \
@@ -320,12 +277,6 @@ cp lib/libQt5QmlDevTools.a %{buildroot}/%{_libdir}
 # Copy docs
 mkdir -p %{buildroot}/%{_docdir}/qt5/qtqml
 mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
-#%if 0%{?qt5_release_build}
-#cp -R doc/qtqml %{buildroot}/%{_docdir}/qt5
-#cp -R doc/qtqml.qch %{buildroot}/%{_docdir}/qt5
-#cp -R doc/qtquick %{buildroot}/%{_docdir}/qt5
-#cp -R doc/qtquick.qch %{buildroot}/%{_docdir}/qt5
-#%endif
 
 
 #### Pre/Post section
@@ -363,8 +314,6 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_libdir}/libQt5Qml.so.5
 %{_libdir}/libQt5Qml.so.5.*
 
-# FIXME: the provided .pc file is empty!
-# Find out what gives and find a clean resolution
 %files devel
 %defattr(-,root,root,-)
 %{_libdir}/libQt5Qml.so
@@ -423,9 +372,6 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_qt5_bindir}/qmltestrunner
 %{_qt5_bindir}/qmlmin
 %{_qt5_bindir}/qmllint
-#%if ! 0%{?qt5_release_build}
-#%{_qt5_bindir}/qmljs
-#%endif
 
 
 %files import-folderlistmodel
@@ -450,11 +396,6 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlNativeDebugConnectorFactory.cmake
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlDebuggerServiceFactory.cmake
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlProfilerServiceFactory.cmake
-
-
-#%files plugin-accessible
-#%defattr(-,root,root,-)
-#%{_libdir}/qt5/plugins/accessible/libqtaccessiblequick.so
 
 %files import-qttest
 %defattr(-,root,root,-)
@@ -508,7 +449,6 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_includedir}/qt5/QtQuickParticles/
 %{_libdir}/libQt5QuickParticles.so
 %{_libdir}/libQt5QuickParticles.prl
-#%{_libdir}/pkgconfig/Qt5QuickParticles.pc
 %{_datadir}/qt5/mkspecs/modules/qt_lib_quickparticles_private.pri
 
 %files qtdeclarativetools-devel
@@ -516,7 +456,6 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_libdir}/libQt5QmlDevTools.a
 %{_libdir}/libQt5QmlDevTools.prl
 %{_includedir}/qt5/QtQmlDevTools/
-#%{_libdir}/pkgconfig/Qt5QmlDevTools.pc
 %{_datadir}/qt5/mkspecs/modules/qt_lib_qmldevtools_private.pri
 
 %files plugin-qmlstatemachine
