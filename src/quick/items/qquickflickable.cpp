@@ -1073,9 +1073,9 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
             } else {
                 qreal vel = velocity.y() / overshootFriction;
                 if (vel > 0. && vel > vData.velocity)
-                    vData.velocity = qMin(velocity.y() / overshootFriction, float(defaultMaxVelocity));
+                    vData.velocity = qMin(vel, defaultMaxVelocity);
                 else if (vel < 0. && vel < vData.velocity)
-                    vData.velocity = qMax(velocity.y() / overshootFriction, -float(defaultMaxVelocity));
+                    vData.velocity = qMax(vel, -defaultMaxVelocity);
                 if (newY > minY) {
                     // Overshoot beyond the top.  But don't wait for momentum phase to end before returning to bounds.
                     if (momentum && vData.atBeginning) {
@@ -1146,9 +1146,9 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
             } else {
                 qreal vel = velocity.x() / overshootFriction;
                 if (vel > 0. && vel > hData.velocity)
-                    hData.velocity = qMin(velocity.x() / overshootFriction, float(defaultMaxVelocity));
+                    hData.velocity = qMin(vel, defaultMaxVelocity);
                 else if (vel < 0. && vel < hData.velocity)
-                    hData.velocity = qMax(velocity.x() / overshootFriction, -float(defaultMaxVelocity));
+                    hData.velocity = qMax(vel, -defaultMaxVelocity);
                 if (newX > minX) {
                     // Overshoot beyond the left.  But don't wait for momentum phase to end before returning to bounds.
                     if (momentum && hData.atBeginning) {
