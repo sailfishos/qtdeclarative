@@ -2,7 +2,7 @@ Name:       qt5-qtdeclarative
 Summary:    Qt Declarative library
 Version:    5.6.3+git9
 Release:    1%{?dist}
-License:    LGPLv2.1 with exception or GPLv3
+License:    (LGPLv2 or LGPLv3) with exception or GPLv3 or Qt Commercial
 URL:        https://www.qt.io/
 Source0:    %{name}-%{version}.tar.bz2
 BuildRequires:  qt5-qtcore-devel >= 5.6.3
@@ -311,6 +311,7 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 
 %files
 %defattr(-,root,root,-)
+%license LICENSE.LGPLv* LGPL_EXCEPTION.txt LICENSE.GPLv3
 %{_libdir}/libQt5Qml.so.5
 %{_libdir}/libQt5Qml.so.5.*
 
