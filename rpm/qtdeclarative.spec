@@ -193,6 +193,7 @@ This package provides the QtDeclarative XmlListModel plugin for QtQuick 2.0
 %package qmlscene
 Summary:    QML scene viewer
 Requires:   %{name} = %{version}-%{release}
+Requires:   qtchooser
 
 %description qmlscene
 This package contains the QML viewer for QtQuick 2.0 files.
@@ -209,6 +210,7 @@ Summary:    QML development tools
 Requires:   %{name} = %{version}-%{release}
 Provides:   %{name}-tool-qmlimportscanner
 Conflicts:  %{name}-tool-qmlimportscanner < 5.6.3+git10
+Requires:   qtchooser
 
 %description devel-tools
 This package contains QML debugging and development tools
