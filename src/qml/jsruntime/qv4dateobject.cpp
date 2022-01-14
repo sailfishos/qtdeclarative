@@ -298,7 +298,11 @@ static inline double DaylightSavingTA(double t)
     else
 #endif
         return 0;
-    return (tmtm.tm_isdst > 0) ? msPerHour : 0;
+    // Don't assume DST is +1 shift. Compute it instead.
+    if (!tmtm.tm_isdst)
+        return 0.;
+    tmtm.tm_isdst = 0;
+    return double(mktime(&tmtm) - tt) * msPerSecond;
 }
 
 static inline double LocalTime(double t)
