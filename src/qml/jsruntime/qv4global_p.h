@@ -114,15 +114,10 @@ inline double trunc(double d) { return d > 0 ? floor(d) : ceil(d); }
 
 // Do certain things depending on whether the JIT is enabled or disabled
 
-#ifdef V4_ENABLE_JIT
+#define V4_ENABLE_JIT
 #define ENABLE_YARR_JIT 1
-#define ENABLE_JIT 1
 #define ENABLE_ASSEMBLER 1
-#else
-#define ENABLE_YARR_JIT 0
-#define ENABLE_ASSEMBLER 0
-#define ENABLE_JIT 0
-#endif
+#define ENABLE_JIT 1
 
 #if defined(Q_OS_QNX) && defined(_CPPLIB_VER)
 #include <math.h>
