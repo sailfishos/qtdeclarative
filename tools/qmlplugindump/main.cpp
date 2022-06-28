@@ -523,7 +523,7 @@ public:
         qml->writeEndObject();
     }
 
-    void dump(QQmlEnginePrivate *engine, const QMetaObject *meta, bool isUncreatable, bool isSingleton)
+    void dump(QQmlEnginePrivate *engine, const QMetaObject *meta, bool isUncreatable, bool isSingleton, const QString &filter)
     {
         qml->writeStartObject("Component");
 
@@ -542,14 +542,17 @@ public:
             qml->writeScriptBinding(QLatin1String("prototype"), enquote(convertToId(meta->superClass())));
 
         QSet<const QQmlType *> qmlTypes = qmlTypesByCppName.value(meta->className());
-        if (!qmlTypes.isEmpty()) {
-            QHash<QString, const QQmlType *> exports;
+        QHash<QString, const QQmlType *> exports;
 
-            foreach (const QQmlType *qmlTy, qmlTypes) {
-                const QString exportString = getExportString(qmlTy->qmlTypeName(), qmlTy->majorVersion(), qmlTy->minorVersion());
-                exports.insert(exportString, qmlTy);
+        foreach (const QQmlType *qmlTy, qmlTypes) {
+            if (!filter.isEmpty() && !qmlTy->qmlTypeName().startsWith(filter + QChar('/'))) {
+                continue;
             }
+            const QString exportString = getExportString(qmlTy->qmlTypeName(), qmlTy->majorVersion(), qmlTy->minorVersion());
+            exports.insert(exportString, qmlTy);
+        }
 
+        if (!exports.isEmpty()) {
             // ensure exports are sorted and don't change order when the plugin is dumped again
             QStringList exportStrings = exports.keys();
             std::sort(exportStrings.begin(), exportStrings.end());
@@ -735,7 +738,7 @@ void sigSegvHandler(int) {
 void printUsage(const QString &appName)
 {
     std::cerr << qPrintable(QString(
-                                 "Usage: %1 [-v] [-noinstantiate] [-defaultplatform] [-[non]relocatable] [-dependencies <dependencies.json>] [-merge <file-to-merge.qmltypes>] module.uri version [module/import/path]\n"
+                                 "Usage: %1 [-v] [-noinstantiate] [-defaultplatform] [-[non]relocatable] [-dependencies <dependencies.json>] [-merge <file-to-merge.qmltypes>] [-exportmoduleonly] module.uri version [module/import/path]\n"
                                  "       %1 [-v] [-noinstantiate] -path path/to/qmldir/directory [version]\n"
                                  "       %1 [-v] -builtins\n"
                                  "Example: %1 Qt.labs.folderlistmodel 2.0 /home/user/dev/qt-install/imports").arg(
@@ -992,6 +995,7 @@ int main(int argc, char *argv[])
     QString mergeFile;
     enum Action { Uri, Path, Builtins };
     Action action = Uri;
+    bool moduleOnly = false;
     {
         QStringList positionalArgs;
 
@@ -1037,6 +1041,10 @@ int main(int argc, char *argv[])
             } else if (arg == QLatin1String("--defaultplatform")
                        || arg == QLatin1String("-defaultplatform")) {
                 continue;
+            } else if (arg == QLatin1String("-exportmoduleonly")) {
+                 // experimental! filters exporting to include only the module passed as parameter.
+                 // can be used if the import as side-effect registers also other modules.
+                 moduleOnly = true;
             } else {
                 std::cerr << "Invalid argument: " << qPrintable(arg) << std::endl;
                 return EXIT_INVALIDARGUMENTS;
@@ -1292,7 +1300,8 @@ int main(int argc, char *argv[])
     if (relocatable)
         dumper.setRelocatableModuleUri(pluginImportUri);
     foreach (const QMetaObject *meta, nameToMeta) {
-        dumper.dump(QQmlEnginePrivate::get(&engine), meta, uncreatableMetas.contains(meta), singletonMetas.contains(meta));
+        dumper.dump(QQmlEnginePrivate::get(&engine), meta, uncreatableMetas.contains(meta), singletonMetas.contains(meta),
+                    moduleOnly ? pluginImportUri : QString());
     }
 
     QMap<QString, QSet<const QQmlType *> >::const_iterator iter = qmlTypesByCompositeName.constBegin();
