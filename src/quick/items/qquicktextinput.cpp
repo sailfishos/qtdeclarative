@@ -669,6 +669,7 @@ void QQuickTextInput::setReadOnly(bool ro)
         return;
 
 #ifndef QT_NO_IM
+    d->commitPreedit();
     setFlag(QQuickItem::ItemAcceptsInputMethod, !ro);
 #endif
     d->m_readOnly = ro;
