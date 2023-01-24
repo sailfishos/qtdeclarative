@@ -996,6 +996,7 @@ int main(int argc, char *argv[])
     bool relocatable = true;
     QString dependenciesFile;
     QString mergeFile;
+    int outputFd = 1; // stdout
     enum Action { Uri, Path, Builtins };
     Action action = Uri;
     {
@@ -1021,6 +1022,18 @@ int main(int argc, char *argv[])
                     return EXIT_INVALIDARGUMENTS;
                 }
                 mergeFile = args.at(iArg);
+            } else if (arg == QLatin1String("--output-fd")
+                       || arg == QLatin1String("-output-fd")) {
+                if (++iArg == args.size()) {
+                    std::cerr << "missing output FD number" << std::endl;
+                    return EXIT_INVALIDARGUMENTS;
+                }
+                bool ok = true;
+                outputFd = args.at(iArg).toInt(&ok);
+                if (!ok || outputFd < 0) {
+                    std::cerr << "not a valid FD number: " << qPrintable(args.at(iArg)) << std::endl;
+                    return EXIT_INVALIDARGUMENTS;
+                }
             } else if (arg == QLatin1String("--notrelocatable")
                     || arg == QLatin1String("-notrelocatable")
                     || arg == QLatin1String("--nonrelocatable")
@@ -1293,7 +1306,13 @@ int main(int argc, char *argv[])
     qml.writeEndObject();
     qml.writeEndDocument();
 
-    std::cout << bytes.constData() << std::flush;
+    QFile file;
+    if (!file.open(outputFd, QIODevice::WriteOnly)) {
+        std::cerr << "Failed to open output FD for writing: " << qPrintable(file.errorString()) << std::endl;
+    } else {
+        file.write(bytes);
+        file.close();
+    }
 
     // workaround to avoid crashes on exit
     QTimer timer;
