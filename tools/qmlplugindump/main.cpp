@@ -84,6 +84,7 @@ static const uint qtQmlMinorVersion = 2;
 QString pluginImportPath;
 bool verbose = false;
 bool creatable = true;
+bool noComposites = false;
 
 QString currentProperty;
 QString inObjectInstantiation;
@@ -474,6 +475,11 @@ public:
 
     void dumpCompositeItem(QQmlEngine *engine, const QQmlType *compositeType, QSet<QByteArray> &defaultReachableNames)
     {
+        if (noComposites) {
+            std::cerr << "Skipping composite module " << compositeType->elementName().toStdString() << std::endl;
+            return;
+        }
+
         QQmlComponent e(engine, compositeType->sourceUrl());
         if (!e.isReady()) {
             std::cerr << "WARNING: skipping module " << compositeType->elementName().toStdString()
@@ -1026,6 +1032,9 @@ int main(int argc, char *argv[])
             } else if (arg == QLatin1String("--noinstantiate")
                        || arg == QLatin1String("-noinstantiate")) {
                 creatable = false;
+            } else if (arg == QLatin1String("--nocomposites")
+                       || arg == QLatin1String("-nocomposites")) {
+                noComposites = true;
             } else if (arg == QLatin1String("--path")
                        || arg == QLatin1String("-path")) {
                 action = Path;
