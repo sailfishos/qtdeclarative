@@ -84,6 +84,7 @@ static const uint qtQmlMinorVersion = 2;
 QString pluginImportPath;
 bool verbose = false;
 bool creatable = true;
+bool noComposites = false;
 
 QString currentProperty;
 QString inObjectInstantiation;
@@ -474,6 +475,11 @@ public:
 
     void dumpCompositeItem(QQmlEngine *engine, const QQmlType *compositeType, QSet<QByteArray> &defaultReachableNames)
     {
+        if (noComposites) {
+            std::cerr << "Skipping composite module " << compositeType->elementName().toStdString() << std::endl;
+            return;
+        }
+
         QQmlComponent e(engine, compositeType->sourceUrl());
         if (!e.isReady()) {
             std::cerr << "WARNING: skipping module " << compositeType->elementName().toStdString()
@@ -990,6 +996,7 @@ int main(int argc, char *argv[])
     bool relocatable = true;
     QString dependenciesFile;
     QString mergeFile;
+    int outputFd = 1; // stdout
     enum Action { Uri, Path, Builtins };
     Action action = Uri;
     {
@@ -1015,6 +1022,18 @@ int main(int argc, char *argv[])
                     return EXIT_INVALIDARGUMENTS;
                 }
                 mergeFile = args.at(iArg);
+            } else if (arg == QLatin1String("--output-fd")
+                       || arg == QLatin1String("-output-fd")) {
+                if (++iArg == args.size()) {
+                    std::cerr << "missing output FD number" << std::endl;
+                    return EXIT_INVALIDARGUMENTS;
+                }
+                bool ok = true;
+                outputFd = args.at(iArg).toInt(&ok);
+                if (!ok || outputFd < 0) {
+                    std::cerr << "not a valid FD number: " << qPrintable(args.at(iArg)) << std::endl;
+                    return EXIT_INVALIDARGUMENTS;
+                }
             } else if (arg == QLatin1String("--notrelocatable")
                     || arg == QLatin1String("-notrelocatable")
                     || arg == QLatin1String("--nonrelocatable")
@@ -1026,6 +1045,9 @@ int main(int argc, char *argv[])
             } else if (arg == QLatin1String("--noinstantiate")
                        || arg == QLatin1String("-noinstantiate")) {
                 creatable = false;
+            } else if (arg == QLatin1String("--nocomposites")
+                       || arg == QLatin1String("-nocomposites")) {
+                noComposites = true;
             } else if (arg == QLatin1String("--path")
                        || arg == QLatin1String("-path")) {
                 action = Path;
@@ -1197,14 +1219,6 @@ int main(int argc, char *argv[])
             importCode += QString("\nimport \".\" %2\n").arg(pluginImportVersion).toLatin1();
         }
 
-        // collect QMetaObjects that are reachable through dependencies but only become registered
-        // after the specified modules is imported
-        QSet<const QMetaObject *> defaultReachableNotExported;
-        foreach (const QMetaObject *mo, defaultReachable) {
-            if (!QQmlMetaType::qmlType(mo))
-                defaultReachableNotExported.insert(mo);
-        }
-
         // create a component with these imports to make sure the imports are valid
         // and to populate the declarative meta type system
         {
@@ -1220,24 +1234,6 @@ int main(int argc, char *argv[])
                 return EXIT_IMPORTERROR;
             }
         }
-
-        // only keep those that really became registered (exported)
-        for (auto i = defaultReachableNotExported.begin(); i != defaultReachableNotExported.end(); ) {
-            QQmlType *ty = QQmlMetaType::qmlType(*i);
-            if (!ty || ty->module().isEmpty())
-                i = defaultReachableNotExported.erase(i);
-            else
-                ++i;
-        }
-
-        if (verbose && !defaultReachableNotExported.isEmpty()) {
-            std::cerr << "Objects reachable through dependencies, but only exported by "
-                << qPrintable( pluginImportUri ) << ":" << std::endl;
-            foreach (const QMetaObject *mo, defaultReachableNotExported)
-                std::cerr << "    " << qPrintable( mo->className() ) << std::endl;
-        }
-
-        defaultReachable.subtract(defaultReachableNotExported);
 
         QSet<const QMetaObject *> candidates = collectReachableMetaObjects(&engine, uncreatableMetas, singletonMetas, defaultTypes);
         candidates.subtract(defaultReachable);
@@ -1310,7 +1306,13 @@ int main(int argc, char *argv[])
     qml.writeEndObject();
     qml.writeEndDocument();
 
-    std::cout << bytes.constData() << std::flush;
+    QFile file;
+    if (!file.open(outputFd, QIODevice::WriteOnly)) {
+        std::cerr << "Failed to open output FD for writing: " << qPrintable(file.errorString()) << std::endl;
+    } else {
+        file.write(bytes);
+        file.close();
+    }
 
     // workaround to avoid crashes on exit
     QTimer timer;
