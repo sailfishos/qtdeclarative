@@ -996,7 +996,8 @@ ReturnedValue Runtime::callProperty(ExecutionEngine *engine, int nameIndex, Call
 
     ScopedFunctionObject o(scope, baseObject->get(name));
     if (!o) {
-        QString error = QStringLiteral("Property '%1' of object %2 is not a function").arg(name->toQString(), callData->thisObject.toQStringNoThrow());
+//        QString error = QStringLiteral("Property '%1' of object %2 is not a function").arg(name->toQString(), callData->thisObject.toQStringNoThrow());
+        QString error = QStringLiteral("Property '%1' of object <failure> is not a function").arg(name->toQString());
         return engine->throwTypeError(error);
     }
 
