@@ -1,9 +1,9 @@
 Name:       qt5-qtdeclarative
 Summary:    Qt Declarative library
 Version:    5.6.3+git20
-Release:    1%{?dist}
+Release:    1
 License:    (LGPLv2 or LGPLv3) with exception or GPLv3 or Qt Commercial
-URL:        https://www.qt.io/
+URL:        https://github.com/sailfishos/qtdeclarative
 Source0:    %{name}-%{version}.tar.bz2
 BuildRequires:  qt5-qtcore-devel >= 5.6.3
 BuildRequires:  qt5-qtgui-devel >= 5.6.3
@@ -14,16 +14,13 @@ BuildRequires:  qt5-qtxmlpatterns-devel
 BuildRequires:  qt5-qmake
 BuildRequires:  fdupes
 BuildRequires:  python3-base
-BuildRequires:  gdb
 BuildRequires:  qml-rpm-macros
-Obsoletes: qt5-qtjsbackend <= 5.1.0+git4
-Provides: qt5-qtjsbackend > 5.1.0+git4
 
 %description
 Qt is a cross-platform application and UI framework. Using Qt, you can
 write web-enabled applications once and deploy them across desktop,
 mobile and embedded systems without rewriting the source code.
-.
+
 This package contains the Declarative library
 
 
@@ -38,7 +35,7 @@ Requires:   qml-rpm-macros
 Qt is a cross-platform application and UI framework. Using Qt, you can
 write web-enabled applications once and deploy them across desktop,
 mobile and embedded systems without rewriting the source code.
-.
+
 This package contains the Declarative library development files
 
 %package doc
@@ -69,7 +66,6 @@ This package contains the development headers for QtQuickTest library
 %package qtquick
 Summary:    Qt Declarative - QtQuick library
 Requires:   %{name} = %{version}-%{release}
-Obsoletes: qt5-qtdeclarative-plugin-accessible
 
 %description qtquick
 This package contains the QtQuick QML support library
@@ -223,7 +219,6 @@ Requires:   %{name} = %{version}-%{release}
 This package provides the QML State Machine plugin
 
 
-
 %prep
 %autosetup -n %{name}-%{version}
 
@@ -283,42 +278,25 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 
 #### Pre/Post section
 
-%post
-/sbin/ldconfig
-%postun
-/sbin/ldconfig
+%post -p /sbin/ldconfig
+%postun -p /sbin/ldconfig
 
-%post qtquicktest
-/sbin/ldconfig
-%postun qtquicktest
-/sbin/ldconfig
+%post qtquicktest -p /sbin/ldconfig
+%postun qtquicktest -p /sbin/ldconfig
 
-%post qtquick
-/sbin/ldconfig
-%postun qtquick
-/sbin/ldconfig
+%post qtquick -p /sbin/ldconfig
+%postun qtquick -p /sbin/ldconfig
 
-
-%post qtquickparticles
-/sbin/ldconfig
-%postun qtquickparticles
-/sbin/ldconfig
-
-
-
-
+%post qtquickparticles -p /sbin/ldconfig
+%postun qtquickparticles -p /sbin/ldconfig
 
 #### File section
-
-
 %files
-%defattr(-,root,root,-)
 %license LICENSE.LGPLv* LGPL_EXCEPTION.txt LICENSE.GPLv3
 %{_libdir}/libQt5Qml.so.5
 %{_libdir}/libQt5Qml.so.5.*
 
 %files devel
-%defattr(-,root,root,-)
 %{_libdir}/libQt5Qml.so
 %{_libdir}/libQt5Qml.prl
 %{_libdir}/pkgconfig/Qt5Qml.pc
@@ -332,17 +310,14 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_libdir}/cmake/Qt5Qml/Qt5QmlConfigExtras.cmake
 %{_libdir}/cmake/Qt5Qml/Qt5QmlConfigVersion.cmake
 
-
 %files doc
 %{_docdir}/qt5/qtqml*
 
 %files qtquick
-%defattr(-,root,root,-)
 %{_libdir}/libQt5Quick.so.5
 %{_libdir}/libQt5Quick.so.5.*
 
 %files qtquick-devel
-%defattr(-,root,root,-)
 %{_libdir}/libQt5Quick.so
 %{_libdir}/libQt5Quick.prl
 %{_libdir}/pkgconfig/Qt5Quick.pc
@@ -355,20 +330,13 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %files qtquick-doc
 %{_docdir}/qt5/qtquick*
 
-
-
-
-
 %files qmlscene
-%defattr(-,root,root,-)
 %{_qt5_bindir}/qmlscene
 
 %files tool-qml
-%defattr(-,root,root,-)
 %{_qt5_bindir}/qml
 
 %files devel-tools
-%defattr(-,root,root,-)
 %{_qt5_bindir}/qmlimportscanner
 %{_qt5_bindir}/qmlplugindump
 %{_qt5_bindir}/qmlprofiler
@@ -376,21 +344,16 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_qt5_bindir}/qmlmin
 %{_qt5_bindir}/qmllint
 
-
 %files import-folderlistmodel
-%defattr(-,root,root,-)
 %{_libdir}/qt5/qml/Qt/labs/folderlistmodel/*
 
 %files import-settings
-%defattr(-,root,root,-)
 %{_libdir}/qt5/qml/Qt/labs/settings/*
 
 %files import-localstorageplugin
-%defattr(-,root,root,-)
 %{_libdir}/qt5/qml/QtQuick/LocalStorage/
 
 %files plugin-qmlinspector
-%defattr(-,root,root,-)
 %{_libdir}/qt5/plugins/qmltooling/*
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QLocalClientConnectionFactory.cmake
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlInspectorServiceFactory.cmake
@@ -401,38 +364,28 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_libdir}/cmake/Qt5Qml/Qt5Qml_QQmlProfilerServiceFactory.cmake
 
 %files import-qttest
-%defattr(-,root,root,-)
 %{_libdir}/qt5/qml/QtTest/
 
 %files import-qtquick2plugin
-%defattr(-,root,root,-)
 %{_libdir}/qt5/qml/QtQuick.2/
 
 %files import-particles2
-%defattr(-,root,root,-)
 %{_libdir}/qt5/qml/QtQuick/Particles.2/
 
 %files import-window2
-%defattr(-,root,root,-)
 %{_libdir}/qt5/qml/QtQuick/Window.2/
 
 %files import-models2
-%defattr(-,root,root,-)
 %{_libdir}/qt5/qml/QtQml/Models.2/
 
 %files import-xmllistmodel
-%defattr(-,root,root,-)
 %{_libdir}/qt5/qml/QtQuick/XmlListModel/
 
-
-
 %files qtquicktest
-%defattr(-,root,root,-)
 %{_libdir}/libQt5QuickTest.so.5
 %{_libdir}/libQt5QuickTest.so.5.*
 
 %files qtquicktest-devel
-%defattr(-,root,root,-)
 %{_includedir}/qt5/QtQuickTest/
 %{_libdir}/libQt5QuickTest.so
 %{_libdir}/libQt5QuickTest.prl
@@ -443,25 +396,20 @@ mkdir -p %{buildroot}/%{_docdir}/qt5/qtquick
 %{_libdir}/cmake/Qt5QuickTest/Qt5QuickTestConfigVersion.cmake
 
 %files qtquickparticles
-%defattr(-,root,root,-)
 %{_libdir}/libQt5QuickParticles.so.5
 %{_libdir}/libQt5QuickParticles.so.5.*
 
 %files qtquickparticles-devel
-%defattr(-,root,root,-)
 %{_includedir}/qt5/QtQuickParticles/
 %{_libdir}/libQt5QuickParticles.so
 %{_libdir}/libQt5QuickParticles.prl
 %{_datadir}/qt5/mkspecs/modules/qt_lib_quickparticles_private.pri
 
 %files qtdeclarativetools-devel
-%defattr(-,root,root,-)
 %{_libdir}/libQt5QmlDevTools.a
 %{_libdir}/libQt5QmlDevTools.prl
 %{_includedir}/qt5/QtQmlDevTools/
 %{_datadir}/qt5/mkspecs/modules/qt_lib_qmldevtools_private.pri
 
 %files plugin-qmlstatemachine
-%defattr(-,root,root,-)
-%{_libdir}/qt5/qml/QtQml/StateMachine//
-
+%{_libdir}/qt5/qml/QtQml/StateMachine/
