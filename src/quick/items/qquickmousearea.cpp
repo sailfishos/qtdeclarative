@@ -977,6 +977,18 @@ bool QQuickMouseArea::childMouseEventFilter(QQuickItem *i, QEvent *e)
     case QEvent::MouseMove:
     case QEvent::MouseButtonRelease:
         return sendMouseEvent(static_cast<QMouseEvent *>(e));
+    case QEvent::UngrabMouse: {
+            QQuickWindow *c = window();
+            QQuickItem *grabber = c ? c->mouseGrabberItem() : nullptr;
+
+            while (grabber && grabber != this) {
+                grabber = grabber->parentItem();
+            }
+
+            if (grabber != this)
+                ungrabMouse();
+        }
+        break;
     default:
         break;
     }
