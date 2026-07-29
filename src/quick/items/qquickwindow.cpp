@@ -577,7 +577,7 @@ bool QQuickWindowPrivate::checkIfDoubleClicked(ulong newPressEventTimestamp)
     return doubleClicked;
 }
 
-bool QQuickWindowPrivate::translateTouchToMouse(QQuickItem *item, QTouchEvent *event)
+bool QQuickWindowPrivate::translateTouchToMouse(QQuickItem *item, QTouchEvent *event, QSet<QQuickItem *> *hasFiltered)
 {
     // For each point, check if it is accepted, if not, try the next point.
     // Any of the fingers can become the mouse one.
@@ -614,8 +614,11 @@ bool QQuickWindowPrivate::translateTouchToMouse(QQuickItem *item, QTouchEvent *e
                     itemForTouchPointId.remove(p.id());
                 }
 
-                if (mouseGrabberItem == item)
+                if (mouseGrabberItem == item) {
                     item->ungrabMouse();
+                    // Notify filters of subsequent mouse event redelivery to other items.
+                    hasFiltered->clear();
+                }
             }
 
             if (mousePress->isAccepted() && checkIfDoubleClicked(event->timestamp())) {
@@ -2208,7 +2211,7 @@ bool QQuickWindowPrivate::deliverMatchingPointsToItem(QQuickItem *item, QTouchEv
     QQuickItemPrivate *itemPrivate = QQuickItemPrivate::get(item);
     if (!touchEventAccepted && (itemPrivate->acceptedMouseButtons() & Qt::LeftButton)) {
         //  send mouse event
-        event->setAccepted(translateTouchToMouse(item, touchEvent.data()));
+        event->setAccepted(translateTouchToMouse(item, touchEvent.data(), hasFiltered));
         if (event->isAccepted()) {
             touchEventAccepted = true;
         }
